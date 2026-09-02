@@ -30,6 +30,7 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 * **Path autocomplete**: `@/`, `./`, `../` triggers directory browsing
 * **Toolbars**: sticky top bar + floating selection toolbar
 * **Auto save**: writes to disk 1s after editing stops
+* **Clean Markdown save**: minimizes unnecessary escaping and redundant table breaks
 
 ## Settings
 
@@ -44,6 +45,7 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 | `epytor.imageStorage` | `"local"` | Image storage: `local` / `server` |
 | `epytor.imageLocalPath` | `""` | Local image path |
 | `epytor.debugMode` | `false` | Debug mode |
+| `epytor.markdown.serializationMode` | `"clean"` | Markdown save mode: `clean` / `compatible` |
 
 > See Settings UI for all options (`epytor.*`).
 
@@ -63,4 +65,3 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and submission guidelines. Coding and testing standards are maintained in [AGENTS.md](AGENTS.md).
-

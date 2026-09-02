@@ -30,6 +30,7 @@
 * **路径补全**：`@/`、`./`、`../` 触发，分级浏览
 * **工具栏**：顶栏毛玻璃吸顶 + 选中浮动工具栏
 * **自动保存**：停止编辑 1 秒后自动写盘
+* **Clean Markdown 保存**：减少不必要的转义和表格冗余换行
 
 ## 设置
 
@@ -44,6 +45,7 @@
 | `epytor.imageStorage` | `"local"` | 图片存储：`local` / `server` |
 | `epytor.imageLocalPath` | `""` | 本地图片路径 |
 | `epytor.debugMode` | `false` | 调试模式 |
+| `epytor.markdown.serializationMode` | `"clean"` | Markdown 保存模式：`clean` / `compatible` |
 
 > 完整设置列表见 VSCode 设置面板（`epytor.*`）
 
@@ -62,4 +64,3 @@
 ## 参与贡献
 
 开发环境和提交流程见 [CONTRIBUTING.zh-CN.md](CONTRIBUTING.zh-CN.md)。编码和测试规范见 [AGENTS.md](AGENTS.md)。
-
