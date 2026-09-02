@@ -204,6 +204,15 @@ export function activate(context: vscode.ExtensionContext) {
                     enabled: v,
                 });
             }
+            if (e.affectsConfiguration("epytor.markdown.serializationMode")) {
+                const mode = vscode.workspace
+                    .getConfiguration("epytor")
+                    .get<"clean" | "compatible">("markdown.serializationMode", "clean");
+                MarkdownEditorProvider.current?.postToAll({
+                    type: "setSerializationMode",
+                    mode,
+                });
+            }
         }),
     );
 

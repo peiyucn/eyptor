@@ -158,6 +158,19 @@
           "default": false,
           "description": "%config.debugMode.description%"
         },
+        "epytor.markdown.serializationMode": {
+          "type": "string",
+          "enum": [
+            "clean",
+            "compatible"
+          ],
+          "enumDescriptions": [
+            "%config.markdown.serializationMode.clean%",
+            "%config.markdown.serializationMode.compatible%"
+          ],
+          "default": "clean",
+          "description": "%config.markdown.serializationMode.description%"
+        },
         "epytor.imageStorage": {
           "order": 10,
           "type": "string",

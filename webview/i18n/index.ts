@@ -1,9 +1,12 @@
+import type { SerializationMode } from "../utils/markdownSerializer";
+
 declare global {
     interface Window {
         __i18n?: {
             translations: Record<string, string>;
             isMac: boolean;
             debugMode?: boolean;
+            serializationMode?: SerializationMode;
         };
     }
 }

@@ -636,7 +636,8 @@ export class MarkdownEditorProvider
         const isMac = process.platform === 'darwin';
         const translations = lang.startsWith('zh') ? ZH_CN_WEBVIEW : {};
         const debugMode = cfg.get<boolean>("debugMode", false);
-        const i18nScript = `window.__i18n=${JSON.stringify({ translations, isMac, debugMode })};`;
+        const serializationMode = cfg.get<"clean" | "compatible">("markdown.serializationMode", "clean");
+        const i18nScript = `window.__i18n=${JSON.stringify({ translations, isMac, debugMode, serializationMode })};`;
 
         return `<!DOCTYPE html>
 <html lang="${vscode.env.language}">

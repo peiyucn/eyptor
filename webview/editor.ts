@@ -58,6 +58,12 @@ import mermaid from "mermaid";
 import { onThemeChange } from "./utils/themeBus";
 import { t } from "./i18n";
 import { applyMinimalChanges } from "./utils/minimalDiff";
+import { remarkStringifyOptionsCtx } from "@milkdown/kit/core";
+import {
+    cleanTextHandler,
+    serializeCleanMarkdown,
+    type SerializationMode,
+} from "./utils/markdownSerializer";
 
 // 只保留常用语言（143 → ~40）
 const WANTED_LANGS = new Set([
@@ -379,6 +385,43 @@ let _editor: Editor | null = null;
 let _savedMarkdown = '';
 let _hasUserInteracted = false;
 let _interactionListenerAdded = false;
+let _serializationMode: SerializationMode = "clean";
+let _serializationDebug = false;
+
+export function setSerializationMode(mode: SerializationMode): void {
+    _serializationMode = mode;
+}
+
+export function setSerializationDebug(enabled: boolean): void {
+    _serializationDebug = enabled;
+}
+
+function prepareMarkdownForSave(source: string, serialized: string): string {
+    if (_serializationMode === "compatible") return applyMinimalChanges(source, serialized);
+    try {
+        const clean = serializeCleanMarkdown(source, serialized);
+        if (_serializationDebug) {
+            console.debug("[markdown-serialization]", {
+                nodeType: "document",
+                originalSource: source,
+                serializedSource: serialized,
+                output: clean,
+                reason: "clean-mode",
+                dirtyStatus: "phase1-whole-document",
+            });
+        }
+        return applyMinimalChanges(source, clean);
+    } catch (error) {
+        if (_serializationDebug) {
+            console.warn("[markdown-serialization] Clean serializer failed; using compatible output", {
+                error,
+                reason: "clean-serializer-error",
+                dirtyStatus: "phase1-whole-document",
+            });
+        }
+        return applyMinimalChanges(source, serialized);
+    }
+}
 
 function setupInteractionTracking(): void {
     if (_interactionListenerAdded) return;
@@ -402,7 +445,10 @@ export async function createEditor(
     onUpdate: (markdown: string) => void,
     onRenameImage?: (webviewUri: string, newBasename: string) => Promise<void>,
     onTocToggle?: () => void,
+    initialSerializationMode: SerializationMode = "clean",
 ): Promise<Editor> {
+    _serializationMode = initialSerializationMode;
+    _serializationDebug = window.__i18n?.debugMode ?? false;
     _hasUserInteracted = false;
     setupInteractionTracking();
 
@@ -415,7 +461,7 @@ export async function createEditor(
         debounceTimer = setTimeout(() => onUpdate(md), 300);
     };
     const commitMarkdownUpdate = (markdown: string) => {
-        const toSave = applyMinimalChanges(_savedMarkdown, markdown);
+        const toSave = prepareMarkdownForSave(_savedMarkdown, markdown);
         if (toSave === _savedMarkdown) return;
         _savedMarkdown = toSave;
         fireUpdate(toSave);
@@ -803,6 +849,25 @@ export async function createEditor(
     crepe.editor
         .config((ctx) => {
             _savedMarkdown = initialMarkdown;
+
+            // Milkdown 的默认 text handler 会对普通文本中的 `_`、`*`、`[`
+            // 过度转义。保留其上下文安全规则，只在 Clean 模式放宽已知误报。
+            ctx.update(remarkStringifyOptionsCtx, (options) => {
+                const compatibleTextHandler = options.handlers?.text;
+                if (!compatibleTextHandler) return options;
+                return {
+                    ...options,
+                    handlers: {
+                        ...options.handlers,
+                        text: (node, parent, state, info) => {
+                            if (_serializationMode === "compatible") {
+                                return compatibleTextHandler(node, parent, state, info);
+                            }
+                            return cleanTextHandler(node, parent, state, info);
+                        },
+                    },
+                };
+            });
 
             // 注册自定义 image NodeView
             ctx.set(nodeViewCtx, [

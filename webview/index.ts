@@ -16,6 +16,8 @@ import {
     getEditorView,
     registerSelectionChangeHandler,
     setLogTableSel,
+    setSerializationMode,
+    setSerializationDebug,
 } from "./editor";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { TextSelection } from "@milkdown/kit/prose/state";
@@ -367,6 +369,7 @@ async function initEditor(
         },
         handleRenameImage,
         () => toc.toggle(),
+        window.__i18n?.serializationMode ?? "clean",
     );
     toc.updatePosition(); // 工具栏已就绪，更新 TOC 吸顶位置
     toc.refresh(); // 编辑器初始化完成后刷新一次
@@ -853,6 +856,9 @@ onMessage(async (msg) => {
     } else if (msg.type === "setDebugMode") {
         _debugLog = msg.enabled;
         setLogTableSel(msg.enabled);
+        setSerializationDebug(msg.enabled);
+    } else if (msg.type === "setSerializationMode") {
+        setSerializationMode(msg.mode);
     } else if (msg.type === "imageUploaded") {
         const cb = _pendingUploads.get(msg.id);
         if (cb) {
