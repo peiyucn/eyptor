@@ -57,6 +57,7 @@ import { languages as allCodeLanguages } from "@codemirror/language-data";
 import mermaid from "mermaid";
 import { onThemeChange } from "./utils/themeBus";
 import { t } from "./i18n";
+import { applyMinimalChanges } from "./utils/minimalDiff";
 
 // 只保留常用语言（143 → ~40）
 const WANTED_LANGS = new Set([
@@ -368,102 +369,6 @@ const cellClickFixPlugin = $prose(() => {
     });
 });
 
-// ─── 比较规范化辅助函数 ─────────────────────────────────────────────────────
-
-const SEP_ROW_RE  = /^\|[\s\-:|]+\|$/;
-const TABLE_ROW_RE = /^\|.*\|$/;
-
-function normalizeSepRow(line: string): string {
-    const t = line.trim();
-    const cells = t.split('|').slice(1, -1).map(c => {
-        return c.trim().replace(/(:?)-+(:?)/g, (_: string, a: string, b: string) => (a ?? '') + '-' + (b ?? ''));
-    });
-    return '|' + cells.join('|') + '|';
-}
-
-function normalizeSplitStrong(line: string): string {
-    let prev: string;
-    do {
-        prev = line;
-        line = line.replace(
-            /\*\*((?:[^*]|\*(?!\*))*)\*\* \*\*((?:[^*]|\*(?!\*))*)\*\*/g,
-            '**$1 $2**',
-        );
-    } while (line !== prev);
-    return line;
-}
-
-function normalizeTableDataRow(line: string): string {
-    const t = line.trim();
-    const cells = t.split('|').slice(1, -1).map(c => {
-        const v = c.trim();
-        return v === '<br />' ? '' : v;
-    });
-    return '|' + cells.join('|') + '|';
-}
-
-function normalizeFenceOpen(line: string): string {
-    return line.replace(/^(\s*`{3,})\s+/, '$1');
-}
-
-function normLineForCompare(line: string): string {
-    const t = line.trim();
-    if (SEP_ROW_RE.test(t))   return normalizeSepRow(line);
-    if (TABLE_ROW_RE.test(t)) return normalizeTableDataRow(line);
-    if (/^`{3,}/.test(t))     return normalizeFenceOpen(line);
-    return normalizeSplitStrong(line);
-}
-
-// ─── 最小化差异合并 ──────────────────────────────────────────────────────────
-function applyMinimalChanges(saved: string, serialized: string): string {
-    interface SigLine { text: string; lineIdx: number }
-
-    function sigLines(md: string): SigLine[] {
-        return md.split('\n').reduce<SigLine[]>((acc, line, i) => {
-            if (line.trim() !== '') acc.push({ text: line, lineIdx: i });
-            return acc;
-        }, []);
-    }
-
-    const savedSig  = sigLines(saved);
-    const serialSig = sigLines(serialized);
-    const n = savedSig.length, m = serialSig.length;
-
-    const dp: Uint16Array[] = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-    for (let i = 1; i <= n; i++)
-        for (let j = 1; j <= m; j++)
-            dp[i][j] = normLineForCompare(savedSig[i - 1].text) === normLineForCompare(serialSig[j - 1].text)
-                ? dp[i - 1][j - 1] + 1
-                : Math.max(dp[i - 1][j], dp[i][j - 1]);
-
-    const keepMap = new Map<number, number>();
-    {
-        let i = n, j = m;
-        while (i > 0 && j > 0) {
-            if (normLineForCompare(savedSig[i - 1].text) === normLineForCompare(serialSig[j - 1].text)) {
-                keepMap.set(serialSig[j - 1].lineIdx, savedSig[i - 1].lineIdx);
-                i--; j--;
-            } else if (dp[i][j - 1] >= dp[i - 1][j]) {
-                j--;
-            } else {
-                i--;
-            }
-        }
-    }
-
-    if (keepMap.size === n && keepMap.size === m && saved.length === serialized.length) return saved;
-
-    const savedLines = saved.split('\n');
-    const serializedLines = serialized.split('\n');
-    const result: string[] = [];
-    for (let i = 0; i < serializedLines.length; i++) {
-        const savedIdx = keepMap.get(i);
-        if (savedIdx !== undefined) result.push(savedLines[savedIdx]);
-        else result.push(serializedLines[i]);
-    }
-    return result.join('\n');
-}
-
 // ─── 自定义视图组件 ─────────────────────────────────────────
 
 import { createImageView } from "./components/imageView";
@@ -509,9 +414,16 @@ export async function createEditor(
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => onUpdate(md), 300);
     };
-    const debouncedUpdate = (md: string) => {
-        if (isComposing) { pendingMd = md; return; }
-        fireUpdate(md);
+    const commitMarkdownUpdate = (markdown: string) => {
+        const toSave = applyMinimalChanges(_savedMarkdown, markdown);
+        if (toSave === _savedMarkdown) return;
+        _savedMarkdown = toSave;
+        fireUpdate(toSave);
+    };
+
+    const debouncedUpdate = (markdown: string) => {
+        if (isComposing) { pendingMd = markdown; return; }
+        commitMarkdownUpdate(markdown);
     };
 
     container.addEventListener('compositionstart', () => { isComposing = true; });
@@ -520,7 +432,7 @@ export async function createEditor(
         if (pendingMd !== null) {
             const md = pendingMd;
             pendingMd = null;
-            fireUpdate(md);
+            commitMarkdownUpdate(md);
         }
     });
 
@@ -914,10 +826,7 @@ export async function createEditor(
         api.markdownUpdated((_ctx, markdown) => {
             if (!isSettled) return;
             if (!_hasUserInteracted) return;
-            const toSave = applyMinimalChanges(_savedMarkdown, markdown);
-            if (toSave === _savedMarkdown) return;
-            _savedMarkdown = toSave;
-            debouncedUpdate(toSave);
+            debouncedUpdate(markdown);
         });
     });
 
