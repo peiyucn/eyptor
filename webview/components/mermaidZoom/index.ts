@@ -30,6 +30,9 @@ export function enhanceMermaidPreview(container: HTMLElement, svg: SVGElement): 
 
     const apply = (): void => {
         svg.style.width = `${zoom * 100}%`;
+        // mermaid SVG 自带内联 max-width（useMaxWidth 默认），仅改 width 会被压回，
+        // 必须同步缩放 max-width 才能产生视觉效果
+        svg.style.maxWidth = `${zoom * 100}%`;
         container.dataset["epytorMermaidZoom"] = String(zoom);
         bar.setAttribute("data-zoom", String(zoom));
     };
