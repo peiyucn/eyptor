@@ -207,16 +207,17 @@ export function serializeCleanMarkdown(source: string, serialized: string): stri
 }
 
 /**
- * 表格单元格内换行的序列化补丁。
+ * 表格单元格内换行的序列化补丁（闭环方案）。
  *
- * mdast 默认 break handler 在表格上下文（unsafe `\n`）退化为空格，导致
- * hardbreak 序列化丢失（实证：`| x<br> |` 输出为 `|  x |`）。GFM 表格换行的
- * 标准表达是 `<br>`，此处仅在 tableCell 栈内覆盖；其余上下文走默认
- * （CommonMark 软换行反斜杠）。
+ * mdast 默认 break handler 在表格上下文（unsafe `\n`）退化为空格；GFM 表格
+ * 换行的标准表达是 `<br>`，但 remark-gfm 解析层会丢弃 `<br>`（加载往返不一致）。
+ * 因此表格内 break 输出 `&#10;` 实体：GFM 合法、GitHub 渲染为换行、
+ * remark 解析为含 `\n` 的 text、ProseMirror 渲染换行——保存/加载往返一致。
  */
 export function withTableBreakHandler<T extends { handlers?: unknown }>(options: T): T {
     const handlers = (options.handlers ?? {}) as Record<string, unknown>;
     const defaultBreak = handlers.break;
+    const defaultText = handlers.text;
     return {
         ...options,
         handlers: {
@@ -228,12 +229,28 @@ export function withTableBreakHandler<T extends { handlers?: unknown }>(options:
                 info: unknown,
             ) => {
                 if (state.stack.includes("tableCell")) {
-                    return "<br>";
+                    return "&#10;";
                 }
                 const fallback = defaultBreak as
                     | ((n: unknown, p: unknown, s: unknown, i: unknown) => unknown)
                     | undefined;
                 return fallback ? fallback(node, parent, state, info) : "";
+            },
+            // isInline hardbreak（加载 `&#10;` 解析而来）序列化为含 `\n` 的 text：
+            // 表格内必须还原为 `&#10;`，否则裸换行破坏表格结构
+            text: (
+                node: { value?: string },
+                parent: unknown,
+                state: { stack: string[] },
+                info: unknown,
+            ) => {
+                if (state.stack.includes("tableCell") && String(node.value ?? "").includes("\n")) {
+                    return String(node.value ?? "").replace(/\n/g, "&#10;");
+                }
+                const fallback = defaultText as
+                    | ((n: unknown, p: unknown, s: unknown, i: unknown) => unknown)
+                    | undefined;
+                return fallback ? fallback(node, parent, state, info) : String(node.value ?? "");
             },
         } as T["handlers"],
     };

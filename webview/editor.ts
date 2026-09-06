@@ -904,7 +904,7 @@ export async function createEditor(
         .use(formatKeymapPlugin)    // 保留：自定义格式化快捷键
         .use(headingFoldPlugin)     // 标题折叠（Decoration，不修改文档）
         .use(headingStickyPlugin)   // 标题吸顶条（滚动跟随 + 推挤过渡）
-        .use(tableSoftBreakPlugin)  // 表格单元格内 Shift+Enter 软换行（<br>）
+        .use(tableSoftBreakPlugin)  // 表格单元格内 Shift+Enter 软换行（序列化 &#10; 闭环）
         .use(cellClickFixPlugin)    // 表格单击→光标定位，拖拽→多选
         .use(listSpreadNormalizePlugin); // 保留：列表 spread 规范化
 

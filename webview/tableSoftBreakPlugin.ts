@@ -1,9 +1,10 @@
 /**
- * 表格软换行插件：单元格内 Shift+Enter 插入 hardbreak（序列化为 <br>）。
- *
- * 背景（2026-09-04 实证）：官方 tableKeymap 将单元格内 Enter/Shift-Enter
- * 均绑定 goToNextCell（跳转下一单元格），无软换行能力；table_cell schema
- * 支持 hardbreak 节点。本插件在单元格内拦截 Shift-Enter。
+ * 表格换行解析/序列化闭环说明（2026-09-07 实证）：
+ * - remark-gfm 在解析层丢弃表格单元格内的 `<br>`（mdast 信息已丢失，无法恢复）；
+ *   未发布的 Milkdown #2463 正在修此问题。
+ * - epytor 闭环方案：序列化侧把表格内 break 输出为 `&#10;` 实体（withTableBreakHandler），
+ *   GFM 合法、GitHub 渲染为换行、remark 解析为含 `\n` 的 text、ProseMirror 渲染换行——
+ *   往返一致。旧文件中已有的 `<br>` 加载丢失仍为上游限制（升级后解决）。
  */
 import { keymap } from "@milkdown/kit/prose/keymap";
 import { schemaCtx } from "@milkdown/kit/core";

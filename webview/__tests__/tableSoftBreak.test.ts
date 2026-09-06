@@ -97,8 +97,8 @@ describe("tableSoftBreakPlugin", () => {
         view.dispatch(view.state.tr.insert(hbPos + 1, view.state.schema.text("z")));
 
         const md = editor.action(getMarkdown());
-        expect(md).toContain("x<br>z");
-        expect(md).not.toContain("<br>z y");
+        expect(md).toContain("x&#10;z");
+        expect(md).not.toContain("&#10;z y");
     });
 
     it("单元格外 Shift+Enter 应该 放行默认行为（Milkdown 默认 hardbreak，本插件不干预）", async () => {
