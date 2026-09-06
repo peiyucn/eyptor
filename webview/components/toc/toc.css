@@ -52,6 +52,10 @@
 .toc-header-title {
     flex: 1;
     min-width: 0;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ─── TOC 头按钮（对齐顶部工具栏风格）──────────────── */

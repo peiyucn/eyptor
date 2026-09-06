@@ -948,6 +948,10 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     position: fixed;
     z-index: 10000;
     display: none;
+    /* 视口兜底：超长文本不超出屏幕边界（含 8px 边距），超宽省略号 */
+    max-width: calc(100vw - 8px);
+    overflow: hidden;
+    text-overflow: ellipsis;
     padding: 4px 8px;
     background: var(--vscode-editorHoverWidget-background, #252526);
     color: var(--vscode-editorHoverWidget-foreground, #cccccc);
