@@ -99,34 +99,12 @@ codeLanguages.push(LanguageDescription.of({
 
 // ─── 保留的自定义插件 ────────────────────────────────────────────────────────
 // 以下插件 Crepe 不提供对应功能，永久保留：
-//   listLiftPlugin           → 列表 backspace 上升一级
 //   listSpreadNormalizePlugin → 列表 spread 规范化
 //   selectionPlugin          → 选区变更回调（驱动外部 UI）
 //   formatKeymapPlugin       → 自定义格式化快捷键
-
-// 列表 Backspace：光标在行首时，层级 ≥2 → 上升一级；层级 1 → 同样上升（变为普通段落）
-const listLiftPlugin = $prose((ctx) => {
-    const schema = ctx.get(schemaCtx);
-    const listItemType = schema.nodes["list_item"];
-    if (!listItemType) {
-        return new Plugin({});
-    }
-    const doLift = liftListItem(listItemType);
-    return keymap({
-        Backspace: (state, dispatch) => {
-            const { selection } = state;
-            if (!selection.empty) return false;
-            const { $from } = selection;
-            if ($from.parentOffset !== 0) return false;
-            let inList = false;
-            for (let d = $from.depth; d >= 0; d--) {
-                if ($from.node(d).type === listItemType) { inList = true; break; }
-            }
-            if (!inList) return false;
-            return doLift(state, dispatch);
-        },
-    });
-});
+// 说明：列表 Backspace 不再自定义拦截（原 listLiftPlugin 已移除）——
+// 官方 commonmark 默认行为：行首 Backspace = joinBackward（合并/删除行，编号自动重排），
+// Shift-Tab = liftListItem（提升层级），与手测反馈一致。
 
 // 格式化快捷键：Mod-b 粗体、Mod-i 斜体、Mod-Shift-x 删除线、Mod-e 行内代码
 const formatKeymapPlugin = $prose((ctx) =>
@@ -922,7 +900,6 @@ export async function createEditor(
 
         })
         .use(listener)              // 追加 listener 用于 markdownUpdated
-        .use(listLiftPlugin)        // 保留：列表 backspace
         .use(selectionPlugin)       // 保留：选区变更回调
         .use(formatKeymapPlugin)    // 保留：自定义格式化快捷键
         .use(headingFoldPlugin)     // 标题折叠（Decoration，不修改文档）
