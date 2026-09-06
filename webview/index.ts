@@ -40,7 +40,6 @@ import { initPathComplete, dispatchPathSuggestions } from "./components/pathLink
 import { dispatchImgPathSuggestions, dispatchImagePathResolved } from "./components/imageView/imgPathComplete";
 import { setImageUriMap, showGlobalLightbox } from "./components/imageView";
 import { initFindBar } from "./components/findBar";
-import { initHeadingIds } from "./headingIds";
 import { initToc } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
 import { editorViewCtx } from "@milkdown/kit/core";
@@ -441,7 +440,6 @@ if (editorContainer) {
     document.body.appendChild(imgFileInput);
     document.addEventListener('epytor:openSettings', () => notifyOpenSettings());
     setupPathLink(editorContainer);
-    initHeadingIds(editorContainer);
     initPathComplete(() => getEditorView());
     enhanceCodeBlocks(editorContainer);
     setupTopBarTooltips(editorContainer);
