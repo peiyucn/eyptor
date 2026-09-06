@@ -58,6 +58,7 @@ import mermaid from "mermaid";
 import { onThemeChange } from "./utils/themeBus";
 import { t } from "./i18n";
 import { openTableGridPicker } from "./components/tableGridPicker";
+import { enhanceMermaidPreview } from "./components/mermaidZoom";
 import { setTopBarButtonMeta } from "./components/topBarOverflow";
 import { headingFoldPlugin } from "./headingFoldPlugin";
 import { headingStickyPlugin } from "./headingStickyPlugin";
@@ -530,7 +531,11 @@ export async function createEditor(
         // 重绘已有 mermaid 预览
         mermaidCodeMap.forEach((code, key) => {
             const el = document.querySelector<HTMLElement>(`[data-mermaid-key="${key}"]`);
-            if (el) renderMermaid(code).then((svg) => { el.innerHTML = svg; }).catch(() => {});
+            if (el) renderMermaid(code).then((svg) => {
+                el.innerHTML = svg;
+                const svgEl = el.querySelector<SVGElement>("svg");
+                if (svgEl) enhanceMermaidPreview(el, svgEl);
+            }).catch(() => {});
         });
         // 重配 CodeMirror
         reconfigureAllCM();
@@ -542,10 +547,13 @@ export async function createEditor(
         const key = `m-${++mermaidSeq}`;
         mermaidCodeMap.set(key, code);
         apply(`<div data-mermaid-key="${key}"></div>`);
-        const el = () => document.querySelector(`[data-mermaid-key="${key}"]`);
+        const el = () => document.querySelector<HTMLElement>(`[data-mermaid-key="${key}"]`);
         renderMermaid(code).then((svg) => {
             const e = el();
-            if (e) e.innerHTML = svg;
+            if (!e) return;
+            e.innerHTML = svg;
+            const svgEl = e.querySelector<SVGElement>("svg");
+            if (svgEl) enhanceMermaidPreview(e, svgEl);
         }).catch((err) => {
             console.warn('[mermaid] render failed:', err);
             const e = el();
