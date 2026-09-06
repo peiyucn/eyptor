@@ -9,7 +9,7 @@
 
 ### 🔴 高优先级（影响面大，独立处理）
 
-* [ ] **顶栏 button tooltip 注入** — 用正路方案替代 MutationObserver + `requestAnimationFrame` 扫描 `.top-bar-item`
+（无待处理项）
 
 ### 🟡 中优先级（每次改一点）
 
@@ -63,6 +63,10 @@
 ### 🔴 上游 workaround
 
 * [ ] **`cellClickFixPlugin`**（~130 行，[editor.ts:236-363](../webview/editor.ts#L236)）— `filterTransaction` + `appendTransaction` + `requestAnimationFrame` 多层拦截，对抗 Crepe 表格单击行为不稳定。**需等 Milkdown 上游修复后移除。**
+
+### 🔴 官方无替代（已查证）
+
+* [ ] **顶栏 button tooltip 注入**（`setupTopBarTooltips`，MutationObserver 扫描）— 2026-09-04 查证：官方 `TopBarItem` 类型仅 `{ active, icon, selector? }`，无 label/title 字段，**无官方 API 可替代**；MutationObserver 注入为唯一可行手段，保留（上游提供文案字段后移除）。
 
 ### 🟠 DOM 刮削 / MutationObserver 反模式（剩余）
 
