@@ -33,11 +33,19 @@ export function computeOverflow(input: OverflowBudgetInput): Set<string> {
     }
 
     let used = total;
-    // 从右往左尝试收起
+    // 从右往左尝试收起（固定项优先保留）
     for (let i = items.length - 1; i >= 0; i--) {
         if (used <= containerWidth - moreBtnWidth) break;
         const item = items[i];
         if (pinned.has(item.key)) continue;
+        hidden.add(item.key);
+        used -= item.width;
+    }
+    // 兜底：预算仍不足时收起固定项，防止「⋯」按钮与剩余按钮重叠
+    for (let i = items.length - 1; i >= 0; i--) {
+        if (used <= containerWidth - moreBtnWidth) break;
+        const item = items[i];
+        if (hidden.has(item.key)) continue;
         hidden.add(item.key);
         used -= item.width;
     }

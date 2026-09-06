@@ -218,6 +218,10 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
     resizeObserver.observe(document.body);
     window.addEventListener("resize", schedule);
 
+    moreBtn.addEventListener("mousedown", (e) => {
+        // 防止「⋯」按钮夺走编辑器焦点（光标还在但输入失效）
+        e.preventDefault();
+    });
     moreBtn.addEventListener("click", () => {
         const el = host.getTopBarEl();
         if (!el) return;

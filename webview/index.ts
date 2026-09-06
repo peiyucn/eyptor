@@ -363,7 +363,11 @@ async function initEditor(
     _topBarOverflowCtl = initTopBarOverflow({
         getTopBarEl: () => document.querySelector<HTMLElement>(".milkdown-top-bar"),
         runItem: (meta) => {
-            currentEditor?.action((ctx) => meta.onRun(ctx));
+            currentEditor?.action((ctx) => {
+                meta.onRun(ctx);
+                // 执行后把焦点还给编辑器（按钮点击会夺焦）
+                ctx.get(editorViewCtx).focus();
+            });
         },
     });
 }
