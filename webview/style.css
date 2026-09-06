@@ -950,6 +950,7 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     z-index: 10000;
     display: none;
     /* 视口兜底：超长文本不超出屏幕边界（含 8px 边距），超宽省略号 */
+    box-sizing: border-box;
     max-width: calc(100vw - 8px);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -963,5 +964,10 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     white-space: nowrap;
     pointer-events: none;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+}
+
+/* 表格内 isInline hardbreak（加载 `&#10;` 解析而来）：渲染为换行 */
+.milkdown span[data-type="hardbreak"][data-is-inline="true"] {
+    display: block;
 }
 
