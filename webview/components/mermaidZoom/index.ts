@@ -5,6 +5,9 @@
 import "./mermaidZoom.css";
 import { clampZoom, MERMAID_ZOOM_STEP } from "@/utils/mermaidZoom";
 import { t } from "@/i18n";
+import { IconResetZoom } from "@/ui/icons";
+
+const DEFAULT_ZOOM = 0.8;
 
 let _seq = 0;
 
@@ -12,16 +15,21 @@ let _seq = 0;
 export function enhanceMermaidPreview(container: HTMLElement, svg: SVGElement): void {
     const key = `mz-${++_seq}`;
     const savedZoom = Number(container.dataset["epytorMermaidZoom"]);
-    let zoom = Number.isFinite(savedZoom) && savedZoom > 0 ? savedZoom : 1;
+    // 默认 0.8×（mermaid 原始尺寸偏大）；未保存过倍率时用默认值
+    let zoom = Number.isFinite(savedZoom) && savedZoom > 0 ? savedZoom : DEFAULT_ZOOM;
 
     const bar = document.createElement("div");
     bar.className = "epytor-mermaid-zoom-bar";
 
-    const mkBtn = (label: string, title: string, onClick: () => void): HTMLButtonElement => {
+    const mkBtn = (
+        content: string,
+        title: string,
+        onClick: () => void,
+    ): HTMLButtonElement => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "epytor-mermaid-zoom-btn";
-        btn.textContent = label;
+        btn.innerHTML = content;
         btn.title = title;
         btn.setAttribute("aria-label", title);
         btn.addEventListener("click", onClick);
@@ -39,7 +47,7 @@ export function enhanceMermaidPreview(container: HTMLElement, svg: SVGElement): 
 
     const zoomIn = mkBtn("＋", t("Zoom In"), () => { zoom = clampZoom(zoom, MERMAID_ZOOM_STEP); apply(); });
     const zoomOut = mkBtn("－", t("Zoom Out"), () => { zoom = clampZoom(zoom, -MERMAID_ZOOM_STEP); apply(); });
-    const zoomReset = mkBtn("×", t("Reset Zoom"), () => { zoom = 1; apply(); });
+    const zoomReset = mkBtn(IconResetZoom, t("Reset Zoom"), () => { zoom = DEFAULT_ZOOM; apply(); });
 
     bar.append(zoomIn, zoomOut, zoomReset);
     container.classList.add("epytor-mermaid-zoom-container");

@@ -1,7 +1,7 @@
 /**
  * Mermaid 预览缩放纯逻辑（无 DOM 依赖，可单元测试）。
  */
-export const MERMAID_ZOOM_MIN = 0.4;
+export const MERMAID_ZOOM_MIN = 0.2;
 export const MERMAID_ZOOM_MAX = 3;
 export const MERMAID_ZOOM_STEP = 0.2;
 
