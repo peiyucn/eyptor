@@ -616,6 +616,10 @@ export class MarkdownEditorProvider
         const editorMaxWidth = cfg.get<number>("editorMaxWidth", 900);
         const fontFamily = cfg.get<string>("fontFamily", "");
         const imageSelectionColor = cfg.get<string>("imageSelectionColor", "rgba(52, 211, 153, 0.6)");
+        const tableWrapMode = cfg.get<string>("tableWrapMode", "normal");
+        const tableWordBreak = tableWrapMode === "aggressive" ? "break-all" : "keep-all";
+        const tableWhiteSpace = tableWrapMode === "none" ? "nowrap" : "normal";
+        const tableOverflowX = tableWrapMode === "none" ? "auto" : "visible";
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(
                 this.context.extensionUri,
@@ -651,7 +655,7 @@ export class MarkdownEditorProvider
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Markdown Editor</title>
   <link rel="stylesheet" href="${styleUri}">
-  <style>:root { --code-block-max-height: ${maxHeight}px; --editor-max-width: ${editorMaxWidth}px;${fontFamily ? ` --custom-font-family: ${fontFamily};` : ''} --image-selection-color: ${imageSelectionColor}; }</style>
+  <style>:root { --code-block-max-height: ${maxHeight}px; --editor-max-width: ${editorMaxWidth}px;${fontFamily ? ` --custom-font-family: ${fontFamily};` : ''} --image-selection-color: ${imageSelectionColor}; --epytor-table-word-break: ${tableWordBreak}; --epytor-table-white-space: ${tableWhiteSpace}; --epytor-table-overflow-x: ${tableOverflowX}; }</style>
 </head>
 <body>
   <div class="editor-topbar"></div>

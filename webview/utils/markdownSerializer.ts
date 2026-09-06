@@ -205,3 +205,36 @@ export function preserveTableBreakStyle(source: string, serialized: string): str
 export function serializeCleanMarkdown(source: string, serialized: string): string {
     return cleanTableBreaks(preserveTableBreakStyle(source, serialized));
 }
+
+/**
+ * 表格单元格内换行的序列化补丁。
+ *
+ * mdast 默认 break handler 在表格上下文（unsafe `\n`）退化为空格，导致
+ * hardbreak 序列化丢失（实证：`| x<br> |` 输出为 `|  x |`）。GFM 表格换行的
+ * 标准表达是 `<br>`，此处仅在 tableCell 栈内覆盖；其余上下文走默认
+ * （CommonMark 软换行反斜杠）。
+ */
+export function withTableBreakHandler<T extends { handlers?: unknown }>(options: T): T {
+    const handlers = (options.handlers ?? {}) as Record<string, unknown>;
+    const defaultBreak = handlers.break;
+    return {
+        ...options,
+        handlers: {
+            ...handlers,
+            break: (
+                node: unknown,
+                parent: unknown,
+                state: { stack: string[] },
+                info: unknown,
+            ) => {
+                if (state.stack.includes("tableCell")) {
+                    return "<br>";
+                }
+                const fallback = defaultBreak as
+                    | ((n: unknown, p: unknown, s: unknown, i: unknown) => unknown)
+                    | undefined;
+                return fallback ? fallback(node, parent, state, info) : "";
+            },
+        } as T["handlers"],
+    };
+}

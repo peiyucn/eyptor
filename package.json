@@ -171,6 +171,21 @@
           "default": "clean",
           "description": "%config.markdown.serializationMode.description%"
         },
+        "epytor.tableWrapMode": {
+          "type": "string",
+          "enum": [
+            "normal",
+            "aggressive",
+            "none"
+          ],
+          "enumDescriptions": [
+            "%config.tableWrapMode.normal%",
+            "%config.tableWrapMode.aggressive%",
+            "%config.tableWrapMode.none%"
+          ],
+          "default": "normal",
+          "description": "%config.tableWrapMode.description%"
+        },
         "epytor.imageStorage": {
           "order": 10,
           "type": "string",

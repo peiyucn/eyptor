@@ -60,11 +60,13 @@ import { t } from "./i18n";
 import { openTableGridPicker } from "./components/tableGridPicker";
 import { headingFoldPlugin } from "./headingFoldPlugin";
 import { headingStickyPlugin } from "./headingStickyPlugin";
+import { tableSoftBreakPlugin } from "./tableSoftBreakPlugin";
 import { applyMinimalChanges } from "./utils/minimalDiff";
 import { remarkStringifyOptionsCtx } from "@milkdown/kit/core";
 import {
     cleanTextHandler,
     serializeCleanMarkdown,
+    withTableBreakHandler,
     type SerializationMode,
 } from "./utils/markdownSerializer";
 
@@ -868,7 +870,9 @@ export async function createEditor(
             ctx.update(remarkStringifyOptionsCtx, (options) => {
                 const compatibleTextHandler = options.handlers?.text;
                 if (!compatibleTextHandler) return options;
-                return {
+                // 表格单元格内换行：mdast 默认 handler 在表格上下文退化为空格，
+                // 覆盖为 GFM 标准 <br>（两种序列化模式均生效，见 withTableBreakHandler）
+                return withTableBreakHandler({
                     ...options,
                     handlers: {
                         ...options.handlers,
@@ -879,7 +883,7 @@ export async function createEditor(
                             return cleanTextHandler(node, parent, state, info);
                         },
                     },
-                };
+                });
             });
 
             // 注册自定义 image NodeView
@@ -898,6 +902,7 @@ export async function createEditor(
         .use(formatKeymapPlugin)    // 保留：自定义格式化快捷键
         .use(headingFoldPlugin)     // 标题折叠（Decoration，不修改文档）
         .use(headingStickyPlugin)   // 标题吸顶条（滚动跟随 + 推挤过渡）
+        .use(tableSoftBreakPlugin)  // 表格单元格内 Shift+Enter 软换行（<br>）
         .use(cellClickFixPlugin)    // 表格单击→光标定位，拖拽→多选
         .use(listSpreadNormalizePlugin); // 保留：列表 spread 规范化
 

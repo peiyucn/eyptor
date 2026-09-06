@@ -868,6 +868,16 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
 }
 
 /* ─── 表格：按钮形状 + 背景 ───────────────────────────────── */
+/* 换行三档（epytor.tableWrapMode）：CSS 变量由 Extension 注入 */
+.milkdown .milkdown-table-block {
+    overflow-x: var(--epytor-table-overflow-x, visible);
+}
+.milkdown .milkdown-table-block table th,
+.milkdown .milkdown-table-block table td {
+    word-break: var(--epytor-table-word-break, keep-all);
+    white-space: var(--epytor-table-white-space, normal);
+    overflow-wrap: break-word;
+}
 .milkdown .milkdown-table-block .cell-handle {
     background-color: var(--vscode-editor-background);
     border-radius: 6px;
