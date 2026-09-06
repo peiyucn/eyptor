@@ -59,7 +59,7 @@ import { onThemeChange } from "./utils/themeBus";
 import { t } from "./i18n";
 import { openTableGridPicker } from "./components/tableGridPicker";
 import { enhanceMermaidPreview } from "./components/mermaidZoom";
-import { setTopBarButtonMeta } from "./components/topBarOverflow";
+import { setTopBarButtonMeta, findTopBarButtonEl } from "./components/topBarOverflow";
 import { headingFoldPlugin } from "./headingFoldPlugin";
 import { headingStickyPlugin } from "./headingStickyPlugin";
 import { tableSoftBreakPlugin } from "./tableSoftBreakPlugin";
@@ -667,7 +667,8 @@ export async function createEditor(
                         onRun: (ctx) => {
                             // 网格选择器：hover 预览行列，点击插入（官方 insertTableCommand 支持任意行列）
                             const viewDom = ctx.get(editorViewCtx).dom;
-                            const anchor = viewDom.parentElement?.querySelector<HTMLElement>('.milkdown-top-bar') ?? viewDom;
+                            const topBar = viewDom.parentElement?.querySelector<HTMLElement>('.milkdown-top-bar');
+                            const anchor = (topBar ? findTopBarButtonEl(topBar, 'table') : null) ?? topBar ?? viewDom;
                             openTableGridPicker(anchor, (rows, cols) => {
                                 ctx.get(commandsCtx).call(insertTableCommand.key, { row: rows, col: cols });
                             });

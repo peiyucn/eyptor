@@ -52,6 +52,20 @@ export function setTopBarButtonMeta(meta: TopBarButtonMeta[]): void {
     _meta = meta;
 }
 
+/** 按 meta 顺序定位指定 key 的顶栏按钮 DOM（heading selector 与普通 item 均计入序列） */
+export function findTopBarButtonEl(topBar: HTMLElement, key: string): HTMLElement | null {
+    const children = Array.from(
+        topBar.querySelectorAll<HTMLElement>(".top-bar-item, .top-bar-heading-selector"),
+    );
+    let metaIdx = 0;
+    for (const child of children) {
+        const meta = _meta[metaIdx];
+        if (meta && meta.key === key) return child;
+        metaIdx++;
+    }
+    return null;
+}
+
 let _activeMenu: HTMLElement | null = null;
 let _onMenuKey: ((e: KeyboardEvent) => void) | null = null;
 let _onMenuDocMousedown: ((e: MouseEvent) => void) | null = null;
