@@ -98,7 +98,8 @@ function buildFoldDecorations(doc: ProseNode, folded: ReadonlySet<number>): Deco
                     offset + 1,
                     (view) => createFoldGutter(view, offset, collapsed),
                     {
-                        key: `epytor-heading-fold-gutter-${offset}`,
+                        // key 含折叠状态：状态翻转时强制重建 widget（chevron 图标切换）
+                        key: `epytor-heading-fold-gutter-${offset}-${collapsed ? "closed" : "open"}`,
                     },
                 ),
             );

@@ -390,6 +390,8 @@ import { createImageView } from "./components/imageView";
 
 let _editor: Editor | null = null;
 let _savedMarkdown = '';
+/** CodeMirror 主题补配 MutationObserver（编辑器重建时先断开旧的） */
+let _cmObserver: MutationObserver | null = null;
 let _hasUserInteracted = false;
 let _interactionListenerAdded = false;
 let _serializationMode: SerializationMode = "clean";
@@ -510,9 +512,12 @@ export async function createEditor(
     };
 
     // 监听新 CodeMirror 编辑器创建（补配主题）
+    // 模块级引用：编辑器重建时先断开旧的，避免 MutationObserver 累积泄漏
+    _cmObserver?.disconnect();
     const cmObserver = new MutationObserver(() => {
         if (document.querySelector(".cm-editor")) setTimeout(reconfigureAllCM, 10);
     });
+    _cmObserver = cmObserver;
     cmObserver.observe(container, { childList: true, subtree: true });
 
     // 主题切换：CodeMirror + Mermaid 全部统一处理
