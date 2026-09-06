@@ -50,6 +50,9 @@ import { applyTooltip } from "./ui/tooltip";
 import { IconMaximize2 } from "./ui/icons";
 import { t } from "./i18n";
 import { createFrontmatterPanel, type FrontmatterPanelHandle } from "./components/frontmatterPanel";
+import { initTopBarOverflow } from "./components/topBarOverflow";
+
+let _topBarOverflowCtl: { dispose(): void } | null = null;
 
 let currentEditor: Editor | null = null;
 let currentLineMap: number[] = [];
@@ -335,6 +338,8 @@ async function initEditor(
         currentEditor.destroy();
         currentEditor = null;
         container.innerHTML = "";
+        _topBarOverflowCtl?.dispose();
+        _topBarOverflowCtl = null;
     }
 
     currentEditor = await createEditor(
@@ -353,6 +358,14 @@ async function initEditor(
     toc.refresh(); // 编辑器初始化完成后刷新一次
     toc.show();    // toolbar 就绪，显示 TOC 面板
     updateWordCount(); // 编辑器初始化完成后统计一次
+
+    // 顶栏溢出菜单（topBar 已渲染后初始化）
+    _topBarOverflowCtl = initTopBarOverflow({
+        getTopBarEl: () => document.querySelector<HTMLElement>(".milkdown-top-bar"),
+        runItem: (meta) => {
+            currentEditor?.action((ctx) => meta.onRun(ctx));
+        },
+    });
 }
 
 // 链接 Hover 弹框（在 #editor 容器上监听）
