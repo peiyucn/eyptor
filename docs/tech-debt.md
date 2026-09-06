@@ -16,6 +16,7 @@
 
 * [ ] **代码块全屏按钮注入** — MutationObserver 改为 Crepe NodeView 扩展
 * [ ] **CodeMirror 主题补配** — MutationObserver 改为 Compartment 初始化时传入
+* [ ] **溢出菜单与官方 Vue 渲染的耦合点**（2026-09-04 新增，`components/topBarOverflow`）— ① 隐藏 class 依赖 MutationObserver 自愈（Vue patch 覆盖）② 按钮 meta 与官方 DOM 渲染顺序对齐（官方渲染顺序变更需同步）；上游 topBar 提供 item key 或 overflow 能力后移除
 
 ***
 
@@ -24,6 +25,7 @@
 ### 🔴 高优先级
 
 * [x] **`setupSelectionToolbar` 拆分** — 提取 `createFormatDropdown` / `createAlignmentDropdown` / `createTableDeleteButtons` 三个模块函数（554→277 行）
+* [x] **selectionToolbar 整体删除**（2026-09-04）— 官方 `feature/toolbar` 替代后遗留死代码（813 行 + 95 CSS + 7 个孤儿图标），连同空实现 `headingIds.ts` 一并清理（-1025 行）
 * [x] **`initToc` 拆分** — 提取 `getHeadings` / `findHeadingElement` / `hasChildren` / `isHeadingVisible` 到模块级（406→338 行）
 * [x] **`createImageView` 拆分** — 提取 `startToolbarInlineEdit` 通用内联编辑辅助，消除 `startCaptionEdit`/`startSrcEdit` 重复（~80 行共用），同步修复路径解析不存在的文件产生畸形 URL
 * [x] **魔法数字常量化** — 新增 `shared/constants.ts`，提取 25 个命名常量，替换 ~55 处硬编码数字
