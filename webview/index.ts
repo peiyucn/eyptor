@@ -49,7 +49,7 @@ import { editorViewCtx } from "@milkdown/kit/core";
 import { applyTooltip } from "./ui/tooltip";
 import { IconMaximize2 } from "./ui/icons";
 import { t } from "./i18n";
-import { parseFrontmatter, serializeFrontmatter, type FrontmatterRow } from "./utils/frontmatter";
+import { createFrontmatterPanel, type FrontmatterPanelHandle } from "./components/frontmatterPanel";
 
 let currentEditor: Editor | null = null;
 let currentLineMap: number[] = [];
@@ -267,117 +267,27 @@ document.body.appendChild(toc.panel);
 const findBar = initFindBar(() => document.getElementById("editor"));
 
 /** 在 #editor 前渲染 frontmatter 可编辑面板；无 frontmatter 时移除面板 */
+let _frontmatterPanelHandle: FrontmatterPanelHandle | null = null;
+
 function renderFrontmatterPanel(frontmatter: string | undefined): void {
-    const existing = document.getElementById('frontmatter-panel');
     const editorEl = document.getElementById('editor');
     if (!frontmatter) {
-        existing?.remove();
+        _frontmatterPanelHandle?.dispose();
+        _frontmatterPanelHandle = null;
         if (editorEl) { editorEl.style.paddingTop = ''; }
         return;
     }
-    const entries = parseFrontmatter(frontmatter);
-    if (entries.length === 0) {
-        existing?.remove();
-        if (editorEl) { editorEl.style.paddingTop = ''; }
-        return;
-    }
-
-    const panel = existing ?? document.createElement('div');
-    panel.id = 'frontmatter-panel';
-    panel.className = 'frontmatter-panel';
-    panel.innerHTML = '';
-    const table = document.createElement('table');
-    table.className = 'frontmatter-table';
-    const tbody = document.createElement('tbody');
-    table.appendChild(tbody);
-    panel.appendChild(table);
-
-    let saveTimer: ReturnType<typeof setTimeout> | null = null;
-    const collectRows = (): FrontmatterRow[] => {
-        const rows: FrontmatterRow[] = [];
-        tbody.querySelectorAll<HTMLTableRowElement>('tr.fm-row').forEach((tr) => {
-            const keyInput = tr.querySelector<HTMLInputElement>('.fm-key-input');
-            const valueInput = tr.querySelector<HTMLInputElement>('.fm-val-input');
-            rows.push({
-                key: keyInput?.value ?? "",
-                value: valueInput?.value ?? "",
-            });
-        });
-        return rows;
-    };
-    const scheduleSave = () => {
-        if (saveTimer) clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
-            notifyFrontmatterUpdate(serializeFrontmatter(collectRows()));
-        }, 300);
-    };
-
-    const addRow = (key = "", value = ""): void => {
-        const tr = document.createElement('tr');
-        tr.className = 'fm-row';
-        const keyTd = document.createElement('td');
-        keyTd.className = 'fm-key';
-        const keyInput = document.createElement('input');
-        keyInput.className = 'fm-key-input';
-        keyInput.value = key;
-        keyInput.placeholder = 'key';
-        keyInput.spellcheck = false;
-        const valTd = document.createElement('td');
-        valTd.className = 'fm-val';
-        const valueInput = document.createElement('input');
-        valueInput.className = 'fm-val-input';
-        valueInput.value = value;
-        valueInput.placeholder = 'value';
-        valueInput.spellcheck = false;
-        const delTd = document.createElement('td');
-        delTd.className = 'fm-del';
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.className = 'fm-del-btn';
-        delBtn.textContent = '✕';
-        delBtn.setAttribute('aria-label', t('Delete'));
-        delBtn.addEventListener('click', () => {
-            tr.remove();
-            scheduleSave();
-        });
-        delTd.appendChild(delBtn);
-        keyTd.appendChild(keyInput);
-        valTd.appendChild(valueInput);
-        tr.append(keyTd, valTd, delTd);
-        tbody.appendChild(tr);
-        keyInput.addEventListener('input', scheduleSave);
-        valueInput.addEventListener('input', scheduleSave);
-        keyInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); valueInput.focus(); }
-        });
-        valueInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                addRow();
-                tbody.querySelector<HTMLInputElement>('tr:last-child .fm-key-input')?.focus();
-            }
-        });
-    };
-
-    for (const { key, value } of entries) {
-        addRow(key, value);
-    }
-
-    const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.className = 'fm-add-btn';
-    addBtn.textContent = '+';
-    addBtn.setAttribute('aria-label', t('Add'));
-    addBtn.addEventListener('click', () => {
-        addRow();
-        tbody.querySelector<HTMLInputElement>('tr:last-child .fm-key-input')?.focus();
+    // 重建前先 dispose 旧实例，取消其防抖 timer（防止 revert 后旧编辑写回）
+    _frontmatterPanelHandle?.dispose();
+    _frontmatterPanelHandle = createFrontmatterPanel(frontmatter, (serialized) => {
+        notifyFrontmatterUpdate(serialized);
     });
-    panel.appendChild(addBtn);
-
-    const editor = document.getElementById('editor');
-    if (!existing) {
-        editor?.parentNode?.insertBefore(panel, editor);
+    if (!_frontmatterPanelHandle) {
+        if (editorEl) { editorEl.style.paddingTop = ''; }
+        return;
     }
+    const editor = document.getElementById('editor');
+    editor?.parentNode?.insertBefore(_frontmatterPanelHandle.panel, editor);
     // 有 frontmatter 面板时，editor 的顶部 padding 由面板承担，只保留间距
     if (editor) { editor.style.paddingTop = '16px'; }
 }
