@@ -181,11 +181,22 @@ export const headingFoldPlugin = $prose(() =>
                 if (headingPos === null || !folded.has(headingPos)) return false;
                 if ($from.pos < headingPos + 1 + headingTextLen) return false;
 
+                // 展开并把光标移入展开内容的第一个块（不产生新段落）
+                const headingNode = view.state.doc.nodeAt(headingPos);
+                const range = headingNode
+                    ? findHeadingFoldRange(view.state.doc, headingPos, getHeadingLevel(headingNode))
+                    : null;
                 const tr = view.state.tr
                     .setMeta(headingFoldPluginKey, { type: "toggle", pos: headingPos } satisfies HeadingFoldMeta)
                     .setMeta("addToHistory", false);
+                if (range) {
+                    tr.setSelection(
+                        TextSelection.near(tr.doc.resolve(Math.min(range.from + 1, tr.doc.content.size))),
+                    );
+                }
                 view.dispatch(tr);
-                return false;
+                view.focus();
+                return true;
             },
         },
         view(view) {

@@ -153,11 +153,19 @@ export const headingStickyPlugin = $prose(() =>
 
                 let activeIndex = -1;
                 for (let i = 0; i < headings.length; i++) {
-                    if (headings[i].getBoundingClientRect().top <= top) {
-                        activeIndex = i;
-                    } else {
+                    const rect = headings[i].getBoundingClientRect();
+                    if (rect.bottom > top) {
+                        // 第一个尚未完全滚出顶栏的标题：吸顶它的前一个（已滚出的）
+                        activeIndex =
+                            i > 0 && headings[i - 1].getBoundingClientRect().bottom <= top
+                                ? i - 1
+                                : -1;
                         break;
                     }
+                }
+                if (activeIndex < 0 && headings.length > 0) {
+                    // 所有标题均已滚出：吸顶最后一个（文档底部）
+                    activeIndex = headings.length - 1;
                 }
 
                 if (activeIndex < 0) {
