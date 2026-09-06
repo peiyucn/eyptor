@@ -9,7 +9,6 @@
 
 ### 🔴 高优先级（影响面大，独立处理）
 
-* [ ] **`resolveCustomEditor` 拆分** — [`MarkdownEditorProvider.ts:183`](../src/MarkdownEditorProvider.ts#L183)，322 行，可提取面板清理 / ViewState / 消息路由 / 文件监听为类方法
 * [ ] **顶栏 button tooltip 注入** — 用正路方案替代 MutationObserver + `requestAnimationFrame` 扫描 `.top-bar-item`
 
 ### 🟡 中优先级（每次改一点）
@@ -24,6 +23,7 @@
 
 ### 🔴 高优先级
 
+* [x] **`resolveCustomEditor` 拆分**（2026-09-05）— 336 行提取为 `_registerPanelDisposeCleanup` / `_registerViewStateHandler` / `_handleWebviewMessage` / `_handleOpenFileMessage` / `_registerFileWatcher` 五个私有方法，行为零变化
 * [x] **`setupSelectionToolbar` 拆分** — 提取 `createFormatDropdown` / `createAlignmentDropdown` / `createTableDeleteButtons` 三个模块函数（554→277 行）
 * [x] **selectionToolbar 整体删除**（2026-09-04）— 官方 `feature/toolbar` 替代后遗留死代码（813 行 + 95 CSS + 7 个孤儿图标），连同空实现 `headingIds.ts` 一并清理（-1025 行）
 * [x] **`initToc` 拆分** — 提取 `getHeadings` / `findHeadingElement` / `hasChildren` / `isHeadingVisible` 到模块级（406→338 行）
