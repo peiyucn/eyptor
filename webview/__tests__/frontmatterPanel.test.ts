@@ -65,4 +65,24 @@ describe("frontmatterPanel 组件", () => {
     it("空 frontmatter 应该 返回 null（不创建面板）", () => {
         expect(createFrontmatterPanel("", vi.fn())).toBeNull();
     });
+
+    it("点击 + 新增行并输入 应该 回调含新行的序列化结果", () => {
+        const onChange = vi.fn();
+        const handle = createFrontmatterPanel("---\ntitle: A\n---\n", onChange)!;
+        document.body.appendChild(handle.panel);
+
+        const addBtn = handle.panel.querySelector<HTMLButtonElement>(".fm-add-btn")!;
+        addBtn.click();
+        expect(handle.panel.querySelectorAll("tr.fm-row")).toHaveLength(2);
+
+        const newKey = handle.panel.querySelector<HTMLInputElement>('tr:last-child .fm-key-input')!;
+        const newVal = handle.panel.querySelector<HTMLInputElement>('tr:last-child .fm-val-input')!;
+        newKey.value = "tags";
+        newKey.dispatchEvent(new Event("input"));
+        newVal.value = "a, b";
+        newVal.dispatchEvent(new Event("input"));
+
+        vi.advanceTimersByTime(300);
+        expect(onChange).toHaveBeenCalledWith("---\ntitle: A\ntags: a, b\n---\n");
+    });
 });

@@ -59,6 +59,13 @@ export function createFrontmatterPanel(
         }, SAVE_DEBOUNCE_MS);
     };
 
+    /** 立即提交（输入框失焦 / 删除行 / 切换模式前）：防抖窗口内切走不丢改动 */
+    const flushSave = () => {
+        if (disposed) return;
+        clearTimer();
+        onChange(serializeFrontmatter(collectRows()));
+    };
+
     const addRow = (key = "", value = ""): void => {
         const tr = document.createElement("tr");
         tr.className = "fm-row";
@@ -85,7 +92,7 @@ export function createFrontmatterPanel(
         delBtn.setAttribute("aria-label", t("Delete"));
         delBtn.addEventListener("click", () => {
             tr.remove();
-            scheduleSave();
+            flushSave();
         });
         delTd.appendChild(delBtn);
         keyTd.appendChild(keyInput);
@@ -94,6 +101,8 @@ export function createFrontmatterPanel(
         tbody.appendChild(tr);
         keyInput.addEventListener("input", scheduleSave);
         valueInput.addEventListener("input", scheduleSave);
+        keyInput.addEventListener("blur", flushSave);
+        valueInput.addEventListener("blur", flushSave);
         keyInput.addEventListener("keydown", (e) => {
             if (e.key === "Enter") { e.preventDefault(); valueInput.focus(); }
         });
