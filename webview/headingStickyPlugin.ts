@@ -56,14 +56,25 @@ export const headingStickyPlugin = $prose(() =>
             let activeHeading: HTMLElement | null = null;
             let activeHeadingPos: number | null = null;
 
+            const STICKY_SCROLL_OFFSET_PX = 8;
+
             const scrollHeadingIntoStickyPosition = (headingPos: number) => {
                 requestAnimationFrame(() => {
                     const heading = view.nodeDOM(headingPos);
                     if (!(heading instanceof HTMLElement)) return;
-                    const top = heading.getBoundingClientRect().top + window.scrollY - getTopbarBottom() - 8;
+                    const top = heading.getBoundingClientRect().top + window.scrollY - getTopbarBottom() - STICKY_SCROLL_OFFSET_PX;
                     window.scrollTo({ top });
                 });
             };
+
+            // 点击吸顶条跳回标题：只绑定一次（标题变化仅更新内容，避免监听器累积）
+            sticky.addEventListener("click", (event) => {
+                if ((event.target as HTMLElement).closest(".heading-sticky-toggle")) return;
+                const pos = Number(sticky.dataset["headingPos"]);
+                if (Number.isFinite(pos) && pos > 0) {
+                    scrollHeadingIntoStickyPosition(pos);
+                }
+            });
 
             const setStickyContent = (
                 heading: HTMLElement,
@@ -74,11 +85,6 @@ export const headingStickyPlugin = $prose(() =>
                 const level = getHeadingLevel(view.state.doc.nodeAt(headingPos) ?? { attrs: {} });
                 const text = getHeadingText(heading);
                 sticky.innerHTML = "";
-
-                sticky.addEventListener("click", (event) => {
-                    if ((event.target as HTMLElement).closest(".heading-sticky-toggle")) return;
-                    scrollHeadingIntoStickyPosition(headingPos);
-                });
 
                 if (foldable) {
                     const button = document.createElement("button");
