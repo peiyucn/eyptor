@@ -14,7 +14,7 @@ import {
     listItemSchema,
     wrapInBlockTypeCommand,
 } from "@milkdown/kit/preset/commonmark";
-import { toggleStrikethroughCommand } from "@milkdown/kit/preset/gfm";
+import { toggleStrikethroughCommand, insertTableCommand } from "@milkdown/kit/preset/gfm";
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { undo, redo } from "@milkdown/kit/prose/history";
@@ -57,6 +57,7 @@ import { languages as allCodeLanguages } from "@codemirror/language-data";
 import mermaid from "mermaid";
 import { onThemeChange } from "./utils/themeBus";
 import { t } from "./i18n";
+import { openTableGridPicker } from "./components/tableGridPicker";
 import { applyMinimalChanges } from "./utils/minimalDiff";
 import { remarkStringifyOptionsCtx } from "@milkdown/kit/core";
 import {
@@ -643,7 +644,17 @@ export async function createEditor(
                             ctx.get(editorViewCtx).dom.dispatchEvent(new CustomEvent('epytor:insertImage', { bubbles: true }));
                         },
                     });
-                    if (tableItem) g.addItem('table', tableItem);
+                    if (tableItem) g.addItem('table', {
+                        ...tableItem,
+                        onRun: (ctx) => {
+                            // 网格选择器：hover 预览行列，点击插入（官方 insertTableCommand 支持任意行列）
+                            const viewDom = ctx.get(editorViewCtx).dom;
+                            const anchor = viewDom.parentElement?.querySelector<HTMLElement>('.milkdown-top-bar') ?? viewDom;
+                            openTableGridPicker(anchor, (rows, cols) => {
+                                ctx.get(commandsCtx).call(insertTableCommand.key, { row: rows, col: cols });
+                            });
+                        },
+                    });
                 }
                 // 引用块一键退出：在引用内点击 → lift 解包，否则 → 包裹
                 {
