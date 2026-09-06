@@ -8,10 +8,11 @@ import { t } from "@/i18n";
 
 let _seq = 0;
 
-/** 为已渲染的 mermaid 预览容器注入控制条与缩放交互；返回当前倍率读取器 */
+/** 为已渲染的 mermaid 预览容器注入控制条与缩放交互；倍率存于容器 dataset，主题重绘后保持 */
 export function enhanceMermaidPreview(container: HTMLElement, svg: SVGElement): void {
     const key = `mz-${++_seq}`;
-    let zoom = 1;
+    const savedZoom = Number(container.dataset["epytorMermaidZoom"]);
+    let zoom = Number.isFinite(savedZoom) && savedZoom > 0 ? savedZoom : 1;
 
     const bar = document.createElement("div");
     bar.className = "epytor-mermaid-zoom-bar";
@@ -29,6 +30,7 @@ export function enhanceMermaidPreview(container: HTMLElement, svg: SVGElement): 
 
     const apply = (): void => {
         svg.style.width = `${zoom * 100}%`;
+        container.dataset["epytorMermaidZoom"] = String(zoom);
         bar.setAttribute("data-zoom", String(zoom));
     };
 
