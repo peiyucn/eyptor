@@ -8,25 +8,30 @@
 
 ```
 src/extension.ts                         — 扩展入口，注册 CustomEditorProvider
-src/MarkdownEditorProvider.ts            — Provider 核心（消息路由、自动保存、revert）
+src/MarkdownEditorProvider.ts            — Provider 核心（消息路由、自动保存、revert、文件监听、frontmatter 更新）
 src/utils/getNonce.ts                    — CSP nonce 生成
 src/utils/imageService.ts               — 图片本地保存（MD5 去重）+ 服务器上传
 src/i18n/webviewTranslations.ts         — WebView 翻译数据
-webview/index.ts                         — WebView 入口（消息路由、DOM 事件委托、品牌标识注入）
-webview/editor.ts                        — CrepeBuilder 入口（Milkdown 7.21.2 + Crepe 原生功能注册）
+webview/index.ts                         — WebView 入口（消息路由、DOM 事件委托、frontmatter 可编辑面板、品牌标识注入）
+webview/editor.ts                        — CrepeBuilder 入口（Milkdown 7.22.1 + Crepe 原生功能注册、buildTopBar 定制、序列化配置）
 webview/messaging.ts                     — WebView ↔ Extension 消息协议（唯一通信层）
 webview/style.css                        — VSCode 主题全覆盖（--vscode-* CSS 变量，覆盖 Crepe 组件）
 webview/i18n/index.ts                    — t() / kbd() 翻译函数
 webview/ui/icons.ts                      — SVG 图标
 webview/ui/tooltip.ts                    — Tooltip 组件
 webview/utils/themeBus.ts               — Mermaid/CodeMirror 深浅主题统一事件总线
-webview/components/selectionToolbar/index.ts — 选区变更回调（驱动源码行号映射）
+webview/headingFoldPlugin.ts             — 标题折叠插件（Decoration，不修改文档）
+webview/headingStickyPlugin.ts           — 标题吸顶条（滚动跟随 + 推挤过渡）
+webview/tableSoftBreakPlugin.ts          — 表格单元格 Shift+Enter 软换行（<br>）
 webview/components/toc/index.ts         — 目录（TOC）面板（吸底工具栏下方、可固定、可拖拽宽度）
 webview/components/imageView/index.ts   — 图片 NodeView（选中/lightbox/工具栏/缩放 handle）
-webview/components/findBar/index.ts     — 编辑器内查找栏（Cmd/Ctrl+F）
+webview/components/findBar/index.ts     — 编辑器内查找栏（Cmd/Ctrl+F，大小写 + 正则）
 webview/components/pathLink/            — 路径链接自动补全
-webview/headingIds.ts                    — 标题 id 管理（不操作 DOM，仅保留签名）
-docs/specs/                              — 功能 spec 文档
+webview/components/tableGridPicker/     — 表格网格选择器（顶栏表格按钮弹出 8×8 网格）
+webview/components/topBarOverflow/      — 工具栏溢出菜单（窄窗口按钮收进 ⋯ 面板）
+webview/components/mermaidZoom/         — Mermaid 预览缩放（0.4–3× + 控制条）
+docs/specs/                              — 功能 spec 文档（2026-09-04-* 为本批 v1.2 功能）
+docs/checklists/                         — 手测清单
 docs/roadmap.md                          — 项目路线图（面向用户的功能规划）
 docs/tech-debt.md                        — 技术债务清单（面向开发者的代码改进）
 ```
@@ -292,6 +297,8 @@ Issue 使用 `.yml` Issue Forms（结构化表单），模板文件见 `.github/
 ### 上游限制
 
 以下限制来自 Milkdown / Crepe / ProseMirror 等上游依赖，EPYTOR 无法自行修复。升级上游依赖时需逐项验证是否已解决。
+
+> 最近验证：2026-09-05（Milkdown 7.22.1）——三项仍全部 open，未解决；自动化回归断言见 `webview/__tests__/upstreamRegression.test.ts`。
 
 | # | 限制 | 来源 | 追踪 |
 |---|------|------|------|
