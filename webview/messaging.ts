@@ -22,6 +22,10 @@ export function notifyUpdate(markdown: string): void {
     vscode.postMessage({ type: "update", content: markdown });
 }
 
+export function notifyFrontmatterUpdate(frontmatter: string): void {
+    vscode.postMessage({ type: "frontmatterUpdate", frontmatter });
+}
+
 export function notifyOpenUrl(url: string): void {
     vscode.postMessage({ type: "openUrl", url });
 }

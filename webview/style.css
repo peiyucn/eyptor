@@ -66,6 +66,62 @@ body {
     word-break: break-word;
 }
 
+/* frontmatter 可编辑面板输入框与按钮 */
+.frontmatter-table .fm-key-input,
+.frontmatter-table .fm-val-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    color: inherit;
+    font: inherit;
+    padding: 0 2px;
+    outline: none;
+}
+.frontmatter-table .fm-key-input {
+    font-weight: bold;
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+.frontmatter-table .fm-key-input:hover,
+.frontmatter-table .fm-val-input:hover {
+    border-color: var(--vscode-input-border, rgba(128, 128, 128, 0.4));
+}
+.frontmatter-table .fm-key-input:focus,
+.frontmatter-table .fm-val-input:focus {
+    border-color: var(--vscode-focusBorder, #007acc);
+    background: var(--vscode-input-background, #3c3c3c);
+}
+.frontmatter-table .fm-del {
+    width: 1%;
+}
+.fm-del-btn {
+    border: none;
+    background: transparent;
+    color: var(--vscode-descriptionForeground, #858585);
+    cursor: pointer;
+    padding: 0 4px;
+    border-radius: 3px;
+    line-height: 1.4;
+}
+.fm-del-btn:hover {
+    background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+    color: var(--vscode-errorForeground, #f48771);
+}
+.fm-add-btn {
+    margin-top: 4px;
+    border: none;
+    background: transparent;
+    color: var(--vscode-descriptionForeground, #858585);
+    cursor: pointer;
+    border-radius: 3px;
+    padding: 1px 8px;
+}
+.fm-add-btn:hover {
+    background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+    color: var(--vscode-editor-foreground, #cccccc);
+}
+
 #editor {
     /* 用户未设置 editorMaxWidth 时：自适应视口宽度
        - 小屏：92vw 先收窄，永不超出

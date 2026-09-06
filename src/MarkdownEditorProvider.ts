@@ -325,6 +325,21 @@ export class MarkdownEditorProvider
                             this._scheduleAutoSaveOrMarkDirty(document);
                         }
                         break;
+                    case "frontmatterUpdate": {
+                        // Frontmatter 面板编辑：更新缓存并重组保存（正文取自内存最新版）
+                        const frontmatter = message.frontmatter ?? "";
+                        this._frontmatterMap.set(uriKey, frontmatter);
+                        const { body } = extractFrontmatter(document.getText());
+                        const newContent = restoreContentForSave(
+                            body,
+                            frontmatter,
+                            this._imageUriMaps.get(uriKey) ?? new Map(),
+                        );
+                        if (newContent === document.getText()) { break; }
+                        document.update(newContent);
+                        this._scheduleAutoSaveOrMarkDirty(document);
+                        break;
+                    }
                     case "openUrl":
                         if (message.url) {
                             vscode.env.openExternal(vscode.Uri.parse(message.url));
