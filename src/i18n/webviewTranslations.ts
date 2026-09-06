@@ -93,6 +93,8 @@ export const ZH_CN_WEBVIEW: Record<string, string> = {
     'Previous Match': '上一个匹配项',
     'Next Match': '下一个匹配项',
     'Match Case': '区分大小写',
+    'Regular Expression': '正则表达式',
+    'Invalid Regex': '无效的正则表达式',
     'No results': '无结果',
     // toc
     'Pin panel': '固定面板',

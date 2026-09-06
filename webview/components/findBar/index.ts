@@ -3,6 +3,7 @@ import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../../../shared/constan
 import { createButton } from "@/ui/dom";
 import { IconChevronUp, IconChevronDown, IconX } from "@/ui/icons";
 import { t, kbd } from "@/i18n";
+import { findMatches } from "@/utils/findMatches";
 
 // TypeScript 类型声明：CSS Custom Highlight API（Chromium 105+ / Electron 22+）
 declare class Highlight {
@@ -60,6 +61,14 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
     btnCase.setAttribute("aria-label", t("Match Case"));
     btnCase.setAttribute("aria-pressed", "false");
 
+    const btnRegex = createButton({
+        className: "find-bar__btn",
+        label: ".*",
+        title: t("Regular Expression"),
+    });
+    btnRegex.setAttribute("aria-label", t("Regular Expression"));
+    btnRegex.setAttribute("aria-pressed", "false");
+
     const btnClose = createButton({
         className: "find-bar__btn",
         icon: IconX,
@@ -67,13 +76,14 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
     });
     btnClose.setAttribute("aria-label", t("Close"));
 
-    // 布局：input → count → prev↑ → next↓ → sep → Aa → close
-    bar.append(input, count, btnPrev, btnNext, sep, btnCase, btnClose);
+    // 布局：input → count → prev↑ → next↓ → sep → Aa → .* → close
+    bar.append(input, count, btnPrev, btnNext, sep, btnCase, btnRegex, btnClose);
     document.body.appendChild(bar);
 
     // ── 状态 ─────────────────────────────────────────────
     let visible = false;
     let caseSensitive = false;
+    let useRegex = false;
     let matchRanges: Range[] = [];
     let currentIdx = 0;
     let debounceTimer = 0;
@@ -113,21 +123,29 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
         const editorEl = getEditorEl();
         if (!editorEl) { return; }
 
-        const q = caseSensitive ? query : query.toLowerCase();
+        let invalidRegex = false;
         const walker = document.createTreeWalker(editorEl, NodeFilter.SHOW_TEXT);
         let node: Text | null;
         while ((node = walker.nextNode() as Text | null)) {
-            const text = caseSensitive ? node.textContent! : node.textContent!.toLowerCase();
-            let idx = 0;
-            while (idx < text.length) {
-                const found = text.indexOf(q, idx);
-                if (found === -1) { break; }
-                const r = new Range();
-                r.setStart(node, found);
-                r.setEnd(node, found + query.length);
-                matchRanges.push(r);
-                idx = found + 1;
+            const result = findMatches(node.textContent!, query, { caseSensitive, useRegex });
+            if (result.invalidRegex) {
+                invalidRegex = true;
+                break;
             }
+            for (const m of result.matches) {
+                const r = new Range();
+                r.setStart(node, m.start);
+                r.setEnd(node, m.end);
+                matchRanges.push(r);
+            }
+        }
+
+        if (invalidRegex) {
+            matchRanges = [];
+            count.textContent = t("Invalid Regex");
+            bar.classList.add("find-bar--no-results");
+            updateHighlights();
+            return;
         }
 
         if (matchRanges.length) {
@@ -196,6 +214,13 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
         caseSensitive = !caseSensitive;
         btnCase.classList.toggle("find-bar__btn--active", caseSensitive);
         btnCase.setAttribute("aria-pressed", String(caseSensitive));
+        search(input.value);
+    });
+
+    btnRegex.addEventListener("click", () => {
+        useRegex = !useRegex;
+        btnRegex.classList.toggle("find-bar__btn--active", useRegex);
+        btnRegex.setAttribute("aria-pressed", String(useRegex));
         search(input.value);
     });
 
