@@ -9,4 +9,4 @@ coverage/
 .claude/settings.local.json
 .env
 .env.*
-test.md
+test*.md
