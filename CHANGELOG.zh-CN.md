@@ -5,6 +5,31 @@
 
 简体中文 | [English](CHANGELOG.md)
 
+## [1.2.0] - 2026-09-05
+
+### 新增
+
+- **Clean Markdown 序列化模式**（`epytor.markdown.serializationMode`：clean / compatible）——减少多余转义与表格占位换行，默认 clean（#15，感谢 @dongjha）
+- **表格网格选择器**：插入表格按钮弹出 8×8 网格，任意行列插入
+- **查找栏正则搜索**（`.*` 开关）：无效正则错误提示 + 零宽匹配防护
+- **标题吸顶 + 同级折叠**（Decoration 实现，不修改文档）
+- **表格换行模式**（`epytor.tableWrapMode`：normal / aggressive / none）+ 单元格内 Shift+Enter 软换行（序列化为 `<br>`）
+- **Frontmatter 面板可编辑**（key/value 行编辑 + 增删行）
+- **工具栏溢出菜单**：窗口收窄时按钮收进「⋯」菜单（替代旧换行布局）
+- **Mermaid 预览缩放**（0.4×–3×，可重置，横向滚动）
+
+### 修复
+
+- **大文档编辑卡顿**（macOS 中文输入法场景）：有界 LCS 差异 + IME 感知调度（#16，感谢 @dongjha）
+
+### 变更
+
+- **Milkdown** 升级 7.22.0 → 7.22.1（行内代码 mark 修复 + dompurify 安全升级）
+
+### 移除
+
+- **死代码**：`selectionToolbar`（约 900 行）及官方工具栏接管后的相关遗留
+
 ## [1.1.6] - 2026-08-06
 
 ### 新增

@@ -5,6 +5,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 English | [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.2.0] - 2026-09-05
+
+### Added
+
+- **Clean Markdown serialization mode** (`epytor.markdown.serializationMode`: clean / compatible) — minimizes unnecessary escapes and placeholder table breaks; default `clean` (#15, thanks @dongjha)
+- **Table grid picker**: 8×8 grid on the insert-table button with any row × column size
+- **FindBar regular-expression search** (`.*` toggle) with invalid-pattern feedback and zero-width match protection
+- **Heading sticky title with sibling folding** (Decoration-based; the underlying document is never modified)
+- **Table wrap modes** (`epytor.tableWrapMode`: normal / aggressive / none) and Shift+Enter soft breaks inside table cells (serialized as `<br>`)
+- **Editable frontmatter panel** (key/value rows with add/remove)
+- **Toolbar overflow menu**: buttons collapse into a "⋯" menu on narrow windows (replaces the old wrapping layout)
+- **Mermaid preview zoom** (0.4×–3×, reset control, horizontal scroll)
+
+### Fixed
+
+- **Large-document editing lag on macOS IME input**: bounded-LCS diff + IME-aware scheduling (#16, thanks @dongjha)
+
+### Changed
+
+- **Milkdown** upgraded 7.22.0 → 7.22.1 (inline code mark fix + dompurify security update)
+
+### Removed
+
+- **Dead code**: `selectionToolbar` (~900 lines) and related leftovers after the official toolbar feature took over
+
 ## [1.1.6] - 2026-08-06
 
 ### Added
