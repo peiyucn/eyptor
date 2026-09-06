@@ -29,7 +29,8 @@ body {
 .frontmatter-panel {
     max-width: var(--editor-max-width, min(1400px, 92vw));
     margin: 0 auto;
-    padding: 8px 48px 0;
+    /* 顶部 36px 让位 fixed 顶栏（否则面板首行被顶栏遮挡） */
+    padding: 44px 48px 0;
 }
 
 .frontmatter-table {
