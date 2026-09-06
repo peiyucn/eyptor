@@ -152,10 +152,12 @@ export const headingStickyPlugin = $prose(() =>
                 }
 
                 let activeIndex = -1;
+                let broke = false;
                 for (let i = 0; i < headings.length; i++) {
                     const rect = headings[i].getBoundingClientRect();
                     if (rect.bottom > top) {
                         // 第一个尚未完全滚出顶栏的标题：吸顶它的前一个（已滚出的）
+                        broke = true;
                         activeIndex =
                             i > 0 && headings[i - 1].getBoundingClientRect().bottom <= top
                                 ? i - 1
@@ -163,8 +165,8 @@ export const headingStickyPlugin = $prose(() =>
                         break;
                     }
                 }
-                if (activeIndex < 0 && headings.length > 0) {
-                    // 所有标题均已滚出：吸顶最后一个（文档底部）
+                if (!broke && headings.length > 0) {
+                    // 循环无 break = 所有标题均已滚出：吸顶最后一个（文档底部）
                     activeIndex = headings.length - 1;
                 }
 
@@ -208,12 +210,8 @@ export const headingStickyPlugin = $prose(() =>
                     setStickyContent(heading, headingPos, collapsed, foldable);
                 }
 
-                // 推挤过渡：下一标题顶到吸顶条时向上让位
-                const nextHeading = headings[activeIndex + 1] ?? null;
-                const stickyHeight = sticky.getBoundingClientRect().height;
-                const nextTop = nextHeading?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY;
-                const offset = Math.min(0, nextTop - top - stickyHeight);
-                sticky.style.transform = `translateY(${offset}px)`;
+                // 无推挤过渡：下一标题顶到时直接切换（推挤曾导致吸顶条被顶栏遮挡）
+                sticky.style.transform = "";
             };
 
             const scheduleUpdate = () => {
