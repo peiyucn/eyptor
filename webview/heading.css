@@ -1,0 +1,107 @@
+/* 标题折叠 + 吸顶（全部使用 --vscode-* 变量） */
+
+/* ── 折叠 gutter ─────────────────────────────────────── */
+.heading-fold-gutter {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 6px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    vertical-align: middle;
+}
+
+.heading-fold-gutter--visible {
+    opacity: 1;
+}
+
+.heading-fold-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--vscode-icon-foreground, #cccccc);
+    cursor: pointer;
+}
+
+.heading-fold-toggle:hover {
+    background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+.heading-fold-toggle svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ── 折叠隐藏 ────────────────────────────────────────── */
+.heading-fold-hidden {
+    display: none !important;
+}
+
+/* 折叠中的标题：chevron 常显，便于发现展开入口 */
+.heading-fold-heading--collapsed .heading-fold-gutter {
+    opacity: 0.6;
+}
+
+/* ── 吸顶标题条 ──────────────────────────────────────── */
+.heading-sticky-title {
+    position: fixed;
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 10px 2px 6px;
+    box-sizing: border-box;
+    background: var(--vscode-editor-background, #1e1e1e);
+    border-left: 3px solid var(--vscode-focusBorder, #007fd4);
+    border-radius: 0 3px 3px 0;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.heading-sticky-marker {
+    flex-shrink: 0;
+    font-size: 10px;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background: var(--vscode-badge-background, #4d4d4d);
+    color: var(--vscode-badge-foreground, #ffffff);
+    letter-spacing: 0.05em;
+}
+
+.heading-sticky-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--vscode-editor-foreground, #cccccc);
+}
+
+.heading-sticky-toggle {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--vscode-icon-foreground, #cccccc);
+    cursor: pointer;
+}
+
+.heading-sticky-toggle:hover {
+    background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+.heading-sticky-toggle svg {
+    width: 14px;
+    height: 14px;
+}

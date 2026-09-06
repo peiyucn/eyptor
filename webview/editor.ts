@@ -58,6 +58,8 @@ import mermaid from "mermaid";
 import { onThemeChange } from "./utils/themeBus";
 import { t } from "./i18n";
 import { openTableGridPicker } from "./components/tableGridPicker";
+import { headingFoldPlugin } from "./headingFoldPlugin";
+import { headingStickyPlugin } from "./headingStickyPlugin";
 import { applyMinimalChanges } from "./utils/minimalDiff";
 import { remarkStringifyOptionsCtx } from "@milkdown/kit/core";
 import {
@@ -894,6 +896,8 @@ export async function createEditor(
         .use(listLiftPlugin)        // 保留：列表 backspace
         .use(selectionPlugin)       // 保留：选区变更回调
         .use(formatKeymapPlugin)    // 保留：自定义格式化快捷键
+        .use(headingFoldPlugin)     // 标题折叠（Decoration，不修改文档）
+        .use(headingStickyPlugin)   // 标题吸顶条（滚动跟随 + 推挤过渡）
         .use(cellClickFixPlugin)    // 表格单击→光标定位，拖拽→多选
         .use(listSpreadNormalizePlugin); // 保留：列表 spread 规范化
 
