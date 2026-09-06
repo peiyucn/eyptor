@@ -58,6 +58,7 @@ import mermaid from "mermaid";
 import { onThemeChange } from "./utils/themeBus";
 import { t } from "./i18n";
 import { openTableGridPicker } from "./components/tableGridPicker";
+import { setTopBarButtonMeta } from "./components/topBarOverflow";
 import { headingFoldPlugin } from "./headingFoldPlugin";
 import { headingStickyPlugin } from "./headingStickyPlugin";
 import { tableSoftBreakPlugin } from "./tableSoftBreakPlugin";
@@ -852,6 +853,16 @@ export async function createEditor(
                     groups.splice(idx, 1);
                     groups.splice(1, 0, historyGroup);
                 }
+                // 顶栏溢出菜单按钮元数据（key/icon/onRun 快照，供溢出面板渲染副本）
+                setTopBarButtonMeta(
+                    groups.flatMap((g) =>
+                        g.items.map((item) => ({
+                            key: item.key,
+                            icon: (item.icon as string) ?? "",
+                            onRun: item.onRun ?? (() => undefined),
+                        })),
+                    ),
+                );
             },
         })
         .addFeature(toolbar)
