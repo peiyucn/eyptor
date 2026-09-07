@@ -71,10 +71,12 @@
     width: 16px;
     height: 16px;
     flex-shrink: 0;
-    /* 图标统一菜单前景色：图标均为 stroke=currentColor 风格，
-       只设 color 让 stroke 继承；禁止 CSS fill 强制——会覆盖 fill="none"
-       把描边图标（如设置齿轮）填成实心块（回归：白色填充满） */
     color: var(--vscode-menu-foreground, #cccccc);
+    /* 两种图标形态统一着色：
+       - 官方 top-bar 图标无 fill/stroke 属性 → SVG 默认黑色 fill；此处 fill:currentColor 继承菜单前景色
+       - 我们的 Tb 图标带内联 style="fill:none!important"（描边风格）→ 内联 !important 胜过此规则，保持描边
+       注意：不要写 `svg *` 子元素 fill 规则，会把描边图标的 path 填成实心块 */
+    fill: currentColor;
 }
 
 .epytor-topbar-overflow-label {

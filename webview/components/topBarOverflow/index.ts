@@ -224,7 +224,13 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
         moreBtn.hidden = hiddenKeys.size === 0;
         const rect = topBar.getBoundingClientRect();
         moreBtn.style.top = `${Math.max(2, rect.top + (rect.height - 28) / 2)}px`;
-        moreBtn.style.right = "6px";
+        // 动态定位：紧跟按钮组（top-bar-inner）右缘，而非固定视口右缘——
+        // 居中布局下右缘空隙不可预知，固定右缘会与最后一个按钮重叠（回归）
+        const innerRect = inner.getBoundingClientRect();
+        const innerRight = innerRect.width > 0 ? innerRect.right : rect.right - 40;
+        const desiredLeft = innerRight + 4;
+        moreBtn.style.left = `${Math.min(desiredLeft, window.innerWidth - MORE_BTN_WIDTH - 6)}px`;
+        moreBtn.style.right = "auto";
 
         // Vue patch 可能覆盖隐藏 class：测量完成后恢复监听（目标可能被重建）
         mutObs = new MutationObserver(schedule);
