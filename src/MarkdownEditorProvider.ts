@@ -462,6 +462,11 @@ export class MarkdownEditorProvider
                     frontmatter,
                     this._imageUriMaps.get(uriKey) ?? new Map(),
                 );
+                const debugMode = vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false);
+                if (debugMode) {
+                    console.log("[frontmatterUpdate] received:", JSON.stringify(frontmatter));
+                    console.log("[frontmatterUpdate] assembled-same-as-current:", newContent === null);
+                }
                 if (newContent === null) { break; }
                 document.update(newContent);
                 // 立即写盘而非走 autoSave 防抖：面板编辑（如新增行）后用户往往立刻切到
