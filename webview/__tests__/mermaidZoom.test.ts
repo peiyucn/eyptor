@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { clampZoom, MERMAID_ZOOM_MAX, MERMAID_ZOOM_MIN } from "../utils/mermaidZoom";
 import { enhanceMermaidPreview } from "../components/mermaidZoom";
 
@@ -30,7 +30,7 @@ describe("clampZoom", () => {
 });
 
 describe("enhanceMermaidPreview 倍率保持", () => {
-    it("缩放倍率 应该 存容器 dataset 并在主题重绘后保持", () => {
+    it("无布局环境（jsdom rect=0）应该 回退容器百分比", () => {
         const container = document.createElement("div");
         document.body.appendChild(container);
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -54,7 +54,28 @@ describe("enhanceMermaidPreview 倍率保持", () => {
         expect(svg2.style.width).toBe("100%");
     });
 
-    it("reset 按钮 应该 恢复默认 0.8× 并重置 dataset", () => {
+    it("以原始渲染宽度为基准 应该 输出像素宽度（回归：百分比曾导致宽容器下默认反而放大）", () => {
+        const container = document.createElement("div");
+        document.body.appendChild(container);
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        container.appendChild(svg);
+        // 模拟真实布局：原始渲染宽度 500px
+        vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({ width: 500 } as DOMRect);
+
+        enhanceMermaidPreview(container, svg);
+
+        // 默认 0.8× → 400px，且解除 mermaid 内联 max-width 压制
+        expect(svg.style.width).toBe("400px");
+        expect(svg.style.maxWidth).toBe("none");
+
+        // 点一次 + → 1.0× → 500px（原始大小）
+        const buttons = container.querySelectorAll<HTMLButtonElement>(".epytor-mermaid-zoom-btn");
+        buttons[0].dispatchEvent(new MouseEvent("click"));
+        expect(svg.style.width).toBe("500px");
+        expect(container.dataset["epytorMermaidZoom"]).toBe("1");
+    });
+
+    it("reset 按钮 应该 恢复默认 0.8× 并重置 dataset（回退路径）", () => {
         const container = document.createElement("div");
         document.body.appendChild(container);
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
