@@ -257,8 +257,7 @@
     "@milkdown/crepe": "7.22.1",
     "@milkdown/kit": "7.22.1",
     "mermaid": "^11.16.1",
-    "prosemirror-commands": "^1.7.1",
-    "prosemirror-virtual-cursor": "^0.4.2"
+    "prosemirror-commands": "^1.7.1"
   },
   "overrides": {
     "prosemirror-changeset": "^2.3.1",

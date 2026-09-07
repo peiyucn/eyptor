@@ -18,7 +18,6 @@ import {
 import { toggleStrikethroughCommand, insertTableCommand } from "@milkdown/kit/preset/gfm";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import type { Node as ProseNode } from "@milkdown/kit/prose/model";
-import { Mark } from "@milkdown/kit/prose/model";
 import { undo, redo } from "@milkdown/kit/prose/history";
 import { keymap } from "@milkdown/kit/prose/keymap";
 import { Plugin, NodeSelection, TextSelection, type EditorState } from "@milkdown/kit/prose/state";
@@ -45,7 +44,7 @@ export function setLogTableSel(enabled: boolean): void {
 // feature/code-mirror → 换回自定义实现（复制反馈、全屏、样式更精致）
 import { codeMirror } from "@milkdown/crepe/feature/code-mirror";
 import { cursor } from "@milkdown/kit/plugin/cursor";
-import { createVirtualCursor } from "prosemirror-virtual-cursor";
+import { createVirtualCursor } from "./vendor/prosemirrorVirtualCursor";
 import { latex } from "@milkdown/crepe/feature/latex";
 import { listItem } from "@milkdown/crepe/feature/list-item";
 import { table } from "@milkdown/crepe/feature/table";
@@ -139,45 +138,6 @@ const formatKeymapPlugin = $prose((ctx) =>
             tr.setSelection(TextSelection.create(tr.doc, from + 1));
             view.dispatch(tr);
             return true;
-        },
-    }),
-);
-
-// 行内代码行尾方向键退出：inclusive mark 右边界 sticky，行尾（后面无代码内容）
-// 按 ArrowRight 明确移出 code mark——@/ ./ 路径在行内代码尾部编辑完成后按右键退出。
-// DOM 捕获阶段实现（回归：keymap 方案被先注册的官方 keymap/虚拟光标抢先消费）；
-// 且必须 setStoredMarks(Mark.none)——inclusive 边界位置 marks() 永远含 code，
-// 仅移动选区后输入仍是代码（回归：两轮「仍无法移出」的根因）
-export const exitInlineCodePlugin = $prose(() =>
-    new Plugin({
-        view(view) {
-            const onKeydown = (event: KeyboardEvent) => {
-                if (event.key !== "ArrowRight") return;
-                const { state } = view;
-                const { $from, empty } = state.selection;
-                if (!empty) return;
-                const hasCode = $from.marks().some((m) => m.type.name === "inlineCode");
-                if (!hasCode) return;
-                if ($from.pos + 1 > state.doc.content.size) return;
-                const $next = state.doc.resolve($from.pos + 1);
-                const nextText = $next.parent.maybeChild($next.index());
-                // 下一位置有文本且仍带 code mark → 放行默认（代码内移动）
-                if (nextText && nextText.marks.some((m) => m.type.name === "inlineCode")) return;
-                event.preventDefault();
-                event.stopPropagation();
-                view.dispatch(
-                    state.tr
-                        .setSelection(TextSelection.create(state.doc, $from.pos + 1))
-                        .setStoredMarks(Mark.none),
-                );
-            };
-            view.dom.addEventListener("keydown", onKeydown, true);
-            return {
-                update() { /* noop */ },
-                destroy() {
-                    view.dom.removeEventListener("keydown", onKeydown, true);
-                },
-            };
         },
     }),
 );
@@ -938,7 +898,6 @@ export async function createEditor(
     // 导致行内代码边界的方向指示消失、方向键无法退出——自注册默认行为（7.22.0 一致）
     crepe.editor.use(cursor);
     crepe.editor.use($prose(() => createVirtualCursor()));
-    crepe.editor.use(exitInlineCodePlugin);
 
     // 注入保留的自定义配置
     crepe.editor
