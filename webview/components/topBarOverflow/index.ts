@@ -43,6 +43,13 @@ const ITEM_LABELS: Record<string, string> = {
 /** 优先保留的按钮（heading 下拉与 history 组） */
 const PINNED_KEYS = new Set(["heading", "undo", "redo"]);
 
+/**
+ * 常驻溢出菜单的按钮（用户决策）：非编辑类按钮（如设置）默认不进顶栏，
+ * 顶栏只放编辑相关按钮——按钮总数减少、溢出频率降低，
+ * 且「⋯」按钮固定右缘不再需要动态跟随间隙（结构性消除重叠）。
+ */
+const ALWAYS_IN_MENU_KEYS = new Set(["settings"]);
+
 const MORE_BTN_WIDTH = 34;
 /** 安全边距：居中布局下右侧空隙不可预知，多扣 32px 防「⋯」与最后一个按钮重叠 */
 const MORE_BTN_SAFETY_GAP_PX = 32;
@@ -178,7 +185,7 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
             return;
         }
 
-        // 先全部显示再测量
+        // 先全部显示再测量（常驻菜单的按钮参与布局测量后仍会隐藏）
         inner.querySelectorAll<HTMLElement>(`.${HIDDEN_CLASS}`).forEach((el) => el.classList.remove(HIDDEN_CLASS));
 
         const containerWidth = getTopBarUsableWidth(topBar);
@@ -198,11 +205,16 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
         }
 
         hiddenKeys = computeOverflow({
-            items,
+            // 常驻菜单按钮（settings）不进顶栏：不占预算
+            items: items.filter((item) => !ALWAYS_IN_MENU_KEYS.has(item.key)),
             containerWidth,
             moreBtnWidth: MORE_BTN_WIDTH + MORE_BTN_SAFETY_GAP_PX,
             pinnedKeys: PINNED_KEYS,
         });
+        // 常驻菜单按钮永远在溢出集合：more 按钮始终显示、菜单里始终可见
+        for (const key of ALWAYS_IN_MENU_KEYS) {
+            hiddenKeys.add(key);
+        }
 
         // 应用隐藏 class（DOM 与 meta 顺序一致）；
         // 分割线双向跟随：左侧按钮被收起（组尾）或右侧按钮被收起（组头）时一并隐藏，
@@ -247,25 +259,11 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
         moreBtn.hidden = hiddenKeys.size === 0;
         const rect = topBar.getBoundingClientRect();
         moreBtn.style.top = `${Math.max(2, rect.top + (rect.height - 28) / 2)}px`;
-        // 动态定位：紧跟「最后一个可见按钮」的右缘。
-        // 此前用 top-bar-inner 的右缘：居中 flex 布局 + 按钮收缩下 inner 边界不可预知
-        // （真实引擎实测临界宽度时 inner 右缘与按钮实际占位错位 150px+，more 盖在按钮上）
-        let lastVisible: HTMLElement | null = null;
-        for (const child of Array.from(inner.children) as HTMLElement[]) {
-            if (
-                (child.classList.contains("top-bar-item") ||
-                    child.classList.contains("top-bar-heading-selector")) &&
-                !child.classList.contains(HIDDEN_CLASS)
-            ) {
-                lastVisible = child;
-            }
-        }
-        const desiredLeft = lastVisible
-            ? lastVisible.getBoundingClientRect().right + 16
-            : rect.right - 40;
-        // clientWidth 不含纵向滚动条（innerWidth 含），避免「⋯」右缘被滚动条/编辑框边缘压住
+        // 「⋯」固定右缘（用户决策）：settings 等常驻菜单、顶栏只放编辑按钮，
+        // 预算内按钮组不会越过 more 左缘——无需动态跟随间隙，结构性消除重叠。
+        // clientWidth 不含纵向滚动条（innerWidth 含），避免右缘被滚动条/编辑框边缘压住
         const viewportW = document.documentElement.clientWidth;
-        moreBtn.style.left = `${Math.min(desiredLeft, viewportW - MORE_BTN_WIDTH - 8)}px`;
+        moreBtn.style.left = `${viewportW - MORE_BTN_WIDTH - 8}px`;
         moreBtn.style.right = "auto";
 
         // Vue patch 可能覆盖隐藏 class：测量完成后恢复监听（目标可能被重建）；
