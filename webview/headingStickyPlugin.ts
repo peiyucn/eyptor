@@ -50,6 +50,7 @@ export const headingStickyPlugin = $prose(() =>
             const sticky = document.createElement("div");
             sticky.className = "heading-sticky-title";
             sticky.hidden = true;
+            sticky.style.display = "none";
             document.body.appendChild(sticky);
 
             let rafId: number | null = null;
@@ -138,6 +139,9 @@ export const headingStickyPlugin = $prose(() =>
                 activeHeading = null;
                 activeHeadingPos = null;
                 sticky.hidden = true;
+                // 双保险：heading.css 的 display:flex 会覆盖 hidden 属性的 UA 样式，
+                // 必须显式控制 display 才能真正隐藏
+                sticky.style.display = "none";
                 delete sticky.dataset["headingPos"];
             };
 
@@ -193,6 +197,7 @@ export const headingStickyPlugin = $prose(() =>
                 const collapsed = headingFoldPluginKey.getState(view.state)?.has(headingPos) ?? false;
                 const rect = heading.getBoundingClientRect();
                 sticky.hidden = false;
+                sticky.style.display = "";
                 sticky.dataset["headingPos"] = String(headingPos);
                 sticky.style.top = `${top}px`;
                 sticky.style.left = `${rect.left}px`;

@@ -48,6 +48,11 @@
 }
 
 /* ── 吸顶标题条 ──────────────────────────────────────── */
+/* hidden 属性兜底：display:flex 会覆盖 UA 的 [hidden]{display:none}，需显式声明 */
+.heading-sticky-title[hidden] {
+    display: none !important;
+}
+
 .heading-sticky-title {
     position: fixed;
     z-index: 90;
