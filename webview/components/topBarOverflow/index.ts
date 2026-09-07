@@ -128,8 +128,10 @@ function openOverflowMenu(anchor: HTMLElement, hiddenKeys: ReadonlySet<string>, 
     const menuHeight = menu.getBoundingClientRect().height;
     let left = rect.right - menuWidth;
     if (left < 8) left = 8;
-    // 右缘 clamp：more 按钮贴视口右缘时，右对齐展开的菜单右缘可能超出页面被裁
-    const maxLeft = window.innerWidth - menuWidth - 20;
+    // 右缘 clamp：more 按钮贴视口右缘时，右对齐展开的菜单右缘可能超出页面被裁；
+    // 用 clientWidth（不含滚动条）对齐可视内容区
+    const viewportW = document.documentElement.clientWidth;
+    const maxLeft = viewportW - menuWidth - 12;
     if (left > maxLeft) left = maxLeft;
     let top = rect.bottom + 6;
     if (top + menuHeight > window.innerHeight - 8) top = Math.max(8, rect.top - menuHeight - 6);
@@ -261,7 +263,9 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
         const desiredLeft = lastVisible
             ? lastVisible.getBoundingClientRect().right + 16
             : rect.right - 40;
-        moreBtn.style.left = `${Math.min(desiredLeft, window.innerWidth - MORE_BTN_WIDTH - 6)}px`;
+        // clientWidth 不含纵向滚动条（innerWidth 含），避免「⋯」右缘被滚动条/编辑框边缘压住
+        const viewportW = document.documentElement.clientWidth;
+        moreBtn.style.left = `${Math.min(desiredLeft, viewportW - MORE_BTN_WIDTH - 8)}px`;
         moreBtn.style.right = "auto";
 
         // Vue patch 可能覆盖隐藏 class：测量完成后恢复监听（目标可能被重建）；

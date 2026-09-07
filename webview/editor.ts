@@ -15,6 +15,7 @@ import {
     wrapInBlockTypeCommand,
 } from "@milkdown/kit/preset/commonmark";
 import { toggleStrikethroughCommand, insertTableCommand } from "@milkdown/kit/preset/gfm";
+import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { undo, redo } from "@milkdown/kit/prose/history";
 import { keymap } from "@milkdown/kit/prose/keymap";
@@ -22,7 +23,7 @@ import { Plugin, NodeSelection, TextSelection, type EditorState } from "@milkdow
 import { liftListItem } from "@milkdown/kit/prose/schema-list";
 import { lift, wrapIn } from "prosemirror-commands";
 import { CellSelection, TableMap } from "@milkdown/kit/prose/tables";
-import { $prose, getMarkdown } from "@milkdown/kit/utils";
+import { $prose } from "@milkdown/kit/utils";
 import { CrepeBuilder } from "@milkdown/crepe";
 import { linkTooltip } from "@milkdown/crepe/feature/link-tooltip";
 import { TbUndo, TbRedo, TbImage, TbEraser, TbGear, TbToc } from "./ui/icons";
@@ -440,12 +441,7 @@ export async function createEditor(
 
     let debounceTimer: ReturnType<typeof setTimeout>;
     let isComposing = false;
-    let pendingFlush = false;
-
-    // 输入防抖：停顿 INPUT_UPDATE_DEBOUNCE_MS 后手动序列化一次。
-    // 回归：此前用 Milkdown listener 的 markdownUpdated——每次按键即全量序列化
-    // （1 万行基准最慢 99ms/键尖峰）；改防抖后序列化，输入期间零序列化开销
-    const INPUT_UPDATE_DEBOUNCE_MS = 500;
+    let pendingMd: string | null = null;
 
     const fireUpdate = (md: string) => {
         clearTimeout(debounceTimer);
@@ -458,45 +454,22 @@ export async function createEditor(
         fireUpdate(toSave);
     };
 
-    const scheduleFlush = () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-            if (isComposing) {
-                pendingFlush = true;
-                return;
-            }
-            if (!_editor) return;
-            const markdown = _editor.action(getMarkdown());
-            commitMarkdownUpdate(markdown);
-        }, INPUT_UPDATE_DEBOUNCE_MS);
+    const debouncedUpdate = (markdown: string) => {
+        if (isComposing) { pendingMd = markdown; return; }
+        commitMarkdownUpdate(markdown);
     };
 
     container.addEventListener('compositionstart', () => { isComposing = true; });
     container.addEventListener('compositionend', () => {
         isComposing = false;
-        if (pendingFlush) {
-            pendingFlush = false;
-            scheduleFlush();
+        if (pendingMd !== null) {
+            const md = pendingMd;
+            pendingMd = null;
+            commitMarkdownUpdate(md);
         }
     });
 
     let isSettled = false;
-
-    // 输入触发：防抖后手动序列化一次（替代 listener 的 markdownUpdated——后者每次按键
-    // 即全量序列化，1 万行基准最慢 99ms/键尖峰）
-    const updateFlushPlugin = $prose(() =>
-        new Plugin({
-            view() {
-                return {
-                    update() {
-                        if (!isSettled) return;
-                        if (!_hasUserInteracted) return;
-                        scheduleFlush();
-                    },
-                };
-            },
-        }),
-    );
 
     // ── CrepeBuilder ──────────────────────────────────────────────────────────
     const crepe = new CrepeBuilder({
@@ -926,7 +899,7 @@ export async function createEditor(
             ]);
 
         })
-        .use(updateFlushPlugin)     // 输入防抖后手动序列化（替代 listener markdownUpdated 的每键全量序列化）
+        .use(listener)              // 追加 listener 用于 markdownUpdated
         .use(selectionPlugin)       // 保留：选区变更回调
         .use(formatKeymapPlugin)    // 保留：自定义格式化快捷键
         .use(headingFoldPlugin)     // 标题折叠（Decoration，不修改文档）
@@ -934,6 +907,15 @@ export async function createEditor(
         .use(tableSoftBreakPlugin)  // 表格单元格内 Shift+Enter 软换行（序列化 &#10; 闭环）
         .use(cellClickFixPlugin)    // 表格单击→光标定位，拖拽→多选
         .use(listSpreadNormalizePlugin); // 保留：列表 spread 规范化
+
+    // 注册 markdownUpdated 回调（自动保存链路）
+    crepe.on((api) => {
+        api.markdownUpdated((_ctx, markdown) => {
+            if (!isSettled) return;
+            if (!_hasUserInteracted) return;
+            debouncedUpdate(markdown);
+        });
+    });
 
     _editor = await crepe.create();
     isSettled = true;

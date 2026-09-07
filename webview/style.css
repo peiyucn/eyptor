@@ -962,21 +962,23 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     overflow-wrap: break-word;
 }
 
-/* 行列手柄与整行/整列选中工具栏：组件类名直配（对齐编辑器浮层风格） */
+/* 行列手柄与整行/整列选中工具栏：组件类名直配（对齐编辑器浮层风格）；
+   !important 兜底——官方规则（--crepe 变量）在打包 CSS 中与裸类同特异性，
+   部分 hover/:has 状态会反超导致样式回退 */
 .cell-handle {
-    background-color: var(--vscode-editor-background);
-    border-radius: 6px;
+    background-color: var(--vscode-editor-background) !important;
+    border-radius: 6px !important;
 }
 .cell-handle:hover {
-    background-color: var(--vscode-editorWidget-background);
+    background-color: var(--vscode-editorWidget-background) !important;
 }
 .line-handle .add-button {
     border-radius: 4px;
 }
 .cell-handle .button-group {
-    background-color: var(--vscode-editorWidget-background, var(--vscode-editor-background));
-    border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, rgba(128,128,128,0.35)));
-    border-radius: 5px;
+    background-color: var(--vscode-editorWidget-background, var(--vscode-editor-background)) !important;
+    border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, rgba(128,128,128,0.35))) !important;
+    border-radius: 5px !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
 }
 .cell-handle .button-group button {
@@ -991,7 +993,7 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
 }
 .cell-handle .button-group button:hover {
     border-radius: 3px;
-    background-color: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2));
+    background-color: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2)) !important;
 }
 .cell-handle .button-group button:active {
     background: var(--vscode-toolbar-activeBackground, rgba(128,128,128,0.3));
