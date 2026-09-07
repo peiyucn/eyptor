@@ -11,6 +11,7 @@ import { applyTooltip, hideTooltip } from "./ui/tooltip";
 import { t } from "./i18n";
 import { headingFoldPluginKey, type HeadingFoldMeta } from "./headingFoldPlugin";
 import { findHeadingFoldRange, getHeadingLevel } from "./utils/headingFold";
+import { computeStickyActiveIndex } from "./utils/headingSticky";
 
 const HEADING_SELECTOR = "h1,h2,h3,h4,h5,h6";
 
@@ -155,24 +156,13 @@ export const headingStickyPlugin = $prose(() =>
                     return;
                 }
 
-                let activeIndex = -1;
-                let broke = false;
-                for (let i = 0; i < headings.length; i++) {
-                    const rect = headings[i].getBoundingClientRect();
-                    if (rect.bottom > top) {
-                        // 第一个尚未完全滚出顶栏的标题：吸顶它的前一个（已滚出的）
-                        broke = true;
-                        activeIndex =
-                            i > 0 && headings[i - 1].getBoundingClientRect().bottom <= top
-                                ? i - 1
-                                : -1;
-                        break;
-                    }
-                }
-                if (!broke && headings.length > 0) {
-                    // 循环无 break = 所有标题均已滚出：吸顶最后一个（文档底部）
-                    activeIndex = headings.length - 1;
-                }
+                let activeIndex = computeStickyActiveIndex(
+                    headings.map((heading) => {
+                        const rect = heading.getBoundingClientRect();
+                        return { top: rect.top, bottom: rect.bottom };
+                    }),
+                    top,
+                );
 
                 if (activeIndex < 0) {
                     hideSticky();
