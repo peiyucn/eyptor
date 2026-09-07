@@ -27,6 +27,17 @@ interface TooltipHandle {
     show(): void;
 }
 
+/** 横向钳制纯函数（可单测）：tooltip 左缘 x 钳制进视口，右侧超界贴右缘 */
+export function clampTooltipX(x: number, width: number, viewportWidth: number): number {
+    if (x + width > viewportWidth - TOOLTIP_VIEWPORT_MARGIN_PX) {
+        return viewportWidth - width - TOOLTIP_VIEWPORT_MARGIN_PX;
+    }
+    if (x < TOOLTIP_VIEWPORT_MARGIN_PX) {
+        return TOOLTIP_VIEWPORT_MARGIN_PX;
+    }
+    return x;
+}
+
 function position(
     tip: HTMLElement,
     el: HTMLElement,
@@ -38,7 +49,11 @@ function position(
     const elRect = el.getBoundingClientRect();
     const tipRect = tip.getBoundingClientRect();
 
-    let x = elRect.left + elRect.width / 2 - tipRect.width / 2;
+    let x = clampTooltipX(
+        elRect.left + elRect.width / 2 - tipRect.width / 2,
+        tipRect.width,
+        window.innerWidth,
+    );
     let y: number;
 
     if (placement === "above") {
@@ -53,15 +68,20 @@ function position(
         }
     }
 
-    if (x + tipRect.width > window.innerWidth - TOOLTIP_VIEWPORT_MARGIN_PX) {
-        x = window.innerWidth - tipRect.width - TOOLTIP_VIEWPORT_MARGIN_PX;
-    }
-    if (x < TOOLTIP_VIEWPORT_MARGIN_PX) {
-        x = TOOLTIP_VIEWPORT_MARGIN_PX;
+    tip.style.left = `${x}px`;
+    tip.style.right = "auto";
+    tip.style.top = `${y}px`;
+
+    // 读回校验兜底：任何测量/CSS 层误差导致仍超出视口时，改由 right 锚定（浏览器保证贴边）
+    const finalRect = tip.getBoundingClientRect();
+    if (finalRect.width > 0 && finalRect.right > window.innerWidth - TOOLTIP_VIEWPORT_MARGIN_PX) {
+        tip.style.left = "auto";
+        tip.style.right = `${TOOLTIP_VIEWPORT_MARGIN_PX}px`;
+    } else if (finalRect.width > 0 && finalRect.left < TOOLTIP_VIEWPORT_MARGIN_PX) {
+        tip.style.left = `${TOOLTIP_VIEWPORT_MARGIN_PX}px`;
+        tip.style.right = "auto";
     }
 
-    tip.style.left = `${x}px`;
-    tip.style.top = `${y}px`;
     tip.style.visibility = "visible";
 }
 
