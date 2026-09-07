@@ -760,20 +760,21 @@ window.addEventListener('scroll', () => {
     }, 200);
 }, { passive: true });
 
-// 恢复（主路径）：tab 切换时 iframe 被隐藏再显示，浏览器会重置 scrollY
-// visibilitychange 触发时读取已保存位置并还原；同时恢复编辑器焦点
-// （回归：切到别的文件再切回，光标还在但输入无效——webview 失焦未恢复）
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
-    const state = getWebviewState();
-    if (state?.scrollY !== undefined) {
-        requestAnimationFrame(() => {
-            window.scrollTo({ top: state.scrollY as number });
-        });
-    }
+// 切回 webview 时恢复编辑器焦点（不滚动）。
+// 诊断日志证实：VS Code 切 tab 时 webview 的 visibilitychange 不触发（visibility 恒 visible），
+// 必须用 window focus 事件（webview 重新激活时触发）
+const restoreEditorFocus = () => {
     requestAnimationFrame(() => {
         const view = getEditorView();
         if (view && !view.hasFocus()) {
+            // 面板输入框有焦点时不抢（用户可能正在编辑 frontmatter/查找框）
+            const active = document.activeElement;
+            if (
+                active instanceof HTMLInputElement ||
+                active instanceof HTMLTextAreaElement
+            ) {
+                return;
+            }
             // 恢复焦点但不得滚动：ProseMirror focus() 会把光标位置 scrollIntoView，
             // 导致切回后页面跳到标题行/mermaid 处（回归：frontmatter 编辑行点击后页面跳）
             const scrollBefore = window.scrollY;
@@ -783,6 +784,17 @@ document.addEventListener('visibilitychange', () => {
             }
         }
     });
+};
+window.addEventListener("focus", restoreEditorFocus);
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    const state = getWebviewState();
+    if (state?.scrollY !== undefined) {
+        requestAnimationFrame(() => {
+            window.scrollTo({ top: state.scrollY as number });
+        });
+    }
+    restoreEditorFocus();
 });
 // ─────────────────────────────────────────────────────────────
 

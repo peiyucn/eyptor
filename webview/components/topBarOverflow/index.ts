@@ -44,8 +44,8 @@ const ITEM_LABELS: Record<string, string> = {
 const PINNED_KEYS = new Set(["heading", "undo", "redo"]);
 
 const MORE_BTN_WIDTH = 34;
-/** 安全边距：居中布局下右侧空隙不可预知，多扣 20px 防「⋯」与最后一个按钮重叠 */
-const MORE_BTN_SAFETY_GAP_PX = 20;
+/** 安全边距：居中布局下右侧空隙不可预知，多扣 32px 防「⋯」与最后一个按钮重叠 */
+const MORE_BTN_SAFETY_GAP_PX = 32;
 const HIDDEN_CLASS = "top-bar-item--overflow-hidden";
 
 let _meta: TopBarButtonMeta[] = [];
@@ -129,7 +129,7 @@ function openOverflowMenu(anchor: HTMLElement, hiddenKeys: ReadonlySet<string>, 
     let left = rect.right - menuWidth;
     if (left < 8) left = 8;
     // 右缘 clamp：more 按钮贴视口右缘时，右对齐展开的菜单右缘可能超出页面被裁
-    const maxLeft = window.innerWidth - menuWidth - 16;
+    const maxLeft = window.innerWidth - menuWidth - 20;
     if (left > maxLeft) left = maxLeft;
     let top = rect.bottom + 6;
     if (top + menuHeight > window.innerHeight - 8) top = Math.max(8, rect.top - menuHeight - 6);
@@ -259,7 +259,7 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
             }
         }
         const desiredLeft = lastVisible
-            ? lastVisible.getBoundingClientRect().right + 10
+            ? lastVisible.getBoundingClientRect().right + 16
             : rect.right - 40;
         moreBtn.style.left = `${Math.min(desiredLeft, window.innerWidth - MORE_BTN_WIDTH - 6)}px`;
         moreBtn.style.right = "auto";
