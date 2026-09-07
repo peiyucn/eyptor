@@ -13,7 +13,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Table grid picker**: 8×8 grid on the insert-table button with any row × column size
 - **FindBar regular-expression search** (`.*` toggle) with invalid-pattern feedback and zero-width match protection
 - **Heading sticky title with sibling folding** (Decoration-based; the underlying document is never modified)
-- **Table wrap modes** (`epytor.tableWrapMode`: normal / aggressive / none) and Shift+Enter soft breaks inside table cells (serialized as `<br>`)
+- **Table wrap modes** (`epytor.tableWrapMode`: wrap / nowrap) and Shift+Enter soft breaks inside table cells (serialized as `<br>`)
 - **Editable frontmatter panel** (key/value rows with add/remove)
 - **Toolbar overflow menu**: buttons collapse into a "⋯" menu on narrow windows (replaces the old wrapping layout)
 - **Mermaid preview zoom** (0.4×–3×, reset control, horizontal scroll)

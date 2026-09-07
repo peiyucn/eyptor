@@ -174,16 +174,14 @@
         "epytor.tableWrapMode": {
           "type": "string",
           "enum": [
-            "normal",
-            "aggressive",
-            "none"
+            "wrap",
+            "nowrap"
           ],
           "enumDescriptions": [
-            "%config.tableWrapMode.normal%",
-            "%config.tableWrapMode.aggressive%",
-            "%config.tableWrapMode.none%"
+            "%config.tableWrapMode.wrap%",
+            "%config.tableWrapMode.nowrap%"
           ],
-          "default": "normal",
+          "default": "wrap",
           "description": "%config.tableWrapMode.description%"
         },
         "epytor.imageStorage": {

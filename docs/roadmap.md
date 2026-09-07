@@ -12,7 +12,7 @@
 fork 上游 [git-xing/md-wysiwyg-editor](https://github.com/git-xing/md-wysiwyg-editor) v0.1.6 → v0.3.2，以下功能可参考移植：
 
 * 标题吸顶 + 折叠（v0.2.0）— ✅ 已实现待发布（Decoration 折叠 + 吸顶推挤，spec 注明出处）
-* 表格换行模式（v0.2.0）— ✅ 已实现待发布（Shift+Enter 软换行 + tableWrapMode 三档）
+* 表格换行模式（v0.2.0）— ✅ 已实现待发布（Shift+Enter 软换行 + tableWrapMode 两档 wrap/nowrap，2026-09-07 用户决策三档简化为两档）
 * 工具栏溢出菜单（v0.2.0）— ✅ 已实现待发布（独立设计：JS 测量 + 显示控制 + 外部面板，非 DOM 移动）
 * Frontmatter 可视化面板（v0.2.0）— ✅ 已实现待发布（v1 简单行编辑：key/value + 行增删；嵌套/列表字段未做）
 * 自定义主题（v0.2.0）— 不移植
@@ -21,7 +21,7 @@ fork 上游 [git-xing/md-wysiwyg-editor](https://github.com/git-xing/md-wysiwyg-
 ### 新功能（已实现待发布）
 
 * [x] **标题吸顶 + 折叠** — 长文档滚动时当前章节标题 sticky 在顶栏下方，同级标题间可折叠/展开（Decoration，不修改文档）。
-* [x] **表格换行模式** — 单元格内 Shift+Enter 软换行（序列化 `<br>`）+ `epytor.tableWrapMode` 三档（normal/aggressive/none）。
+* [x] **表格换行模式** — 单元格内 Shift+Enter 软换行（序列化 `<br>`）+ `epytor.tableWrapMode` 两档（wrap/nowrap）。
 * [x] **工具栏溢出菜单** — 窗口窄时按钮收进「⋯」面板，替代 container query + flex-wrap 方案。
 * [x] **Frontmatter 可编辑面板** — 不切源码即可编辑 YAML 元数据（v1 简单行编辑）。
 * [x] **FindBar 正则搜索** — `.*` 开关 + 无效正则错误态 + 零宽匹配防护（新增，非原 roadmap 项）。

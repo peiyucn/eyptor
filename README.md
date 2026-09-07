@@ -45,7 +45,7 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 | `epytor.editorMaxWidth` | `900` | Editor max width (px) |
 | `epytor.fontFamily` | `""` | Editor font family |
 | `epytor.codeBlockMaxHeight` | `600` | Code block max height (px) |
-| `epytor.tableWrapMode` | `"normal"` | Table cell wrapping: `normal` / `aggressive` / `none` |
+| `epytor.tableWrapMode` | `"wrap"` | Table cell wrapping: `wrap` (break anywhere) / `nowrap` (no wrap + horizontal scroll) |
 | `epytor.imageStorage` | `"local"` | Image storage: `local` / `server` |
 | `epytor.imageLocalPath` | `""` | Local image path |
 | `epytor.debugMode` | `false` | Debug mode |

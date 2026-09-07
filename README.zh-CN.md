@@ -45,7 +45,7 @@
 | `epytor.editorMaxWidth` | `900` | 编辑器最大宽度（px） |
 | `epytor.fontFamily` | `""` | 编辑器字体 |
 | `epytor.codeBlockMaxHeight` | `600` | 代码块最大高度（px） |
-| `epytor.tableWrapMode` | `"normal"` | 表格单元格换行：`normal` / `aggressive` / `none` |
+| `epytor.tableWrapMode` | `"wrap"` | 表格单元格换行：`wrap`（任意字符断行）/ `nowrap`（不换行 + 横向滚动） |
 | `epytor.imageStorage` | `"local"` | 图片存储：`local` / `server` |
 | `epytor.imageLocalPath` | `""` | 本地图片路径 |
 | `epytor.debugMode` | `false` | 调试模式 |

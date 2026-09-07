@@ -170,7 +170,7 @@ export class MarkdownEditorProvider
         context.subscriptions.push(
             vscode.workspace.onDidChangeConfiguration((e) => {
                 if (!e.affectsConfiguration("epytor.tableWrapMode")) return;
-                const mode = vscode.workspace.getConfiguration("epytor").get<string>("tableWrapMode", "normal");
+                const mode = vscode.workspace.getConfiguration("epytor").get<string>("tableWrapMode", "wrap");
                 provider.postToAll({ type: "tableWrapModeChanged", mode });
             }),
         );
@@ -705,7 +705,7 @@ export class MarkdownEditorProvider
         const editorMaxWidth = cfg.get<number>("editorMaxWidth", 900);
         const fontFamily = cfg.get<string>("fontFamily", "");
         const imageSelectionColor = cfg.get<string>("imageSelectionColor", "rgba(52, 211, 153, 0.6)");
-        const tableWrapMode = cfg.get<string>("tableWrapMode", "normal");
+        const tableWrapMode = cfg.get<string>("tableWrapMode", "wrap");
         const tableWrapVars = resolveTableWrapVars(tableWrapMode);
         const tableWordBreak = tableWrapVars.wordBreak;
         const tableWhiteSpace = tableWrapVars.whiteSpace;

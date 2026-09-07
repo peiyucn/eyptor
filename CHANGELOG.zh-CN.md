@@ -13,7 +13,7 @@
 - **表格网格选择器**：插入表格按钮弹出 8×8 网格，任意行列插入
 - **查找栏正则搜索**（`.*` 开关）：无效正则错误提示 + 零宽匹配防护
 - **标题吸顶 + 同级折叠**（Decoration 实现，不修改文档）
-- **表格换行模式**（`epytor.tableWrapMode`：normal / aggressive / none）+ 单元格内 Shift+Enter 软换行（序列化为 `<br>`）
+- **表格换行模式**（`epytor.tableWrapMode`：wrap / nowrap）+ 单元格内 Shift+Enter 软换行（序列化为 `<br>`）
 - **Frontmatter 面板可编辑**（key/value 行编辑 + 增删行）
 - **工具栏溢出菜单**：窗口收窄时按钮收进「⋯」菜单（替代旧换行布局）
 - **Mermaid 预览缩放**（0.4×–3×，可重置，横向滚动）

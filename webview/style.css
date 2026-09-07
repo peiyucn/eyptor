@@ -936,12 +936,12 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
    .milkdown-table-block 包装层（官方 CSS 该前缀规则同样落空）；组件的手柄
    （cell-handle/line-handle/button-group）由 Vue 渲染在独立容器中，用类名直配 */
 
-/* 换行三档（epytor.tableWrapMode）：CSS 变量由 Extension 注入；
-   滚动容器 = 含表格的 ProseMirror（none 档横向滚动） */
+/* 换行两档（epytor.tableWrapMode：wrap / nowrap）：CSS 变量由 Extension 注入；
+   滚动容器 = 含表格的 ProseMirror（nowrap 档横向滚动） */
 .milkdown .ProseMirror:has(> table) {
     overflow-x: var(--epytor-table-overflow-x, visible);
 }
-/* none 档：table 宽度强制 max-content，nowrap 内容撑开表格触发横向滚动
+/* nowrap 档：table 宽度强制 max-content，nowrap 内容撑开表格触发横向滚动
    （回归：table 默认收缩宽度时内容溢出单元格而非表格，无滚动条） */
 .milkdown .ProseMirror table {
     width: var(--epytor-table-width, auto);
