@@ -981,10 +981,13 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, rgba(128,128,128,0.35))) !important;
     border-radius: 5px !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+    /* 官方 top:-52px 太远：鼠标从 handle 移向工具栏要穿过相邻行/列的 hover 区域，
+       触发其它 handle 的高亮/加号干扰点击（回归：行列删除按钮难点到）；缩短距离 */
+    top: -30px !important;
 }
 .milkdown .milkdown-table-block .cell-handle .button-group button {
-    margin: 3px !important;
-    padding: 3px !important;
+    margin: 4px !important;
+    padding: 5px !important;
     border-radius: 3px;
 }
 .milkdown .milkdown-table-block .cell-handle .button-group button svg {
