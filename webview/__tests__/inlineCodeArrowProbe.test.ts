@@ -89,4 +89,16 @@ describe("行内代码行尾方向键（vendor 虚拟光标）", () => {
         // 不拦截（defaultPrevented false），由内置处理移动；storedMarks 无变化
         expect(event.defaultPrevented).toBe(false);
     });
+
+    it("普通文本（无 mark）尾部按 ArrowRight 应该 走上游文本边界行为（回归：不误触我们的行尾分支）", async () => {
+        const editor = await makeEditor("para\n");
+        const view = getView(editor);
+        // 光标在普通文本尾部（无任何 mark）
+        view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 4)));
+
+        pressKey(view, "ArrowRight");
+        // 上游原有分支把光标移到文本节点边界（pos 4 → 5）；我们的行尾分支
+        // 要求 marksBefore 非空，普通文本不触发（不抛错、行为与上游一致）
+        expect(view.state.selection.from).toBe(5);
+    });
 });

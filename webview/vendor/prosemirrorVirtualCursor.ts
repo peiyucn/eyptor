@@ -74,10 +74,12 @@ export function createVirtualCursor(options: VirtualCursorOptions = {}): Plugin 
                 const marks = view.state.storedMarks || $pos.marks();
 
                 // [epytor] 行尾（无后续内容）ArrowRight：切换 storedMarks 为空——
-                // 与有后续内容场景一致（先显示块外指示，输入即普通文本，不移动光标）
+                // 与有后续内容场景一致（先显示块外指示，输入即普通文本，不移动光标）。
+                // 注意 marksBefore 非空才处理（普通文本尾部 marksBefore 为空数组，
+                // 误拦截会破坏正常的方向键移动）
                 if (
                     event.key === "ArrowRight" &&
-                    marksBefore && !marksAfter &&
+                    marksBefore && marksBefore.length > 0 && !marksAfter &&
                     Mark.sameSet(marksBefore, marks)
                 ) {
                     view.dispatch(view.state.tr.setStoredMarks(Mark.none));
@@ -175,8 +177,9 @@ function updateCursor(view: EditorView, cursor: HTMLElement): void {
             } else if (Mark.sameSet(marksAfter, marks)) {
                 className += " prosemirror-virtual-cursor-right";
             }
-        } else if (marksBefore && !marksAfter) {
-            // [epytor] 行尾单侧也渲染指示：storedMarks 为空（已退出）时显示块外（右）
+        } else if (marksBefore && marksBefore.length > 0 && !marksAfter) {
+            // [epytor] 行尾单侧也渲染指示：storedMarks 为空（已退出）时显示块外（右）。
+            // 注意 marksBefore 非空（普通文本尾部空数组不渲染，回归：非代码尾部误显左下标）
             if (Mark.sameSet(marksBefore, marks)) {
                 className += " prosemirror-virtual-cursor-left";
             } else {
