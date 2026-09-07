@@ -57,6 +57,10 @@ export const headingStickyPlugin = $prose(() =>
             let rafId: number | null = null;
             let activeHeading: HTMLElement | null = null;
             let activeHeadingPos: number | null = null;
+            // 点击吸顶条跳转后抑制吸顶显示（跳转 scroll 事件会立即重新计算，
+            // 目标标题完整可见时仍会吸顶前一个标题并遮挡目标）；
+            // 用户主动滚动（wheel/touchmove/键盘）后恢复
+            let suppressSticky = false;
 
             const STICKY_SCROLL_OFFSET_PX = 8;
 
@@ -74,6 +78,10 @@ export const headingStickyPlugin = $prose(() =>
                 if ((event.target as HTMLElement).closest(".heading-sticky-toggle")) return;
                 const pos = Number(sticky.dataset["headingPos"]);
                 if (Number.isFinite(pos) && pos > 0) {
+                    // 跳转后抑制吸顶显示，避免前一个标题的吸顶条遮挡刚跳到的标题；
+                    // 用户主动滚动（wheel/touchmove/键盘）时恢复
+                    hideSticky();
+                    suppressSticky = true;
                     scrollHeadingIntoStickyPosition(pos);
                 }
             });
@@ -148,6 +156,10 @@ export const headingStickyPlugin = $prose(() =>
 
             const updateSticky = () => {
                 rafId = null;
+                if (suppressSticky) {
+                    hideSticky();
+                    return;
+                }
 
                 const top = getTopbarBottom();
                 const headings = getVisibleHeadings(view);
@@ -214,11 +226,22 @@ export const headingStickyPlugin = $prose(() =>
                 rafId = requestAnimationFrame(updateSticky);
             };
 
+            // 用户主动滚动 → 解除跳转抑制并刷新（scrollTo 跳转不会触发 wheel/touchmove/keydown）
+            const clearSuppress = () => {
+                if (suppressSticky) {
+                    suppressSticky = false;
+                    scheduleUpdate();
+                }
+            };
+
             const resizeObserver = new ResizeObserver(scheduleUpdate);
             resizeObserver.observe(view.dom);
 
             window.addEventListener("scroll", scheduleUpdate, { passive: true });
             window.addEventListener("resize", scheduleUpdate);
+            window.addEventListener("wheel", clearSuppress, { passive: true });
+            window.addEventListener("touchmove", clearSuppress, { passive: true });
+            window.addEventListener("keydown", clearSuppress);
             scheduleUpdate();
 
             return {
@@ -227,6 +250,9 @@ export const headingStickyPlugin = $prose(() =>
                     if (rafId !== null) cancelAnimationFrame(rafId);
                     window.removeEventListener("scroll", scheduleUpdate);
                     window.removeEventListener("resize", scheduleUpdate);
+                    window.removeEventListener("wheel", clearSuppress);
+                    window.removeEventListener("touchmove", clearSuppress);
+                    window.removeEventListener("keydown", clearSuppress);
                     resizeObserver.disconnect();
                     sticky.remove();
                 },
