@@ -50,12 +50,36 @@ export function createFrontmatterPanel(
         return rows;
     };
 
+    /**
+     * 校验并标记错误行：value 已填但 key 为空的行写盘时会被过滤（用户感知为
+     * 「加行无效」）；返回 false 表示存在待补 key 的行，该行 key 框红框高亮并聚焦。
+     */
+    const validateRows = (rows: FrontmatterRow[]): boolean => {
+        let valid = true;
+        const rowEls = tbody.querySelectorAll<HTMLTableRowElement>("tr.fm-row");
+        rows.forEach((row, index) => {
+            const keyInput = rowEls[index]?.querySelector<HTMLInputElement>(".fm-key-input");
+            const emptyKeyWithValue = row.key.trim() === "" && row.value.trim() !== "";
+            keyInput?.classList.toggle("fm-key-input--error", emptyKeyWithValue);
+            if (emptyKeyWithValue) {
+                valid = false;
+                if (document.activeElement !== keyInput) {
+                    keyInput?.focus();
+                }
+            }
+        });
+        return valid;
+    };
+
     const scheduleSave = () => {
         if (disposed) return;
         clearTimer();
         saveTimer = setTimeout(() => {
             saveTimer = null;
-            if (!disposed) onChange(serializeFrontmatter(collectRows()));
+            if (disposed) return;
+            const rows = collectRows();
+            if (!validateRows(rows)) return;
+            onChange(serializeFrontmatter(rows));
         }, SAVE_DEBOUNCE_MS);
     };
 
@@ -63,7 +87,9 @@ export function createFrontmatterPanel(
     const flushSave = () => {
         if (disposed) return;
         clearTimer();
-        onChange(serializeFrontmatter(collectRows()));
+        const rows = collectRows();
+        if (!validateRows(rows)) return;
+        onChange(serializeFrontmatter(rows));
     };
 
     const addRow = (key = "", value = ""): void => {

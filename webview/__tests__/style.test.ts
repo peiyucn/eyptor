@@ -84,14 +84,15 @@ describe("WebView 样式", () => {
     });
 
     it("表格整行/整列选中工具栏 应该 有 VSCode 变量主题适配规则（回归：官方浅色/独立配色未适配）", () => {
-        // 官方 button-group 依赖 Crepe 变量；本规则直写 --vscode-* 变量对齐编辑器浮层风格
-        expect(styleCss).toContain(".milkdown-table-block .cell-handle .button-group");
+        // 组件手柄由 Vue 渲染在独立容器，类名直配；规则直写 --vscode-* 变量
+        expect(styleCss).toContain(".cell-handle .button-group");
         expect(styleCss).toContain("--vscode-editorWidget-background");
         expect(styleCss).toContain("--vscode-toolbar-hoverBackground");
     });
 
     it("表格单元格内自动链接 应该 强制任意处断行（回归：inline 元素 break-word 不强制断，长 URL 撑宽页面）", () => {
-        expect(styleCss).toContain(".milkdown-table-block table td a");
+        // 7.22.1 真实 DOM：table 直接在 .ProseMirror 下
+        expect(styleCss).toContain(".milkdown .ProseMirror table td a");
         expect(styleCss).toContain("overflow-wrap: anywhere");
     });
 });

@@ -200,14 +200,13 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
         });
 
         // 应用隐藏 class（DOM 与 meta 顺序一致）；
-        // 分割线跟随其左侧按钮：左侧按钮被收起时一并隐藏（防宽度收窄后一串孤立分割线）
+        // 分割线双向跟随：左侧按钮被收起（组尾）或右侧按钮被收起（组头）时一并隐藏，
+        // 否则「⋯」紧跟最后一个可见按钮时会压在残留分割线上（回归：more 压水平线按钮右侧分割线）
+        const children = Array.from(inner.children) as HTMLElement[];
+        const hiddenFlags = new Map<HTMLElement, boolean>();
         metaIdx = 0;
-        let prevHidden = false;
-        for (const child of Array.from(inner.children) as HTMLElement[]) {
-            if (child.classList.contains("top-bar-divider")) {
-                child.classList.toggle(HIDDEN_CLASS, prevHidden);
-                continue;
-            }
+        for (const child of children) {
+            if (child.classList.contains("top-bar-divider")) continue;
             if (
                 !child.classList.contains("top-bar-item") &&
                 !child.classList.contains("top-bar-heading-selector")
@@ -216,9 +215,28 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
             }
             const key = _meta[metaIdx]?.key ?? "";
             metaIdx++;
-            const hidden = hiddenKeys.has(key);
-            child.classList.toggle(HIDDEN_CLASS, hidden);
-            prevHidden = hidden;
+            hiddenFlags.set(child, hiddenKeys.has(key));
+        }
+        for (let i = 0; i < children.length; i++) {
+            const child = children[i];
+            if (child.classList.contains("top-bar-divider")) {
+                let prev: HTMLElement | null = null;
+                let next: HTMLElement | null = null;
+                for (let j = i - 1; j >= 0; j--) {
+                    if (hiddenFlags.has(children[j])) { prev = children[j]; break; }
+                }
+                for (let j = i + 1; j < children.length; j++) {
+                    if (hiddenFlags.has(children[j])) { next = children[j]; break; }
+                }
+                const hidden =
+                    (prev !== null && hiddenFlags.get(prev)) ||
+                    (next !== null && hiddenFlags.get(next));
+                child.classList.toggle(HIDDEN_CLASS, hidden);
+                continue;
+            }
+            if (hiddenFlags.has(child)) {
+                child.classList.toggle(HIDDEN_CLASS, hiddenFlags.get(child));
+            }
         }
 
         moreBtn.hidden = hiddenKeys.size === 0;

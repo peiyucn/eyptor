@@ -58,7 +58,10 @@ body {
     color: var(--vscode-symbolIcon-keywordForeground, var(--vscode-descriptionForeground));
     font-family: var(--vscode-editor-font-family, monospace);
     font-weight: bold;
-    width: 1%;
+    /* 回归：width:1% 把 key 列压成几个像素，key 输入框不可见，
+       用户只能看到一个输入框、直接填 value，空 key 行保存被过滤 → 「加行无效」 */
+    width: 30%;
+    min-width: 150px;
     padding-right: 16px;
 }
 
@@ -84,6 +87,11 @@ body {
     font-weight: bold;
     font-family: var(--vscode-editor-font-family, monospace);
 }
+.frontmatter-table .fm-key-input::placeholder,
+.frontmatter-table .fm-val-input::placeholder {
+    color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground, rgba(128,128,128,0.7)));
+    font-weight: normal;
+}
 .frontmatter-table .fm-key-input:hover,
 .frontmatter-table .fm-val-input:hover {
     border-color: var(--vscode-input-border, rgba(128, 128, 128, 0.4));
@@ -92,6 +100,12 @@ body {
 .frontmatter-table .fm-val-input:focus {
     border-color: var(--vscode-focusBorder, #007acc);
     background: var(--vscode-input-background, #3c3c3c);
+}
+/* 校验错误态：value 已填但 key 为空的行（保存前必须补 key，否则该行被过滤） */
+.frontmatter-table .fm-key-input--error,
+.frontmatter-table .fm-key-input--error:focus {
+    border-color: var(--vscode-errorForeground, #f44336) !important;
+    background: color-mix(in srgb, var(--vscode-errorForeground, #f44336) 12%, transparent);
 }
 .frontmatter-table .fm-del {
     width: 1%;
@@ -917,64 +931,69 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     border-color: var(--vscode-focusBorder, #007acc) !important;
 }
 
-/* ─── 表格：按钮形状 + 背景 ───────────────────────────────── */
-/* 换行三档（epytor.tableWrapMode）：CSS 变量由 Extension 注入 */
-.milkdown .milkdown-table-block {
+/* ─── 表格：换行三档 + 行列工具栏主题 ────────────────────── */
+/* 注意：7.22.1 真实 DOM 中表格本体直接位于 .ProseMirror 下，不存在
+   .milkdown-table-block 包装层（官方 CSS 该前缀规则同样落空）；组件的手柄
+   （cell-handle/line-handle/button-group）由 Vue 渲染在独立容器中，用类名直配 */
+
+/* 换行三档（epytor.tableWrapMode）：CSS 变量由 Extension 注入；
+   滚动容器 = 含表格的 ProseMirror（none 档横向滚动） */
+.milkdown .ProseMirror:has(> table) {
     overflow-x: var(--epytor-table-overflow-x, visible);
 }
 /* none 档：table 宽度强制 max-content，nowrap 内容撑开表格触发横向滚动
    （回归：table 默认收缩宽度时内容溢出单元格而非表格，无滚动条） */
-.milkdown .milkdown-table-block table {
+.milkdown .ProseMirror table {
     width: var(--epytor-table-width, auto);
     min-width: 100%;
 }
 /* 单元格内自动链接（长 URL）：inline 元素上 overflow-wrap:break-word 不强制断行
    （真实引擎实测表格被 URL 撑到 1602px、页面横向滚动），anywhere 才在任意字符处断；
    !important 防御任何层叠竞争，word-break:break-word 作 Chromium 补充兜底 */
-.milkdown .milkdown-table-block table th a,
-.milkdown .milkdown-table-block table td a {
+.milkdown .ProseMirror table th a,
+.milkdown .ProseMirror table td a {
     overflow-wrap: anywhere !important;
     word-break: break-word !important;
 }
-.milkdown .milkdown-table-block table th,
-.milkdown .milkdown-table-block table td {
+.milkdown .ProseMirror table th,
+.milkdown .ProseMirror table td {
     word-break: var(--epytor-table-word-break, keep-all);
     white-space: var(--epytor-table-white-space, normal);
     overflow-wrap: break-word;
 }
-.milkdown .milkdown-table-block .cell-handle {
+
+/* 行列手柄与整行/整列选中工具栏：组件类名直配（对齐编辑器浮层风格） */
+.cell-handle {
     background-color: var(--vscode-editor-background);
     border-radius: 6px;
 }
-.milkdown .milkdown-table-block .cell-handle:hover {
+.cell-handle:hover {
     background-color: var(--vscode-editorWidget-background);
 }
-.milkdown .milkdown-table-block .line-handle .add-button {
+.line-handle .add-button {
     border-radius: 4px;
 }
-
-/* 整行/整列选中工具栏（删除行列 + 对齐按钮）：对齐编辑器浮层风格 */
-.milkdown .milkdown-table-block .cell-handle .button-group {
+.cell-handle .button-group {
     background-color: var(--vscode-editorWidget-background, var(--vscode-editor-background));
     border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, rgba(128,128,128,0.35)));
     border-radius: 5px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
 }
-.milkdown .milkdown-table-block .cell-handle .button-group button {
+.cell-handle .button-group button {
     margin: 3px;
     padding: 3px;
     border-radius: 3px;
 }
-.milkdown .milkdown-table-block .cell-handle .button-group button svg {
+.cell-handle .button-group button svg {
     width: 18px;
     height: 18px;
     fill: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
 }
-.milkdown .milkdown-table-block .cell-handle .button-group button:hover {
+.cell-handle .button-group button:hover {
     border-radius: 3px;
     background-color: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2));
 }
-.milkdown .milkdown-table-block .cell-handle .button-group button:active {
+.cell-handle .button-group button:active {
     background: var(--vscode-toolbar-activeBackground, rgba(128,128,128,0.3));
 }
 

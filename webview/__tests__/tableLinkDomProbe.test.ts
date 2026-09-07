@@ -61,4 +61,20 @@ describe("表格内自动链接 DOM 形态诊断", () => {
         const anchor = view.dom.querySelector("td a");
         expect(anchor).not.toBeNull();
     });
+
+    it("CSS 选择器链 .milkdown .ProseMirror table td a 应该 命中（wrapMode 断行规则的前提）", async () => {
+        const editor = await makeEditor(
+            "| URL |\n| --- |\n| <https://example.com/very/long/path/to/resource> |\n",
+        );
+        const view = getView(editor);
+        // 7.22.1 真实 DOM：table 直接在 .ProseMirror 下，没有 .milkdown-table-block 包装层
+        const hit = document.querySelector(".milkdown .ProseMirror table td a");
+        expect(hit).not.toBeNull();
+        const td = view.dom.querySelector("td");
+        expect(td).not.toBeNull();
+        expect(td!.closest(".milkdown")).not.toBeNull();
+        expect(td!.closest(".ProseMirror")).not.toBeNull();
+        // 回归：旧前缀类名不存在（若上游未来加回包装层需同步调整规则）
+        expect(document.querySelector(".milkdown-table-block")).toBeNull();
+    });
 });
