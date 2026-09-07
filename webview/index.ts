@@ -773,7 +773,13 @@ document.addEventListener('visibilitychange', () => {
     requestAnimationFrame(() => {
         const view = getEditorView();
         if (view && !view.hasFocus()) {
+            // 恢复焦点但不得滚动：ProseMirror focus() 会把光标位置 scrollIntoView，
+            // 导致切回后页面跳到标题行/mermaid 处（回归：frontmatter 编辑行点击后页面跳）
+            const scrollBefore = window.scrollY;
             view.focus();
+            if (window.scrollY !== scrollBefore) {
+                window.scrollTo({ top: scrollBefore });
+            }
         }
     });
 });
