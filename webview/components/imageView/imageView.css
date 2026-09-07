@@ -95,12 +95,15 @@
     user-select: none;
 }
 
-/* 重命名 inline 输入框 */
+/* 重命名/ALT/Caption 内联输入框（工具栏上编辑） */
 .img-rename-input {
     height: 20px;
+    min-width: 140px;
     padding: 0 4px;
     background: var(--vscode-input-background, rgba(128, 128, 128, 0.15));
     color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
+    /* 回归：未显式指定时部分主题下 caret 与背景同色，光标不可见（深浅主题均出现） */
+    caret-color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
     border: 1px solid var(--vscode-focusBorder, #007acc);
     border-radius: 3px;
     font-size: 11px;
@@ -116,6 +119,7 @@
     padding: 0 4px;
     background: transparent;
     color: var(--vscode-descriptionForeground, rgba(204, 204, 204, 0.7));
+    caret-color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
     border: 1px solid transparent;
     border-radius: 3px;
     font-size: 11px;

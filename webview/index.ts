@@ -760,7 +760,8 @@ window.addEventListener('scroll', () => {
 }, { passive: true });
 
 // 恢复（主路径）：tab 切换时 iframe 被隐藏再显示，浏览器会重置 scrollY
-// visibilitychange 触发时读取已保存位置并还原
+// visibilitychange 触发时读取已保存位置并还原；同时恢复编辑器焦点
+// （回归：切到别的文件再切回，光标还在但输入无效——webview 失焦未恢复）
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
     const state = getWebviewState();
@@ -769,8 +770,28 @@ document.addEventListener('visibilitychange', () => {
             window.scrollTo({ top: state.scrollY as number });
         });
     }
+    requestAnimationFrame(() => {
+        const view = getEditorView();
+        if (view && !view.hasFocus()) {
+            view.focus();
+        }
+    });
 });
 // ─────────────────────────────────────────────────────────────
+
+// ── 用户交互保护：延迟定位滚动不得覆盖用户已开始的交互 ──────
+// 回归：1 万行文档渲染慢，切回预览的「定位到文本编辑器光标行」在 300-2000ms
+// 重试期间才执行，用户已开始编辑/点击时页面突然跳到标题行/mermaid 处
+let _userInteracted = false;
+for (const evt of ["wheel", "mousedown", "keydown", "touchstart"] as const) {
+    window.addEventListener(
+        evt,
+        () => {
+            _userInteracted = true;
+        },
+        { passive: true },
+    );
+}
 
 // 监听来自 Extension 侧的消息
 onMessage(async (msg) => {
@@ -797,9 +818,12 @@ onMessage(async (msg) => {
         // Milkdown 渲染 + 浏览器布局需要时间，多次重试确保 DOM 就绪后才滚动
         if (msg.type === "init" && msg.scrollToLine) {
             const targetLine = msg.scrollToLine;
+            _userInteracted = false; // 本次定位请求起算
             let scrollDone = false;
             const tryScroll = () => {
                 if (scrollDone) { return; }
+                // 用户已开始交互（滚动/点击/输入）→ 放弃延迟定位，避免页面突然跳动
+                if (_userInteracted) { scrollDone = true; return; }
                 const view = getEditorView();
                 if (!view) { return; }
                 // 检查第一个块的 DOM 高度：若为 0 说明布局尚未完成
@@ -814,12 +838,15 @@ onMessage(async (msg) => {
             }
         } else if (msg.type === "init") {
             // WebView 重建场景（VSCode 重启恢复标签页等）：从持久状态恢复滚动位置
+            _userInteracted = false; // 本次恢复请求起算
             const saved = getWebviewState();
             if (saved?.scrollY) {
                 const targetY = saved.scrollY as number;
                 let restoreDone = false;
                 const tryRestore = () => {
                     if (restoreDone) return;
+                    // 用户已开始交互 → 放弃恢复，避免覆盖当前位置
+                    if (_userInteracted) { restoreDone = true; return; }
                     const view = getEditorView();
                     if (!view) return;
                     const firstChild = view.dom.children[0] as HTMLElement | undefined;
@@ -842,8 +869,11 @@ onMessage(async (msg) => {
         // 面板已打开时（如全局搜索点击已打开文件）直接滚动
         // 若 initEditor 正在重建（getEditorView 返回 null），最多重试 8 次
         const scrollLine = msg.line;
+        _userInteracted = false; // 本次定位请求起算
         let scrollAttempts = 0;
         const tryScrollNow = () => {
+            // 用户已开始交互 → 放弃定位（回归：渲染慢时延迟定位突然跳动页面）
+            if (_userInteracted) return;
             const view = getEditorView();
             if (view) {
                 scrollToSourceLine(view, currentLineMap, scrollLine);

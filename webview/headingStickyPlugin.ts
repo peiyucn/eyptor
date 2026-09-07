@@ -154,6 +154,45 @@ export const headingStickyPlugin = $prose(() =>
                 delete sticky.dataset["headingPos"];
             };
 
+            // ── 标题缓存（性能）：文档坐标（docTop/docBottom 相对文档顶部，与滚动无关） ──
+            // 回归：1 万行文档输入/滚动卡顿——此前每次 updateSticky 全量
+            // querySelectorAll + getBoundingClientRect（几百标题 × 每帧）；
+            // 现改为文档变更后防抖重建缓存，滚动时仅纯数字比较
+            interface CachedHeading {
+                el: HTMLElement;
+                pos: number | null;
+                docTop: number;
+                docBottom: number;
+            }
+            let cachedHeadings: CachedHeading[] = [];
+            let cacheDirty = true;
+            let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
+
+            const rebuildCache = () => {
+                rebuildTimer = null;
+                const scrollOffset = window.scrollY;
+                cachedHeadings = getVisibleHeadings(view).map((el) => {
+                    const rect = el.getBoundingClientRect();
+                    return {
+                        el,
+                        pos: null,
+                        docTop: rect.top + scrollOffset,
+                        docBottom: rect.bottom + scrollOffset,
+                    };
+                });
+                cacheDirty = false;
+            };
+
+            /** 文档变更/折叠状态变化：防抖重建（输入连续时不重复全量扫描） */
+            const markCacheDirty = () => {
+                cacheDirty = true;
+                if (rebuildTimer !== null) clearTimeout(rebuildTimer);
+                rebuildTimer = setTimeout(() => {
+                    rebuildCache();
+                    scheduleUpdate();
+                }, 300);
+            };
+
             const updateSticky = () => {
                 rafId = null;
                 if (suppressSticky) {
@@ -162,17 +201,16 @@ export const headingStickyPlugin = $prose(() =>
                 }
 
                 const top = getTopbarBottom();
-                const headings = getVisibleHeadings(view);
-                if (headings.length === 0) {
+                if (cacheDirty) rebuildCache();
+                if (cachedHeadings.length === 0) {
                     hideSticky();
                     return;
                 }
 
+                // 文档坐标 + 当前 scrollY 换算为视口坐标：纯数字计算，零 DOM 查询
+                const scrollY = window.scrollY;
                 let activeIndex = computeStickyActiveIndex(
-                    headings.map((heading) => {
-                        const rect = heading.getBoundingClientRect();
-                        return { top: rect.top, bottom: rect.bottom };
-                    }),
+                    cachedHeadings.map((h) => ({ top: h.docTop - scrollY, bottom: h.docBottom - scrollY })),
                     top,
                 );
 
@@ -181,17 +219,22 @@ export const headingStickyPlugin = $prose(() =>
                     return;
                 }
 
-                const heading = headings[activeIndex];
+                const cached = cachedHeadings[activeIndex];
+                const heading = cached.el;
                 const text = getHeadingText(heading);
                 if (!text) {
                     hideSticky();
                     return;
                 }
 
-                const headingPos = findHeadingPos(view, heading);
+                let headingPos = cached.pos;
                 if (headingPos === null) {
-                    hideSticky();
-                    return;
+                    headingPos = findHeadingPos(view, heading);
+                    if (headingPos === null) {
+                        hideSticky();
+                        return;
+                    }
+                    cached.pos = headingPos;
                 }
 
                 activeHeadingPos = headingPos;
@@ -234,10 +277,12 @@ export const headingStickyPlugin = $prose(() =>
                 }
             };
 
-            const resizeObserver = new ResizeObserver(scheduleUpdate);
+            // 文档内容/布局变化（RO）→ 防抖重建缓存（而非每帧全量测量）；滚动时用缓存纯计算
+            const resizeObserver = new ResizeObserver(markCacheDirty);
             resizeObserver.observe(view.dom);
 
             window.addEventListener("scroll", scheduleUpdate, { passive: true });
+            // resize 只刷新显示位置（docTop 与视口无关，无需重建缓存）
             window.addEventListener("resize", scheduleUpdate);
             window.addEventListener("wheel", clearSuppress, { passive: true });
             window.addEventListener("touchmove", clearSuppress, { passive: true });
@@ -245,9 +290,10 @@ export const headingStickyPlugin = $prose(() =>
             scheduleUpdate();
 
             return {
-                update: scheduleUpdate,
+                update: markCacheDirty,
                 destroy() {
                     if (rafId !== null) cancelAnimationFrame(rafId);
+                    if (rebuildTimer !== null) clearTimeout(rebuildTimer);
                     window.removeEventListener("scroll", scheduleUpdate);
                     window.removeEventListener("resize", scheduleUpdate);
                     window.removeEventListener("wheel", clearSuppress);

@@ -44,8 +44,8 @@ const ITEM_LABELS: Record<string, string> = {
 const PINNED_KEYS = new Set(["heading", "undo", "redo"]);
 
 const MORE_BTN_WIDTH = 34;
-/** 安全边距：居中布局下右侧空隙不可预知，多扣 12px 防「⋯」与最后一个按钮重叠 */
-const MORE_BTN_SAFETY_GAP_PX = 12;
+/** 安全边距：居中布局下右侧空隙不可预知，多扣 20px 防「⋯」与最后一个按钮重叠 */
+const MORE_BTN_SAFETY_GAP_PX = 20;
 const HIDDEN_CLASS = "top-bar-item--overflow-hidden";
 
 let _meta: TopBarButtonMeta[] = [];
@@ -128,6 +128,9 @@ function openOverflowMenu(anchor: HTMLElement, hiddenKeys: ReadonlySet<string>, 
     const menuHeight = menu.getBoundingClientRect().height;
     let left = rect.right - menuWidth;
     if (left < 8) left = 8;
+    // 右缘 clamp：more 按钮贴视口右缘时，右对齐展开的菜单右缘可能超出页面被裁
+    const maxLeft = window.innerWidth - menuWidth - 8;
+    if (left > maxLeft) left = maxLeft;
     let top = rect.bottom + 6;
     if (top + menuHeight > window.innerHeight - 8) top = Math.max(8, rect.top - menuHeight - 6);
     menu.style.left = `${left}px`;
@@ -261,7 +264,10 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
         moreBtn.style.left = `${Math.min(desiredLeft, window.innerWidth - MORE_BTN_WIDTH - 6)}px`;
         moreBtn.style.right = "auto";
 
-        // Vue patch 可能覆盖隐藏 class：测量完成后恢复监听（目标可能被重建）
+        // Vue patch 可能覆盖隐藏 class：测量完成后恢复监听（目标可能被重建）；
+        // 同时确保 topBar 进入 RO 观察（幂等）——fixed left:0 right:0 尺寸随视口，
+        // 直接观察避免 resize 触发缺失导致「⋯」重排滞后（回归：按钮收起时机晚）
+        resizeObserver.observe(topBar);
         mutObs = new MutationObserver(schedule);
         mutObs.observe(topBar, {
             subtree: true,
