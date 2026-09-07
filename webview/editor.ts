@@ -43,7 +43,8 @@ export function setLogTableSel(enabled: boolean): void {
 //   feature/latex       → 全新：KaTeX 数学公式支持
 // feature/code-mirror → 换回自定义实现（复制反馈、全屏、样式更精致）
 import { codeMirror } from "@milkdown/crepe/feature/code-mirror";
-import { cursor } from "@milkdown/crepe/feature/cursor";
+import { cursor } from "@milkdown/kit/plugin/cursor";
+import { createVirtualCursor } from "prosemirror-virtual-cursor";
 import { latex } from "@milkdown/crepe/feature/latex";
 import { listItem } from "@milkdown/crepe/feature/list-item";
 import { table } from "@milkdown/crepe/feature/table";
@@ -573,7 +574,6 @@ export async function createEditor(
             renderPreview,
             searchPlaceholder: t('Search language...'),
         })
-        .addFeature(cursor) // 原版虚拟光标（mark 边界方向键/方向指示），z-index 已在 style.css 修复被背景盖住问题
         .addFeature(listItem)
         .addFeature(topBar, {
             headingOptions: [
@@ -855,13 +855,13 @@ export async function createEditor(
                 });
                 // 将 toc、history 组移到最前面
                 const groups = builder.build();
-                const tocGroup = groups.find((g) => g.key === 'toc');
+                const tocGroup = groups.find((g: { key: string }) => g.key === 'toc');
                 if (tocGroup) {
                     const idx = groups.indexOf(tocGroup);
                     groups.splice(idx, 1);
                     groups.unshift(tocGroup);
                 }
-                const historyGroup = groups.find((g) => g.key === 'history');
+                const historyGroup = groups.find((g: { key: string }) => g.key === 'history');
                 if (historyGroup) {
                     const idx = groups.indexOf(historyGroup);
                     groups.splice(idx, 1);
@@ -869,7 +869,7 @@ export async function createEditor(
                 }
                 // 顶栏溢出菜单按钮元数据（key/icon/onRun 快照，供溢出面板渲染副本）
                 setTopBarButtonMeta(
-                    groups.flatMap((g) =>
+                    groups.flatMap((g: { items: { key: string; icon: unknown; onRun?: (ctx: Ctx) => void }[] }) =>
                         g.items.map((item) => ({
                             key: item.key,
                             icon: (item.icon as string) ?? "",
@@ -891,6 +891,13 @@ export async function createEditor(
     crepe.editor.use(
         inlineCodeSchema.extendSchema((prev) => (ctx) => ({ ...prev(ctx), inclusive: true })),
     );
+
+    // 光标插件独立注册：官方 cursor 插件（drop indicator）+ 默认行为虚拟光标。
+    // 回归：Crepe cursor feature 的 createVirtualCursor 带 skipWarning:['inlineCode']
+    // （7.22.1 为 inclusive:false 设计）；epytor 恢复 inclusive:true 后仍跳过警告，
+    // 导致行内代码边界的方向指示消失、方向键无法退出——自注册默认行为（7.22.0 一致）
+    crepe.editor.use(cursor);
+    crepe.editor.use($prose(() => createVirtualCursor()));
 
     // 注入保留的自定义配置
     crepe.editor

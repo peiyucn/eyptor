@@ -50,6 +50,9 @@ importers:
       prosemirror-commands:
         specifier: ^1.7.1
         version: 1.7.1
+      prosemirror-virtual-cursor:
+        specifier: ^0.4.2
+        version: 0.4.2(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-view@1.42.2)
     devDependencies:
       '@types/jsdom':
         specifier: ^28.0.3
