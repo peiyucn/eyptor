@@ -14,6 +14,7 @@ describe("applyTableWrapVars", () => {
         expect(document.documentElement.style.getPropertyValue("--epytor-table-word-break")).toBe("keep-all");
         expect(document.documentElement.style.getPropertyValue("--epytor-table-white-space")).toBe("nowrap");
         expect(document.documentElement.style.getPropertyValue("--epytor-table-overflow-x")).toBe("auto");
+        expect(document.documentElement.style.getPropertyValue("--epytor-table-width")).toBe("max-content");
 
         applyTableWrapVars(resolveTableWrapVars("aggressive"));
         expect(document.documentElement.style.getPropertyValue("--epytor-table-word-break")).toBe("break-all");

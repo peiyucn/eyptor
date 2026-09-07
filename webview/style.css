@@ -922,6 +922,12 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
 .milkdown .milkdown-table-block {
     overflow-x: var(--epytor-table-overflow-x, visible);
 }
+/* none 档：table 宽度强制 max-content，nowrap 内容撑开表格触发横向滚动
+   （回归：table 默认收缩宽度时内容溢出单元格而非表格，无滚动条） */
+.milkdown .milkdown-table-block table {
+    width: var(--epytor-table-width, auto);
+    min-width: 100%;
+}
 .milkdown .milkdown-table-block table th,
 .milkdown .milkdown-table-block table td {
     word-break: var(--epytor-table-word-break, keep-all);

@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import { resolveTableWrapVars } from "../tableWrap";
 
 describe("resolveTableWrapVars", () => {
-    it("normal 档 应该 keep-all + normal + visible", () => {
+    it("normal 档 应该 keep-all + normal + visible + auto 宽度", () => {
         expect(resolveTableWrapVars("normal")).toEqual({
             wordBreak: "keep-all",
             whiteSpace: "normal",
             overflowX: "visible",
+            tableWidth: "auto",
         });
     });
 
@@ -15,14 +16,16 @@ describe("resolveTableWrapVars", () => {
             wordBreak: "break-all",
             whiteSpace: "normal",
             overflowX: "visible",
+            tableWidth: "auto",
         });
     });
 
-    it("none 档 应该 nowrap + 横向滚动", () => {
+    it("none 档 应该 nowrap + 横向滚动 + table max-content（回归：无行内滚动）", () => {
         expect(resolveTableWrapVars("none")).toEqual({
             wordBreak: "keep-all",
             whiteSpace: "nowrap",
             overflowX: "auto",
+            tableWidth: "max-content",
         });
     });
 

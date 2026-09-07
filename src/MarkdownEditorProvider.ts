@@ -6,7 +6,7 @@ import { getNonce } from "./utils/getNonce";
 import { ZH_CN_WEBVIEW } from "./i18n/webviewTranslations";
 import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
 import { computeLineMap } from "./utils/lineMap";
-import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay } from "./utils/contentTransform";
+import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter } from "./utils/contentTransform";
 import type { ToExtensionMessage, ToWebviewMessage } from "../shared/messages";
 import { resolveTableWrapVars } from "../shared/tableWrap";
 
@@ -457,13 +457,12 @@ export class MarkdownEditorProvider
                 // Frontmatter 面板编辑：更新缓存并重组保存（正文取自内存最新版）
                 const frontmatter = message.frontmatter ?? "";
                 this._frontmatterMap.set(uriKey, frontmatter);
-                const { body } = extractFrontmatter(document.getText());
-                const newContent = restoreContentForSave(
-                    body,
+                const newContent = buildContentWithFrontmatter(
+                    document.getText(),
                     frontmatter,
                     this._imageUriMaps.get(uriKey) ?? new Map(),
                 );
-                if (newContent === document.getText()) { break; }
+                if (newContent === null) { break; }
                 document.update(newContent);
                 // 立即写盘而非走 autoSave 防抖：面板编辑（如新增行）后用户往往立刻切到
                 // 文本编辑器核对源码，防抖窗口内磁盘仍是旧内容 → 误判「新增行无效」
@@ -701,6 +700,7 @@ export class MarkdownEditorProvider
         const tableWordBreak = tableWrapVars.wordBreak;
         const tableWhiteSpace = tableWrapVars.whiteSpace;
         const tableOverflowX = tableWrapVars.overflowX;
+        const tableWidth = tableWrapVars.tableWidth;
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(
                 this.context.extensionUri,
@@ -736,7 +736,7 @@ export class MarkdownEditorProvider
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Markdown Editor</title>
   <link rel="stylesheet" href="${styleUri}">
-  <style>:root { --code-block-max-height: ${maxHeight}px; --editor-max-width: ${editorMaxWidth}px;${fontFamily ? ` --custom-font-family: ${fontFamily};` : ''} --image-selection-color: ${imageSelectionColor}; --epytor-table-word-break: ${tableWordBreak}; --epytor-table-white-space: ${tableWhiteSpace}; --epytor-table-overflow-x: ${tableOverflowX}; }</style>
+  <style>:root { --code-block-max-height: ${maxHeight}px; --editor-max-width: ${editorMaxWidth}px;${fontFamily ? ` --custom-font-family: ${fontFamily};` : ''} --image-selection-color: ${imageSelectionColor}; --epytor-table-word-break: ${tableWordBreak}; --epytor-table-white-space: ${tableWhiteSpace}; --epytor-table-overflow-x: ${tableOverflowX}; --epytor-table-width: ${tableWidth}; }</style>
 </head>
 <body>
   <div class="editor-topbar"></div>
