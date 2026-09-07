@@ -27,15 +27,28 @@ interface TooltipHandle {
     show(): void;
 }
 
-/** 横向钳制纯函数（可单测）：tooltip 左缘 x 钳制进视口，右侧超界贴右缘 */
-export function clampTooltipX(x: number, width: number, viewportWidth: number): number {
-    if (x + width > viewportWidth - TOOLTIP_VIEWPORT_MARGIN_PX) {
-        return viewportWidth - width - TOOLTIP_VIEWPORT_MARGIN_PX;
+export interface TooltipHorizontalPos {
+    left?: string;
+    right?: string;
+}
+
+/**
+ * 横向定位纯函数（可单测）：
+ * - 右半屏按钮 → 右缘对齐按钮右缘（确定性不超视口右缘，回归：findBar 末位按钮 tooltip 超屏被裁剪）
+ * - 左半屏按钮 → 左缘对齐按钮左缘（向右伸展，受 CSS max-width 限制）
+ */
+export function computeTooltipHorizontal(
+    el: { left: number; right: number },
+    viewportWidth: number,
+): TooltipHorizontalPos {
+    if (el.right > viewportWidth / 2) {
+        return {
+            right: `${Math.max(TOOLTIP_VIEWPORT_MARGIN_PX, viewportWidth - el.right)}px`,
+        };
     }
-    if (x < TOOLTIP_VIEWPORT_MARGIN_PX) {
-        return TOOLTIP_VIEWPORT_MARGIN_PX;
-    }
-    return x;
+    return {
+        left: `${Math.max(TOOLTIP_VIEWPORT_MARGIN_PX, el.left)}px`,
+    };
 }
 
 function position(
@@ -49,13 +62,19 @@ function position(
     const elRect = el.getBoundingClientRect();
     const tipRect = tip.getBoundingClientRect();
 
-    let x = clampTooltipX(
-        elRect.left + elRect.width / 2 - tipRect.width / 2,
-        tipRect.width,
+    const horizontal = computeTooltipHorizontal(
+        { left: elRect.left, right: elRect.right },
         window.innerWidth,
     );
-    let y: number;
+    if (horizontal.left !== undefined) {
+        tip.style.left = horizontal.left;
+        tip.style.right = "auto";
+    } else {
+        tip.style.left = "auto";
+        tip.style.right = horizontal.right!;
+    }
 
+    let y: number;
     if (placement === "above") {
         y = elRect.top - tipRect.height - TOOLTIP_SPACING_PX;
         if (y < TOOLTIP_VIEWPORT_MARGIN_PX) {
@@ -67,12 +86,9 @@ function position(
             y = elRect.top - tipRect.height - TOOLTIP_SPACING_PX;
         }
     }
-
-    tip.style.left = `${x}px`;
-    tip.style.right = "auto";
     tip.style.top = `${y}px`;
 
-    // 读回校验兜底：任何测量/CSS 层误差导致仍超出视口时，改由 right 锚定（浏览器保证贴边）
+    // 读回校验兜底：任何测量/CSS 层误差导致仍超出视口时，改由 right/left 锚定贴边
     const finalRect = tip.getBoundingClientRect();
     if (finalRect.width > 0 && finalRect.right > window.innerWidth - TOOLTIP_VIEWPORT_MARGIN_PX) {
         tip.style.left = "auto";
