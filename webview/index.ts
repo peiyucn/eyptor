@@ -278,6 +278,8 @@ const findBar = initFindBar(() => document.getElementById("editor"));
 let _frontmatterPanelHandle: FrontmatterPanelHandle | null = null;
 /** 文档变更后 UI 刷新（TOC/字数/脏标记）的防抖 timer */
 let _docChangedTimer: ReturnType<typeof setTimeout> | null = null;
+/** TOC/字数刷新 timer（更长防抖 + rAF，挪出输入热路径——万行文档全量重建 TOC 是上屏后卡顿来源） */
+let _tocRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 function renderFrontmatterPanel(frontmatter: string | undefined): void {
     const editorEl = document.getElementById('editor');
@@ -361,10 +363,16 @@ async function initEditor(
             // 文档变更轻量通知（序列化已在保存时拉取，这里只做 UI 刷新 + 脏标记）
             if (_docChangedTimer) clearTimeout(_docChangedTimer);
             _docChangedTimer = setTimeout(() => {
-                toc.refresh(); // 内容变化时刷新目录（面板关闭时是 no-op）
-                updateWordCount(); // 更新字数统计
                 notifyMarkDirty(); // 通知 Extension 内容已变（自动保存防抖到点后拉取）
             }, 300);
+            // TOC/字数：更长防抖 + rAF，输入节奏中几乎不触发
+            if (_tocRefreshTimer) clearTimeout(_tocRefreshTimer);
+            _tocRefreshTimer = setTimeout(() => {
+                requestAnimationFrame(() => {
+                    toc.refresh(); // 内容变化时刷新目录（面板关闭时是 no-op）
+                    updateWordCount(); // 更新字数统计
+                });
+            }, 800);
         },
         handleRenameImage,
         () => toc.toggle(),
