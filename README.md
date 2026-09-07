@@ -39,9 +39,9 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 
 | Setting | Default | Description |
 |---|---|---|
-| `epytor.autoSave` | `true` | Auto save on edit |
-| `epytor.autoSaveDelay` | `1000` | Auto save delay (ms) |
 | `epytor.defaultMode` | `"wysiwyg"` | Default open mode |
+
+> Auto save uses the built-in VS Code setting `files.autoSave` (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`). EPYTOR no longer ships its own auto-save setting.
 | `epytor.editorMaxWidth` | `900` | Editor max width (px) |
 | `epytor.fontFamily` | `""` | Editor font family |
 | `epytor.codeBlockMaxHeight` | `600` | Code block max height (px) |

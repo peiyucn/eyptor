@@ -15,7 +15,6 @@ import {
     wrapInBlockTypeCommand,
 } from "@milkdown/kit/preset/commonmark";
 import { toggleStrikethroughCommand, insertTableCommand } from "@milkdown/kit/preset/gfm";
-import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { undo, redo } from "@milkdown/kit/prose/history";
 import { keymap } from "@milkdown/kit/prose/keymap";
@@ -23,7 +22,7 @@ import { Plugin, NodeSelection, TextSelection, type EditorState } from "@milkdow
 import { liftListItem } from "@milkdown/kit/prose/schema-list";
 import { lift, wrapIn } from "prosemirror-commands";
 import { CellSelection, TableMap } from "@milkdown/kit/prose/tables";
-import { $prose } from "@milkdown/kit/utils";
+import { $prose, getMarkdown } from "@milkdown/kit/utils";
 import { CrepeBuilder } from "@milkdown/crepe";
 import { linkTooltip } from "@milkdown/crepe/feature/link-tooltip";
 import { TbUndo, TbRedo, TbImage, TbEraser, TbGear, TbToc } from "./ui/icons";
@@ -426,10 +425,23 @@ export function getEditorView(): EditorView | null {
     return _editor.action((ctx) => ctx.get(editorViewCtx));
 }
 
+/**
+ * 保存时拉取序列化（拉取式架构的序列化唯一入口）：
+ * Extension 在自动保存防抖到点 / Cmd+S 时 requestContent，webview 在此序列化一次
+ * （含 clean 模式处理 + minimalDiff 保留未改行原文）并回传。输入期间零序列化。
+ */
+export function getMarkdownForSave(): string {
+    if (!_editor) return _savedMarkdown;
+    const serialized = _editor.action(getMarkdown());
+    const toSave = prepareMarkdownForSave(_savedMarkdown, serialized);
+    _savedMarkdown = toSave;
+    return toSave;
+}
+
 export async function createEditor(
     container: HTMLElement,
     initialMarkdown: string,
-    onUpdate: (markdown: string) => void,
+    onDocumentChanged: () => void,
     onRenameImage?: (webviewUri: string, newBasename: string) => Promise<void>,
     onTocToggle?: () => void,
     initialSerializationMode: SerializationMode = "clean",
@@ -439,37 +451,25 @@ export async function createEditor(
     _hasUserInteracted = false;
     setupInteractionTracking();
 
-    let debounceTimer: ReturnType<typeof setTimeout>;
-    let isComposing = false;
-    let pendingMd: string | null = null;
-
-    const fireUpdate = (md: string) => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => onUpdate(md), 300);
-    };
-    const commitMarkdownUpdate = (markdown: string) => {
-        const toSave = prepareMarkdownForSave(_savedMarkdown, markdown);
-        if (toSave === _savedMarkdown) return;
-        _savedMarkdown = toSave;
-        fireUpdate(toSave);
-    };
-
-    const debouncedUpdate = (markdown: string) => {
-        if (isComposing) { pendingMd = markdown; return; }
-        commitMarkdownUpdate(markdown);
-    };
-
-    container.addEventListener('compositionstart', () => { isComposing = true; });
-    container.addEventListener('compositionend', () => {
-        isComposing = false;
-        if (pendingMd !== null) {
-            const md = pendingMd;
-            pendingMd = null;
-            commitMarkdownUpdate(md);
-        }
-    });
-
     let isSettled = false;
+
+    // 文档变更轻量通知（不含序列化）。
+    // 架构调整：序列化从「每键推送」（listener markdownUpdated 每键全量序列化，
+    // 1 万行基准 52-99ms 尖峰）改为「保存时拉取」——Extension 在自动保存防抖到点
+    // 或 Cmd+S 时发 requestContent，webview 才序列化一次回传。输入期间零序列化。
+    const updateNotifyPlugin = $prose(() =>
+        new Plugin({
+            view() {
+                return {
+                    update() {
+                        if (!isSettled) return;
+                        if (!_hasUserInteracted) return;
+                        onDocumentChanged();
+                    },
+                };
+            },
+        }),
+    );
 
     // ── CrepeBuilder ──────────────────────────────────────────────────────────
     const crepe = new CrepeBuilder({
@@ -899,7 +899,7 @@ export async function createEditor(
             ]);
 
         })
-        .use(listener)              // 追加 listener 用于 markdownUpdated
+        .use(updateNotifyPlugin)    // 文档变更轻量通知（保存时拉取序列化，输入期间零序列化）
         .use(selectionPlugin)       // 保留：选区变更回调
         .use(formatKeymapPlugin)    // 保留：自定义格式化快捷键
         .use(headingFoldPlugin)     // 标题折叠（Decoration，不修改文档）
@@ -907,15 +907,6 @@ export async function createEditor(
         .use(tableSoftBreakPlugin)  // 表格单元格内 Shift+Enter 软换行（序列化 &#10; 闭环）
         .use(cellClickFixPlugin)    // 表格单击→光标定位，拖拽→多选
         .use(listSpreadNormalizePlugin); // 保留：列表 spread 规范化
-
-    // 注册 markdownUpdated 回调（自动保存链路）
-    crepe.on((api) => {
-        api.markdownUpdated((_ctx, markdown) => {
-            if (!isSettled) return;
-            if (!_hasUserInteracted) return;
-            debouncedUpdate(markdown);
-        });
-    });
 
     _editor = await crepe.create();
     isSettled = true;

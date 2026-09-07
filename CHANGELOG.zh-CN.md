@@ -21,14 +21,17 @@
 ### 修复
 
 - **大文档编辑卡顿**（macOS 中文输入法场景）：有界 LCS 差异 + IME 感知调度（#16，感谢 @dongjha）
+- **大文档输入卡顿（万行级）**：标题折叠装饰 O(n²) 单遍化 + 保存改拉取式（输入期间零序列化）
 
 ### 变更
 
 - **Milkdown** 升级 7.22.0 → 7.22.1（行内代码 mark 修复 + dompurify 安全升级）
+- **保存架构改为拉取式**：编辑仅发脏标记，保存时（Cmd+S / 自动保存）由扩展向 WebView 拉取内容一次序列化写盘
 
 ### 移除
 
 - **死代码**：`selectionToolbar`（约 900 行）及官方工具栏接管后的相关遗留
+- **`epytor.autoSave` / `epytor.autoSaveDelay`**：自动保存改用 VS Code 内置 `files.autoSave`（off / afterDelay / onFocusChange / onWindowChange）
 
 ## [1.1.6] - 2026-08-06
 

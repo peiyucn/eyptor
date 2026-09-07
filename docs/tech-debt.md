@@ -41,7 +41,7 @@
 ### 配置项检修
 
 * [x] 全部 13 个配置项已验证在代码中实际使用，无死配置。
-  * `autoSave` / `autoSaveDelay` → `MarkdownEditorProvider._scheduleAutoSaveOrMarkDirty`
+  * ~~`autoSave` / `autoSaveDelay`~~ — 2026-09-07 移除：自动保存改用 VS Code 原生 `files.autoSave`（拉取式保存架构）
   * `codeBlockMaxHeight` / `editorMaxWidth` / `fontFamily` / `imageSelectionColor` → 注入 CSS 变量
   * `defaultMode` → `extension.ts` 编辑器关联同步
   * `debugMode` → 全局调试日志开关 + WebView 同步

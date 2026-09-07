@@ -1,8 +1,6 @@
 {
   "command.switchToTextEditor.title": "EPYTOR OFF",
   "command.switchToPreview.title": "EPYTOR ON",
-  "config.autoSave.description": "Automatically save to disk after editing Markdown (no need to press Cmd+S / Ctrl+S).",
-  "config.autoSaveDelay.description": "Debounce delay in milliseconds for auto-save. The file is written after editing stops for this duration.",
   "config.codeBlockMaxHeight.description": "Maximum display height of code blocks in pixels. A scrollbar appears when content exceeds this height.",
   "config.defaultMode.description": "Default editing mode when opening a .md file.",
   "config.defaultMode.wysiwyg": "Open .md files in WYSIWYG mode (EPYTOR).",

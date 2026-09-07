@@ -21,14 +21,17 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 ### Fixed
 
 - **Large-document editing lag on macOS IME input**: bounded-LCS diff + IME-aware scheduling (#16, thanks @dongjha)
+- **Large-document input lag (10k-line scale)**: heading-fold decorations O(n²) made single-pass + pull-based saving (zero serialization while typing)
 
 ### Changed
 
 - **Milkdown** upgraded 7.22.0 → 7.22.1 (inline code mark fix + dompurify security update)
+- **Pull-based saving**: edits only send a light dirty mark; the extension pulls content from the WebView and serializes once when saving (Cmd+S / auto save)
 
 ### Removed
 
 - **Dead code**: `selectionToolbar` (~900 lines) and related leftovers after the official toolbar feature took over
+- **`epytor.autoSave` / `epytor.autoSaveDelay`**: auto save now uses the built-in VS Code `files.autoSave` (off / afterDelay / onFocusChange / onWindowChange)
 
 ## [1.1.6] - 2026-08-06
 

@@ -39,9 +39,9 @@
 
 | 设置项 | 默认值 | 说明 |
 |---|---|---|
-| `epytor.autoSave` | `true` | 自动保存 |
-| `epytor.autoSaveDelay` | `1000` | 自动保存延迟（ms） |
 | `epytor.defaultMode` | `"wysiwyg"` | 默认打开模式 |
+
+> 自动保存使用 VS Code 内置设置 `files.autoSave`（`off` / `afterDelay` / `onFocusChange` / `onWindowChange`），EPYTOR 不再提供独立的自动保存设置。
 | `epytor.editorMaxWidth` | `900` | 编辑器最大宽度（px） |
 | `epytor.fontFamily` | `""` | 编辑器字体 |
 | `epytor.codeBlockMaxHeight` | `600` | 代码块最大高度（px） |

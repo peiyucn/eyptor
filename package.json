@@ -111,18 +111,6 @@
     "configuration": {
       "title": "epytor",
       "properties": {
-        "epytor.autoSave": {
-          "type": "boolean",
-          "default": true,
-          "description": "%config.autoSave.description%"
-        },
-        "epytor.autoSaveDelay": {
-          "type": "number",
-          "default": 1000,
-          "minimum": 100,
-          "maximum": 10000,
-          "description": "%config.autoSaveDelay.description%"
-        },
         "epytor.codeBlockMaxHeight": {
           "type": "number",
           "default": 600,

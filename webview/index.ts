@@ -16,6 +16,7 @@ import { applyTableWrapVars } from "./utils/tableWrap";
 import {
     createEditor,
     getEditorView,
+    getMarkdownForSave,
     registerSelectionChangeHandler,
     setLogTableSel,
     setSerializationMode,
@@ -25,7 +26,8 @@ import type { EditorView } from "@milkdown/kit/prose/view";
 import { TextSelection } from "@milkdown/kit/prose/state";
 import {
     notifyReady,
-    notifyUpdate,
+    notifyMarkDirty,
+    notifyContentResponse,
     notifyFrontmatterUpdate,
     notifyDebug,
     onMessage,
@@ -274,6 +276,8 @@ const findBar = initFindBar(() => document.getElementById("editor"));
 
 /** 在 #editor 前渲染 frontmatter 可编辑面板；无 frontmatter 时移除面板 */
 let _frontmatterPanelHandle: FrontmatterPanelHandle | null = null;
+/** 文档变更后 UI 刷新（TOC/字数/脏标记）的防抖 timer */
+let _docChangedTimer: ReturnType<typeof setTimeout> | null = null;
 
 function renderFrontmatterPanel(frontmatter: string | undefined): void {
     const editorEl = document.getElementById('editor');
@@ -353,10 +357,14 @@ async function initEditor(
     currentEditor = await createEditor(
         container,
         markdown,
-        (updated) => {
-            notifyUpdate(updated);
-            toc.refresh(); // 内容变化时刷新目录（面板关闭时是 no-op）
-            updateWordCount(); // 更新字数统计
+        () => {
+            // 文档变更轻量通知（序列化已在保存时拉取，这里只做 UI 刷新 + 脏标记）
+            if (_docChangedTimer) clearTimeout(_docChangedTimer);
+            _docChangedTimer = setTimeout(() => {
+                toc.refresh(); // 内容变化时刷新目录（面板关闭时是 no-op）
+                updateWordCount(); // 更新字数统计
+                notifyMarkDirty(); // 通知 Extension 内容已变（自动保存防抖到点后拉取）
+            }, 300);
         },
         handleRenameImage,
         () => toc.toggle(),
@@ -933,6 +941,9 @@ onMessage(async (msg) => {
         setSerializationMode(msg.mode);
     } else if (msg.type === "tableWrapModeChanged") {
         applyTableWrapVars(resolveTableWrapVars(msg.mode));
+    } else if (msg.type === "requestContent") {
+        // 保存时拉取（拉取式架构）：Extension 在 Cmd+S / 原生 autoSave 时请求一次序列化
+        notifyContentResponse(getMarkdownForSave());
     } else if (msg.type === "imageUploaded") {
         const cb = _pendingUploads.get(msg.id);
         if (cb) {

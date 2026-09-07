@@ -149,10 +149,7 @@ docs/tech-debt.md                        — 技术债务清单（面向开发�
 
 #### 配置参考
 
-| 设置项 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `epytor.autoSave` | boolean | `true` | 编辑后自动写盘 |
-| `epytor.autoSaveDelay` | number | `1000` | 防抖延迟（ms） |
+> 自动保存使用 VS Code 内置 `files.autoSave`（off / afterDelay / onFocusChange / onWindowChange），epytor 不再提供独立自动保存配置。保存采用拉取式架构：webview 变更仅发脏标记，保存时（Cmd+S / 原生 autoSave）Extension 发 `requestContent`，webview 序列化一次回传（输入期间零序列化）。
 
 ### 测试
 

@@ -22,6 +22,14 @@ export function notifyUpdate(markdown: string): void {
     vscode.postMessage({ type: "update", content: markdown });
 }
 
+export function notifyMarkDirty(): void {
+    vscode.postMessage({ type: "markDirty" });
+}
+
+export function notifyContentResponse(content: string): void {
+    vscode.postMessage({ type: "contentResponse", content });
+}
+
 export function notifyFrontmatterUpdate(
     frontmatter: string,
     debug?: { activeClass: string; activeValue: string },

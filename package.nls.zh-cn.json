@@ -1,8 +1,6 @@
 {
   "command.switchToTextEditor.title": "EPYTOR OFF",
   "command.switchToPreview.title": "EPYTOR ON",
-  "config.autoSave.description": "编辑 Markdown 内容后自动保存到磁盘（无需 Cmd+S / Ctrl+S）。",
-  "config.autoSaveDelay.description": "自动保存的防抖延迟（毫秒），停止编辑后等待此时间再写盘。",
   "config.codeBlockMaxHeight.description": "代码块最大显示高度（像素），超出后出现滚动条。",
   "config.defaultMode.description": "打开 .md 文件时的默认编辑模式。",
   "config.defaultMode.wysiwyg": "以 WYSIWYG 模式打开（EPYTOR）。",

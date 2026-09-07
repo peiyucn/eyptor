@@ -25,6 +25,8 @@ export type PathSuggestionItem = {
 export type ToExtensionMessage =
     | { type: "ready" }
     | { type: "update"; content: string }
+    | { type: "markDirty" }
+    | { type: "contentResponse"; content: string }
     | { type: "frontmatterUpdate"; frontmatter: string; debug?: { activeClass: string; activeValue: string } }
     | { type: "openUrl"; url: string }
     | { type: "openFile"; path: string }
@@ -45,6 +47,7 @@ export type ToExtensionMessage =
 export type ToWebviewMessage =
     | { type: "init"; content: string; lineMap?: number[]; scrollToLine?: number; frontmatter?: string; imageUriMap?: Record<string, string> }
     | { type: "revert"; content: string; lineMap?: number[]; frontmatter?: string; imageUriMap?: Record<string, string> }
+    | { type: "requestContent" }
     | { type: "scrollToLine"; line: number }
     | { type: "lineMapUpdate"; lineMap: number[] }
     | { type: "setDebugMode"; enabled: boolean }

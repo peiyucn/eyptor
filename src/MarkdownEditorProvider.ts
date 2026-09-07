@@ -19,6 +19,8 @@ const REVEAL_LINE_DELAYED_CHECK_MS = 1000;
 const AUTO_SWITCH_SUPPRESS_DURATION_MS = 2000;
 const SAVE_COOLDOWN_MS = 1500;
 const FS_WATCH_DEBOUNCE_MS = 200;
+/** 保存时拉取内容（requestContent → contentResponse）的超时兜底：超时用内存内容 */
+const CONTENT_REQUEST_TIMEOUT_MS = 3000;
 
 export class MarkdownEditorProvider
     implements vscode.CustomEditorProvider<MarkdownDocument> {
@@ -30,8 +32,8 @@ export class MarkdownEditorProvider
     public readonly onDidChangeCustomDocument =
         this._onDidChangeCustomDocument.event;
 
-    // 自动保存防抖定时器（key: document uri string）
-    private readonly _autoSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    // 保存时拉取的等待者（key: document uri string → resolve(content)）
+    private readonly _pendingContentResolvers = new Map<string, (content: string) => void>();
 
     // 记录每个 document 对应的 webviewPanel（用于 revert 时推送新内容）
     private readonly _webviewPanels = new Map<string, vscode.WebviewPanel>();
@@ -216,7 +218,7 @@ export class MarkdownEditorProvider
         const uriKey = document.uri.toString();
         this._webviewPanels.set(uriKey, webviewPanel);
 
-        this._registerPanelDisposeCleanup(uriKey, webviewPanel);
+        this._registerPanelDisposeCleanup(document, uriKey, webviewPanel);
 
         webviewPanel.webview.options = {
             enableScripts: true,
@@ -244,18 +246,22 @@ export class MarkdownEditorProvider
     }
 
     /** 面板销毁时清理 per-uri 状态、定时器与状态栏 */
-    private _registerPanelDisposeCleanup(uriKey: string, webviewPanel: vscode.WebviewPanel): void {
+    private _registerPanelDisposeCleanup(
+        document: MarkdownDocument,
+        uriKey: string,
+        webviewPanel: vscode.WebviewPanel,
+    ): void {
         webviewPanel.onDidDispose(() => {
             this._webviewPanels.delete(uriKey);
             this._pinnedDocuments.delete(uriKey);
             this._imageUriMaps.delete(uriKey);
             this._initializedPanels.delete(uriKey);
             this._wordCounts.delete(uriKey);
-            // 清理残余定时器
-            const timer = this._autoSaveTimers.get(uriKey);
-            if (timer !== undefined) {
-                clearTimeout(timer);
-                this._autoSaveTimers.delete(uriKey);
+            // 兜底 resolve 未完成的拉取（面板已销毁，用内存内容）
+            const resolver = this._pendingContentResolvers.get(uriKey);
+            if (resolver) {
+                this._pendingContentResolvers.delete(uriKey);
+                resolver(document.getText());
             }
             // 面板关闭（含预览被替换、切文本编辑器）时隐藏状态栏
             // 若有其他活跃 MD 面板，其 wordCount / onDidChangeViewState 会重新显示
@@ -393,7 +399,15 @@ export class MarkdownEditorProvider
                     if (Date.now() - lastSave < SAVE_COOLDOWN_MS) { return; }
                     const cts = new vscode.CancellationTokenSource();
                     try {
+                        // 拉取式：revert 前先取 webview 最新内容，与磁盘比较；
+                        // 若用户有未落盘编辑（内容不同），保留用户内容不 revert
+                        const latest = await this._requestContent(document, uriKey);
                         await document.revert(cts.token);
+                        const diskContent = document.getText();
+                        if (latest !== diskContent) {
+                            document.update(latest);
+                            return;
+                        }
                         const panel = this._webviewPanels.get(uriKey);
                         if (panel) {
                             const revertContent = document.getText();
@@ -440,26 +454,42 @@ export class MarkdownEditorProvider
                 break;
             }
             case "update":
+                // 兼容旧路径：webview 已改为轻量 markDirty 通知，此 case 不再有常规调用方
                 if (message.content !== undefined) {
                     const newContent = this._prepareContentForSave(message.content, uriKey);
-                    // 若内容与当前内存版本完全相同，跳过 auto-save：
-                    // WebView 侧 isSettled 标志已阻断初始化触发；此处作为最后防线防止死循环
                     if (newContent === document.getText()) { break; }
                     document.update(newContent);
-                    // 首次编辑时 pin tab（移除斜体预览状态）
                     if (!this._pinnedDocuments.has(uriKey)) {
                         this._pinnedDocuments.add(uriKey);
                         vscode.commands.executeCommand('workbench.action.keepEditor');
                     }
-                    this._scheduleAutoSaveOrMarkDirty(document);
+                    this._markDirty(document);
                 }
                 break;
+            case "markDirty": {
+                // 轻量脏标记：内容已变（序列化改为保存时拉取）。保存入口统一为
+                // saveCustomDocument（Cmd+S / VS Code 原生 files.autoSave / 关窗）
+                this._markDirty(document);
+                break;
+            }
+            case "contentResponse": {
+                // 保存时拉取的响应：resolve 对应等待者
+                const resolver = this._pendingContentResolvers.get(uriKey);
+                if (resolver) {
+                    this._pendingContentResolvers.delete(uriKey);
+                    resolver(this._prepareContentForSave(message.content, uriKey));
+                }
+                break;
+            }
             case "frontmatterUpdate": {
-                // Frontmatter 面板编辑：更新缓存并重组保存（正文取自内存最新版）
+                // Frontmatter 面板编辑：更新缓存并重组保存
                 const frontmatter = message.frontmatter ?? "";
                 this._frontmatterMap.set(uriKey, frontmatter);
+                // 拉取最新正文（拉取式：内存正文可能落后于 webview 未落盘的编辑，
+                // 直接重组会把未落盘编辑覆盖掉）
+                const body = await this._requestContent(document, uriKey);
                 const newContent = buildContentWithFrontmatter(
-                    document.getText(),
+                    body,
                     frontmatter,
                     this._imageUriMaps.get(uriKey) ?? new Map(),
                 );
@@ -474,23 +504,18 @@ export class MarkdownEditorProvider
                 }
                 if (newContent === null) { break; }
                 document.update(newContent);
-                // 立即写盘而非走 autoSave 防抖：面板编辑（如新增行）后用户往往立刻切到
-                // 文本编辑器核对源码，防抖窗口内磁盘仍是旧内容 → 误判「新增行无效」
-                const config = vscode.workspace.getConfiguration("epytor");
-                if (config.get<boolean>("autoSave", true)) {
-                    const timer = this._autoSaveTimers.get(uriKey);
-                    if (timer !== undefined) {
-                        clearTimeout(timer);
-                        this._autoSaveTimers.delete(uriKey);
+                // 立即写盘：面板编辑后用户往往立刻切到文本编辑器核对源码。
+                // 不经过 saveCustomDocument（其内部会再次拉取 webview 正文并覆盖 frontmatter）
+                this._lastSaveTimes.set(uriKey, Date.now());
+                const cts = new vscode.CancellationTokenSource();
+                try {
+                    await document.save(cts.token);
+                    const panel = this._webviewPanels.get(uriKey);
+                    if (panel) {
+                        panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeLineMap(document.getText()) });
                     }
-                    const cts = new vscode.CancellationTokenSource();
-                    try {
-                        await this.saveCustomDocument(document, cts.token);
-                    } finally {
-                        cts.dispose();
-                    }
-                } else {
-                    this._markDirty(document);
+                } finally {
+                    cts.dispose();
                 }
                 break;
             }
@@ -517,6 +542,17 @@ export class MarkdownEditorProvider
                 break;
             }
             case "switchToTextEditor": {
+                // 切换前落盘：文本编辑器直接读磁盘，必须先把 webview 最新内容写盘
+                // （拉取式架构下内存可能落后，不 flush 会导致切过去看到旧内容）
+                const latest = await this._requestContent(document, uriKey);
+                document.update(latest);
+                this._lastSaveTimes.set(uriKey, Date.now());
+                const flushCts = new vscode.CancellationTokenSource();
+                try {
+                    await document.save(flushCts.token);
+                } finally {
+                    flushCts.dispose();
+                }
                 // 抑制接下来 onDidChangeActiveTextEditor 的行号回传（1.5s 内）
                 this.suppressNavFromTextEditor();
                 // 抑制 onDidChangeTabs 的自动 WYSIWYG 切换（防止切回去）
@@ -609,7 +645,7 @@ export class MarkdownEditorProvider
         }
     }
 
-    /** 手动保存模式：标记 dirty，等待 Cmd+S（autoSave 关闭时用） */
+    /** 标记 dirty（webview 轻量脏标记到达时调用）；保存由 Cmd+S / VS Code 原生 files.autoSave 触发 */
     private _markDirty(document: MarkdownDocument): void {
         this._onDidChangeCustomDocument.fire({
             document,
@@ -619,53 +655,34 @@ export class MarkdownEditorProvider
         });
     }
 
-    private _scheduleAutoSaveOrMarkDirty(document: MarkdownDocument): void {
-        const config = vscode.workspace.getConfiguration("epytor");
-        const autoSave = config.get<boolean>("autoSave", true);
-        const delay = config.get<number>("autoSaveDelay", 1000);
-        const uriKey = document.uri.toString();
-
-        if (autoSave) {
-            // 防抖自动保存：停止编辑 delay ms 后写盘，不显示 ● 标记
-            const existing = this._autoSaveTimers.get(uriKey);
-            if (existing !== undefined) {
-                clearTimeout(existing);
-            }
-            this._autoSaveTimers.set(
-                uriKey,
-                setTimeout(async () => {
-                    this._autoSaveTimers.delete(uriKey);
-                    const cts = new vscode.CancellationTokenSource();
-                    try {
-                        await document.save(cts.token);
-                        // 写盘完成后再记录时间，确保 FileWatcher 触发时时间戳是准确的
-                        // （如果在 save 之前记录，FileWatcher 延迟 > 1500ms 时保护会失效）
-                        this._lastSaveTimes.set(uriKey, Date.now());
-                        const panel = this._webviewPanels.get(uriKey);
-                        if (panel) {
-                            panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeLineMap(document.getText()) });
-                        }
-                    } finally {
-                        cts.dispose();
-                    }
-                }, delay),
-            );
-        } else {
-            this._markDirty(document);
+    /**
+     * 保存时拉取（拉取式架构核心）：请求 webview 序列化当前内容并等待回传。
+     * webview 未就绪 / 超时（CONTENT_REQUEST_TIMEOUT_MS）时回退内存内容。
+     */
+    private _requestContent(document: MarkdownDocument, uriKey: string): Promise<string> {
+        const panel = this._webviewPanels.get(uriKey);
+        if (!panel) {
+            return Promise.resolve(document.getText());
         }
+        return new Promise((resolve) => {
+            this._pendingContentResolvers.set(uriKey, resolve);
+            panel.webview.postMessage({ type: "requestContent" });
+            setTimeout(() => {
+                if (this._pendingContentResolvers.delete(uriKey)) {
+                    resolve(document.getText());
+                }
+            }, CONTENT_REQUEST_TIMEOUT_MS);
+        });
     }
 
     async saveCustomDocument(
         document: MarkdownDocument,
         cancellation: vscode.CancellationToken,
     ): Promise<void> {
-        // 清理自动保存定时器（Cmd+S 直接保存，不需要再等定时器）
         const uriKey = document.uri.toString();
-        const timer = this._autoSaveTimers.get(uriKey);
-        if (timer !== undefined) {
-            clearTimeout(timer);
-            this._autoSaveTimers.delete(uriKey);
-        }
+        // 拉取 webview 最新内容（无未落盘变更时与内存一致，更新为幂等）
+        const content = await this._requestContent(document, uriKey);
+        document.update(content);
         this._lastSaveTimes.set(uriKey, Date.now());
         await document.save(cancellation);
         const panel = this._webviewPanels.get(uriKey);

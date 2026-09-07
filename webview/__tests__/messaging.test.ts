@@ -9,6 +9,8 @@ import { mockVscodeApi } from "./setup";
 const {
     notifyReady,
     notifyUpdate,
+    notifyMarkDirty,
+    notifyContentResponse,
     notifyOpenUrl,
     notifyOpenFile,
     notifySwitchToTextEditor,
@@ -34,6 +36,19 @@ describe("messaging — postMessage 格式验证", () => {
         notifyUpdate("# Hello");
         expect(mockVscodeApi.postMessage).toHaveBeenCalledWith({
             type: "update",
+            content: "# Hello",
+        });
+    });
+
+    it("notifyMarkDirty 发送 { type: 'markDirty' }（拉取式保存的轻量脏标记）", () => {
+        notifyMarkDirty();
+        expect(mockVscodeApi.postMessage).toHaveBeenCalledWith({ type: "markDirty" });
+    });
+
+    it("notifyContentResponse 携带 content 字段（保存时拉取的序列化回传）", () => {
+        notifyContentResponse("# Hello");
+        expect(mockVscodeApi.postMessage).toHaveBeenCalledWith({
+            type: "contentResponse",
             content: "# Hello",
         });
     });
