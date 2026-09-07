@@ -71,4 +71,15 @@ describe("WebView 样式", () => {
         expect(getComputedStyle(hiddenSticky).display).toBe("none");
         expect(getComputedStyle(visibleSticky).display).toBe("flex");
     });
+
+    it("溢出「⋯」按钮 hidden 属性 应该 真正隐藏（回归：display:inline-flex 曾覆盖 UA 的 hidden 样式）", () => {
+        document.body.innerHTML = `
+            <button class="epytor-topbar-more-btn" hidden>⋯</button>
+            <button class="epytor-topbar-more-btn">⋯</button>
+        `;
+        const [hiddenBtn, visibleBtn] =
+            document.querySelectorAll<HTMLElement>(".epytor-topbar-more-btn");
+        expect(getComputedStyle(hiddenBtn).display).toBe("none");
+        expect(getComputedStyle(visibleBtn).display).toBe("inline-flex");
+    });
 });

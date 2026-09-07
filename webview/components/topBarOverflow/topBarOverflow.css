@@ -5,6 +5,12 @@
     display: none !important;
 }
 
+/* hidden 属性兜底：display:inline-flex 会覆盖 UA 的 [hidden]{display:none}，
+   否则宽窗口无需溢出时「⋯」仍显示且点击无反应（菜单为空提前返回） */
+.epytor-topbar-more-btn[hidden] {
+    display: none !important;
+}
+
 /* ⋯ 更多按钮（fixed 在 topBar 右侧，不在 topBar 内部，避免 Vue patch 干扰） */
 .epytor-topbar-more-btn {
     position: fixed;

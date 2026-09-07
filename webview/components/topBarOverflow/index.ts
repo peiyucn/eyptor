@@ -52,6 +52,18 @@ export function setTopBarButtonMeta(meta: TopBarButtonMeta[]): void {
     _meta = meta;
 }
 
+/**
+ * 顶栏按钮实际可用宽度 = topBar 宽度 − 左右内边距。
+ * 回归：此前直接使用 topBar 全宽作为预算，未扣除 padding-left 85px / padding-right 40px，
+ * 预算虚高 125px，收窄窗口时按钮溢出并与「⋯」按钮重叠。
+ */
+export function getTopBarUsableWidth(topBar: HTMLElement): number {
+    const style = window.getComputedStyle(topBar);
+    const padLeft = Number.parseFloat(style.paddingLeft) || 0;
+    const padRight = Number.parseFloat(style.paddingRight) || 0;
+    return Math.max(0, topBar.clientWidth - padLeft - padRight);
+}
+
 /** 按 meta 顺序定位指定 key 的顶栏按钮 DOM（heading selector 与普通 item 均计入序列） */
 export function findTopBarButtonEl(topBar: HTMLElement, key: string): HTMLElement | null {
     const children = Array.from(
@@ -148,6 +160,10 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
 
     const measure = (): void => {
         rafId = null;
+        // 测量期间挂起 observer：measure 自身会移除/重挂 HIDDEN_CLASS，
+        // 若继续观察会把自身 class 变化当成新变化 → schedule → measure 无限循环（每帧重排）
+        mutObs?.disconnect();
+        mutObs = null;
         const topBar = host.getTopBarEl();
         const inner = topBar?.querySelector<HTMLElement>(".top-bar-inner");
         if (!topBar || !inner) {
@@ -155,21 +171,10 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
             return;
         }
 
-        // Vue patch 可能覆盖隐藏 class：每次测量重挂 mutation observer（目标可能被重建）
-        mutObs?.disconnect();
-        mutObs = new MutationObserver(schedule);
-        mutObs.observe(topBar, {
-            subtree: true,
-            childList: true,
-            characterData: true,
-            attributes: true,
-            attributeFilter: ["class"],
-        });
-
-        const containerWidth = topBar.getBoundingClientRect().width;
         // 先全部显示再测量
         inner.querySelectorAll<HTMLElement>(`.${HIDDEN_CLASS}`).forEach((el) => el.classList.remove(HIDDEN_CLASS));
 
+        const containerWidth = getTopBarUsableWidth(topBar);
         const items: TopBarMeasuredItem[] = [];
         let metaIdx = 0;
         for (const child of Array.from(inner.children) as HTMLElement[]) {
@@ -206,6 +211,16 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
         const rect = topBar.getBoundingClientRect();
         moreBtn.style.top = `${Math.max(2, rect.top + (rect.height - 28) / 2)}px`;
         moreBtn.style.right = "6px";
+
+        // Vue patch 可能覆盖隐藏 class：测量完成后恢复监听（目标可能被重建）
+        mutObs = new MutationObserver(schedule);
+        mutObs.observe(topBar, {
+            subtree: true,
+            childList: true,
+            characterData: true,
+            attributes: true,
+            attributeFilter: ["class"],
+        });
     };
 
     const schedule = (): void => {
