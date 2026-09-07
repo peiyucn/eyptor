@@ -13,6 +13,7 @@ import "./style.css"; // 必须在 Crepe CSS 之后加载，用 VSCode 变量覆
 import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../shared/constants";
 import { resolveTableWrapVars } from "../shared/tableWrap";
 import { applyTableWrapVars } from "./utils/tableWrap";
+import { computeHeadingSignature } from "./utils/headingFold";
 import {
     createEditor,
     getEditorView,
@@ -280,6 +281,8 @@ let _frontmatterPanelHandle: FrontmatterPanelHandle | null = null;
 let _docChangedTimer: ReturnType<typeof setTimeout> | null = null;
 /** TOC/字数刷新 timer（更长防抖 + rAF，挪出输入热路径——万行文档全量重建 TOC 是上屏后卡顿来源） */
 let _tocRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+/** 上次 TOC 刷新的标题签名（标题结构未变则跳过重建） */
+let _lastTocSignature = "";
 
 function renderFrontmatterPanel(frontmatter: string | undefined): void {
     const editorEl = document.getElementById('editor');
@@ -365,10 +368,17 @@ async function initEditor(
             _docChangedTimer = setTimeout(() => {
                 notifyMarkDirty(); // 通知 Extension 内容已变（自动保存防抖到点后拉取）
             }, 300);
-            // TOC/字数：更长防抖 + rAF，输入节奏中几乎不触发
+            // TOC/字数：标题签名不变则跳过 TOC 重建（根源级优化：输入正文零重建，
+            // 替代纯防抖延时——停顿后仍会重建的开销被真正消除）；字数统计轻量照常
             if (_tocRefreshTimer) clearTimeout(_tocRefreshTimer);
             _tocRefreshTimer = setTimeout(() => {
                 requestAnimationFrame(() => {
+                    const view = getEditorView();
+                    if (view) {
+                        const sig = computeHeadingSignature(view.state.doc);
+                        if (sig === _lastTocSignature) return;
+                        _lastTocSignature = sig;
+                    }
                     toc.refresh(); // 内容变化时刷新目录（面板关闭时是 no-op）
                     updateWordCount(); // 更新字数统计
                 });

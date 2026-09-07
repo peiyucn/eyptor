@@ -12,7 +12,7 @@ import type { Node as ProseNode } from "@milkdown/kit/prose/model";
 import { IconChevronDown, IconChevronRight } from "./ui/icons";
 import { applyTooltip, hideTooltip } from "./ui/tooltip";
 import { t } from "./i18n";
-import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, computeAllHeadingFoldRanges } from "./utils/headingFold";
+import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, computeAllHeadingFoldRanges, computeHeadingSignature } from "./utils/headingFold";
 
 export type HeadingFoldMeta = { type: "toggle"; pos: number };
 type HeadingFoldRange = { from: number; to: number };
@@ -127,8 +127,12 @@ export function buildFoldDecorations(doc: ProseNode, folded: ReadonlySet<number>
     return decorations.length > 0 ? DecorationSet.create(doc, decorations) : DecorationSet.empty;
 }
 
-export const headingFoldPlugin = $prose(() =>
-    new Plugin<Set<number>>({
+export const headingFoldPlugin = $prose(() => {
+    // 装饰缓存（每编辑器实例独立）：标题结构 + 折叠状态签名不变时复用
+    let cachedSignature = "";
+    let cachedDecorations: DecorationSet | null = null;
+
+    return new Plugin<Set<number>>({
         key: headingFoldPluginKey,
         state: {
             init: () => new Set<number>(),
@@ -161,7 +165,15 @@ export const headingFoldPlugin = $prose(() =>
         props: {
             decorations(state) {
                 const folded = headingFoldPluginKey.getState(state) ?? new Set<number>();
-                return buildFoldDecorations(state.doc, folded);
+                // 缓存：标题结构 + 折叠状态不变时直接复用（输入正文零重建——
+                // 回归：万行文档每键全量重建装饰是上屏卡顿根源，防抖延时只是推迟开销）
+                const signature = computeHeadingSignature(state.doc, folded);
+                if (cachedDecorations !== null && signature === cachedSignature) {
+                    return cachedDecorations;
+                }
+                cachedSignature = signature;
+                cachedDecorations = buildFoldDecorations(state.doc, folded);
+                return cachedDecorations;
             },
             handleKeyDown(view, event) {
                 // 折叠标题末尾按 Enter：自动展开后放行
@@ -238,5 +250,5 @@ export const headingFoldPlugin = $prose(() =>
                 },
             };
         },
-    }),
-);
+    });
+});

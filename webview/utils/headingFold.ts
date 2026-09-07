@@ -44,6 +44,27 @@ export function findHeadingFoldRange(
 }
 
 /**
+ * 标题结构签名（pos:level:size:text;... + 可选折叠状态）。
+ * 用于判断折叠装饰 / TOC 是否需要重建：输入正文（最常见）签名不变，
+ * 可完全跳过 O(n) 重建（根源级性能优化，替代"防抖延时"式的开销推迟）。
+ */
+export function computeHeadingSignature(
+    doc: ProseNode,
+    folded?: ReadonlySet<number>,
+): string {
+    let sig = "";
+    doc.forEach((node, offset) => {
+        if (!isHeadingNode(node)) return;
+        sig += `${offset}:${getHeadingLevel(node)}:${node.nodeSize}:${node.textContent};`;
+    });
+    if (folded) {
+        sig += "|fold:";
+        for (const pos of Array.from(folded).sort((a, b) => a - b)) sig += `${pos},`;
+    }
+    return sig;
+}
+
+/**
  * 单遍计算所有标题的折叠范围（O(n)）。
  * 回归：buildFoldDecorations 曾对每个标题调用 findHeadingFoldRange（内部全量扫描），
  * 1 万行文档 O(n²) 实测 315ms/次（jsdom），每键输入重建 decorations 即输入卡顿主因。
