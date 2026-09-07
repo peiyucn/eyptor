@@ -13,6 +13,7 @@ import {
     toggleInlineCodeCommand,
     listItemSchema,
     wrapInBlockTypeCommand,
+    inlineCodeSchema,
 } from "@milkdown/kit/preset/commonmark";
 import { toggleStrikethroughCommand, insertTableCommand } from "@milkdown/kit/preset/gfm";
 import type { EditorView } from "@milkdown/kit/prose/view";
@@ -883,6 +884,13 @@ export async function createEditor(
         .addFeature(latex)       // 全新：KaTeX 数学公式
         .addFeature(linkTooltip)
     // 已启用：feature/toolbar → 选中文字浮动工具栏
+
+    // 恢复行内代码 mark 的 inclusive：7.22.1（#2451）改为 false，块尾输入即退出
+    // 代码 span——epytor 的 ./ @/ 路径补全依赖在行内代码尾部继续编辑，
+    // 恢复 7.22.0 行为（退出用方向键/点击明确操作）
+    crepe.editor.use(
+        inlineCodeSchema.extendSchema((prev) => (ctx) => ({ ...prev(ctx), inclusive: true })),
+    );
 
     // 注入保留的自定义配置
     crepe.editor
