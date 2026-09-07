@@ -1,7 +1,8 @@
 /**
- * 表格换行往返回归测试（闭环方案）：Shift+Enter 序列化为 `&#10;` 实体；
- * 加载含 `&#10;` 的表格应解析 hardbreak 并渲染 br 元素。覆盖手测反馈
- * 「编辑后进源码正常、回编辑页换行失效」——根因：remark-gfm 解析层丢弃 `<br>`。
+ * 表格换行往返回归测试（闭环方案，源码形态 <br>）：
+ * Extension 加载时把表格内 <br> 转为 &#10; 实体再进解析器（convertTableBrForDisplay），
+ * 渲染为换行；保存序列化回 <br>。覆盖手测反馈「编辑后进源码正常、回编辑页换行失效」
+ * ——根因：remark-gfm 解析层丢弃 <br>。
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { CrepeBuilder } from "@milkdown/crepe";
@@ -58,18 +59,19 @@ function pressShiftEnter(view: EditorView): boolean {
 
 afterEach(() => { document.body.innerHTML = ""; });
 
-describe("表格换行往返（&#10; 闭环）", () => {
-    it("加载含 &#10; 的表格 应该 解析 hardbreak 并渲染 br 元素", async () => {
+describe("表格换行往返（<br> 闭环）", () => {
+    it("加载含 &#10; 的表格（Extension 转换产物） 应该 解析 hardbreak 并渲染 br 元素", async () => {
         const editor = await makeEditor("| A |\n| --- |\n| x&#10;z |\n");
         const view = getView(editor);
         let hb = 0;
         view.state.doc.descendants((node) => { if (node.type.name === "hardbreak") hb++; });
         expect(hb).toBe(1);
         expect(view.dom.querySelectorAll('span[data-type="hardbreak"][data-is-inline="true"]').length).toBe(1);
-        expect(editor.action(getMarkdown())).toContain("x&#10;z");
+        // 序列化输出 GFM 标准 <br>（源码形态），加载时再由 Extension 转回实体
+        expect(editor.action(getMarkdown())).toContain("x<br>z");
     });
 
-    it("回编辑页后再按 Shift+Enter 应该 插入第二个换行且往返一致", async () => {
+    it("回编辑页后再按 Shift+Enter 应该 插入第二个换行且序列化为 <br>", async () => {
         const editor = await makeEditor("| A |\n| --- |\n| x&#10;z |\n");
         const view = getView(editor);
         let cellPos = -1;
@@ -78,7 +80,7 @@ describe("表格换行往返（&#10; 闭环）", () => {
         const handled = pressShiftEnter(view);
         expect(handled).toBe(true);
         const md = editor.action(getMarkdown());
-        expect(md).toContain("x&#10;");
+        expect(md).toContain("x<br>");
         expect(md).toContain("z");
     });
 });

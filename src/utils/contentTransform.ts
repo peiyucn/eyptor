@@ -30,3 +30,32 @@ export function restoreContentForSave(
     }
     return result;
 }
+
+/**
+ * 表格单元格内 `<br>` → `&#10;`（显示层兼容转换，闭环方案的一部分）。
+ *
+ * GFM 表格换行的标准表达是 `<br>`（GitHub 渲染为换行），但 remark-gfm 解析层
+ * 会丢弃表格单元格内的 `<br>`（上游 Milkdown#2463），直接加载会丢换行。
+ * 因此进解析器前先把表格行内的 `<br>`（含 <br/>、<br /> 等变体）转为 `&#10;`
+ * 实体：remark 解析为含 `\n` 的 text，渲染为换行；保存时序列化回 `<br>`，
+ * 源码往返一致。代码围栏内不转换（围栏内是代码，不是表格）。
+ */
+export function convertTableBrForDisplay(content: string): string {
+    const lines = content.split("\n");
+    let inFence = false;
+
+    return lines
+        .map((line) => {
+            if (/^\s*(`{3,}|~{3,})/.test(line)) {
+                inFence = !inFence;
+                return line;
+            }
+            if (inFence) return line;
+            // 表格行（行首 |，允许前导空白）且含 <br> 变体才替换；已有实体原样保留
+            if (/^\s*\|/.test(line) && /<br\s*\/?>/i.test(line)) {
+                return line.replace(/<br\s*\/?>/gi, "&#10;");
+            }
+            return line;
+        })
+        .join("\n");
+}

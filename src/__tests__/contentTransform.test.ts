@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
     extractFrontmatter,
     restoreContentForSave,
+    convertTableBrForDisplay,
 } from "../../src/utils/contentTransform";
 import { computeLineMap } from "../../src/utils/lineMap";
 
@@ -171,5 +172,44 @@ describe("computeLineMap", () => {
         computeLineMap(content);
         const elapsed = performance.now() - start;
         expect(elapsed).toBeLessThan(100);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// convertTableBrForDisplay
+// ─────────────────────────────────────────────────────────────
+describe("convertTableBrForDisplay", () => {
+    it("表格行内 <br> 应该 转为 &#10; 实体（GFM 合法、解析渲染换行）", () => {
+        expect(convertTableBrForDisplay("| A |\n| --- |\n| x<br>z |")).toBe(
+            "| A |\n| --- |\n| x&#10;z |",
+        );
+    });
+
+    it("<br/> 与 <br /> 变体、大小写 应该 全部转换", () => {
+        expect(convertTableBrForDisplay("| a<br/>b |\n| c<br />d |\n| e<BR>f |")).toBe(
+            "| a&#10;b |\n| c&#10;d |\n| e&#10;f |",
+        );
+    });
+
+    it("代码围栏内的 |...<br>... 行 应该 不转换", () => {
+        const input = "```html\n| a<br>b |\n```\n\n| x<br>y |\n";
+        const output = convertTableBrForDisplay(input);
+        // 围栏内保持原样；围栏外的表格行转换
+        expect(output).toBe("```html\n| a<br>b |\n```\n\n| x&#10;y |\n");
+    });
+
+    it("普通段落中的 <br> 应该 不转换", () => {
+        expect(convertTableBrForDisplay("line one<br>line two\n")).toBe(
+            "line one<br>line two\n",
+        );
+    });
+
+    it("已有 &#10; 实体 应该 原样保留", () => {
+        expect(convertTableBrForDisplay("| x&#10;z |")).toBe("| x&#10;z |");
+    });
+
+    it("无 <br> 的表格 应该 原样返回", () => {
+        const input = "| A | B |\n| --- | --- |\n| 1 | 2 |\n";
+        expect(convertTableBrForDisplay(input)).toBe(input);
     });
 });

@@ -6,7 +6,7 @@ import { getNonce } from "./utils/getNonce";
 import { ZH_CN_WEBVIEW } from "./i18n/webviewTranslations";
 import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
 import { computeLineMap } from "./utils/lineMap";
-import { extractFrontmatter, restoreContentForSave } from "./utils/contentTransform";
+import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay } from "./utils/contentTransform";
 import type { ToExtensionMessage, ToWebviewMessage } from "../shared/messages";
 import { resolveTableWrapVars } from "../shared/tableWrap";
 
@@ -755,7 +755,8 @@ export class MarkdownEditorProvider
     ): string {
         const { frontmatter, body } = extractFrontmatter(content);
         this._frontmatterMap.set(uriKey, frontmatter);
-        content = body;
+        // 表格内 <br> 兼容转换：remark-gfm 解析层丢弃 <br>，转 &#10; 保证渲染往返（见 convertTableBrForDisplay）
+        content = convertTableBrForDisplay(body);
 
         if (document.uri.scheme !== 'file') { return content; }
         const mdDir = path.dirname(document.uri.fsPath);

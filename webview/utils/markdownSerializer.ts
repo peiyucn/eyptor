@@ -207,12 +207,14 @@ export function serializeCleanMarkdown(source: string, serialized: string): stri
 }
 
 /**
- * 表格单元格内换行的序列化补丁（闭环方案）。
+ * 表格单元格内换行的序列化补丁（闭环方案，源码形态 <br>）。
  *
  * mdast 默认 break handler 在表格上下文（unsafe `\n`）退化为空格；GFM 表格
- * 换行的标准表达是 `<br>`，但 remark-gfm 解析层会丢弃 `<br>`（加载往返不一致）。
- * 因此表格内 break 输出 `&#10;` 实体：GFM 合法、GitHub 渲染为换行、
- * remark 解析为含 `\n` 的 text、ProseMirror 渲染换行——保存/加载往返一致。
+ * 换行的标准表达是 `<br>`，但 remark-gfm 解析层会丢弃表格内 `<br>`（上游
+ * Milkdown#2463，加载往返不一致）。配合 Extension 侧加载转换
+ * （convertTableBrForDisplay：源码 `<br>` → `&#10;` 再进解析器），形成闭环：
+ * 源码 `<br>` → 加载转换 → 渲染换行 → 序列化 `<br>` → 源码往返一致，
+ * GitHub 渲染同为换行。
  */
 export function withTableBreakHandler<T extends { handlers?: unknown }>(options: T): T {
     const handlers = (options.handlers ?? {}) as Record<string, unknown>;
@@ -229,7 +231,7 @@ export function withTableBreakHandler<T extends { handlers?: unknown }>(options:
                 info: unknown,
             ) => {
                 if (state.stack.includes("tableCell")) {
-                    return "&#10;";
+                    return "<br>";
                 }
                 const fallback = defaultBreak as
                     | ((n: unknown, p: unknown, s: unknown, i: unknown) => unknown)
@@ -237,7 +239,7 @@ export function withTableBreakHandler<T extends { handlers?: unknown }>(options:
                 return fallback ? fallback(node, parent, state, info) : "";
             },
             // isInline hardbreak（加载 `&#10;` 解析而来）序列化为含 `\n` 的 text：
-            // 表格内必须还原为 `&#10;`，否则裸换行破坏表格结构
+            // 表格内必须还原为 `<br>`，否则裸换行破坏表格结构
             text: (
                 node: { value?: string },
                 parent: unknown,
@@ -245,7 +247,7 @@ export function withTableBreakHandler<T extends { handlers?: unknown }>(options:
                 info: unknown,
             ) => {
                 if (state.stack.includes("tableCell") && String(node.value ?? "").includes("\n")) {
-                    return String(node.value ?? "").replace(/\n/g, "&#10;");
+                    return String(node.value ?? "").replace(/\n/g, "<br>");
                 }
                 const fallback = defaultText as
                     | ((n: unknown, p: unknown, s: unknown, i: unknown) => unknown)
