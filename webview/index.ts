@@ -27,6 +27,7 @@ import {
     notifyReady,
     notifyUpdate,
     notifyFrontmatterUpdate,
+    notifyDebug,
     onMessage,
     notifySwitchToTextEditor,
     notifyUploadImage,
@@ -798,6 +799,27 @@ for (const evt of ["wheel", "mousedown", "keydown", "touchstart"] as const) {
         { passive: true },
     );
 }
+
+// 焦点诊断（临时，发布前移除）：记录焦点/可见性事件，定位「切回后焦点异常」
+// （删除一个字再编辑 / IME 候选框跑到左上角 / 有时无焦点）
+for (const evt of ["focusin", "focusout"] as const) {
+    document.addEventListener(evt, (e) => {
+        const t = e.target as Element;
+        const desc =
+            t instanceof HTMLElement
+                ? `${t.tagName.toLowerCase()}.${t.className}`
+                : String(t?.nodeName ?? "unknown");
+        notifyDebug(`[focus] ${evt} -> ${desc}`);
+    });
+}
+document.addEventListener("visibilitychange", () => {
+    const active = document.activeElement;
+    const desc =
+        active instanceof HTMLElement
+            ? `${active.tagName.toLowerCase()}.${active.className}`
+            : String(active?.nodeName ?? "none");
+    notifyDebug(`[visibility] ${document.visibilityState} active=${desc}`);
+});
 
 // 监听来自 Extension 侧的消息
 onMessage(async (msg) => {

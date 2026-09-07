@@ -494,6 +494,18 @@ export class MarkdownEditorProvider
                 }
                 break;
             }
+            case "debug": {
+                // 诊断日志落盘（临时，发布前移除）：焦点/可见性事件，定位切回后焦点异常
+                try {
+                    fs.appendFileSync(
+                        path.join(os.tmpdir(), "epytor-focus-debug.log"),
+                        `[${new Date().toISOString()}] ${message.message}\n`,
+                    );
+                } catch {
+                    // 忽略
+                }
+                break;
+            }
             case "openUrl":
                 if (message.url) {
                     vscode.env.openExternal(vscode.Uri.parse(message.url));

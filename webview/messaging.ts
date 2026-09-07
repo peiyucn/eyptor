@@ -29,6 +29,10 @@ export function notifyFrontmatterUpdate(
     vscode.postMessage({ type: "frontmatterUpdate", frontmatter, debug });
 }
 
+export function notifyDebug(message: string): void {
+    vscode.postMessage({ type: "debug", message });
+}
+
 export function notifyOpenUrl(url: string): void {
     vscode.postMessage({ type: "openUrl", url });
 }

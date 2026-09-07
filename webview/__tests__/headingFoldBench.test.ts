@@ -35,9 +35,9 @@ function getView(editor: Awaited<ReturnType<typeof makeEditor>>): EditorView {
 }
 
 describe("buildFoldDecorations 性能基准（防 O(n²) 回归）", () => {
-    it("1 万行（2000 标题）文档 应该 在 200ms 内完成（回归：每标题全量扫描曾达 315ms）", async () => {
+    it("2 万行（4000 标题）文档 应该 在 500ms 内完成（回归：O(n²) 每标题全量扫描同规模约 1.2s）", async () => {
         const lines: string[] = [];
-        for (let i = 0; i < 2000; i++) {
+        for (let i = 0; i < 4000; i++) {
             lines.push(`## 标题 ${i}`);
             lines.push("正文一行内容");
             lines.push("正文二行内容");
@@ -51,8 +51,8 @@ describe("buildFoldDecorations 性能基准（防 O(n²) 回归）", () => {
         const result = buildFoldDecorations(view.state.doc, new Set());
         const elapsed = performance.now() - t0;
         // eslint-disable-next-line no-console
-        console.log(`[bench] 1万行 buildFoldDecorations: ${elapsed.toFixed(1)}ms, decorations=${result.find().length}`);
-        expect(result.find().length).toBe(4000);
-        expect(elapsed).toBeLessThan(200);
+        console.log(`[bench] 2万行 buildFoldDecorations: ${elapsed.toFixed(1)}ms, decorations=${result.find().length}`);
+        expect(result.find().length).toBe(8000);
+        expect(elapsed).toBeLessThan(500);
     }, 120000);
 });

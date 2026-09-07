@@ -129,7 +129,7 @@ function openOverflowMenu(anchor: HTMLElement, hiddenKeys: ReadonlySet<string>, 
     let left = rect.right - menuWidth;
     if (left < 8) left = 8;
     // 右缘 clamp：more 按钮贴视口右缘时，右对齐展开的菜单右缘可能超出页面被裁
-    const maxLeft = window.innerWidth - menuWidth - 8;
+    const maxLeft = window.innerWidth - menuWidth - 16;
     if (left > maxLeft) left = maxLeft;
     let top = rect.bottom + 6;
     if (top + menuHeight > window.innerHeight - 8) top = Math.max(8, rect.top - menuHeight - 6);
@@ -259,7 +259,7 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
             }
         }
         const desiredLeft = lastVisible
-            ? lastVisible.getBoundingClientRect().right + 4
+            ? lastVisible.getBoundingClientRect().right + 10
             : rect.right - 40;
         moreBtn.style.left = `${Math.min(desiredLeft, window.innerWidth - MORE_BTN_WIDTH - 6)}px`;
         moreBtn.style.right = "auto";
