@@ -71,6 +71,14 @@
     width: 16px;
     height: 16px;
     flex-shrink: 0;
+    /* 图标统一用菜单前景色：顶栏图标 SVG 带硬编码 fill（黑/彩色），
+       进菜单后颜色不一致（有黑有变色） */
+    fill: currentColor !important;
+    color: var(--vscode-menu-foreground, #cccccc);
+}
+
+.epytor-topbar-overflow-item svg * {
+    fill: currentColor !important;
 }
 
 .epytor-topbar-overflow-label {

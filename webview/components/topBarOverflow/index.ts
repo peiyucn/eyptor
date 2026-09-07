@@ -192,10 +192,15 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
 
         hiddenKeys = computeOverflow({ items, containerWidth, moreBtnWidth: MORE_BTN_WIDTH, pinnedKeys: PINNED_KEYS });
 
-        // 应用隐藏 class（DOM 与 meta 顺序一致）
+        // 应用隐藏 class（DOM 与 meta 顺序一致）；
+        // 分割线跟随其左侧按钮：左侧按钮被收起时一并隐藏（防宽度收窄后一串孤立分割线）
         metaIdx = 0;
+        let prevHidden = false;
         for (const child of Array.from(inner.children) as HTMLElement[]) {
-            if (child.classList.contains("top-bar-divider")) continue;
+            if (child.classList.contains("top-bar-divider")) {
+                child.classList.toggle(HIDDEN_CLASS, prevHidden);
+                continue;
+            }
             if (
                 !child.classList.contains("top-bar-item") &&
                 !child.classList.contains("top-bar-heading-selector")
@@ -204,7 +209,9 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
             }
             const key = _meta[metaIdx]?.key ?? "";
             metaIdx++;
-            child.classList.toggle(HIDDEN_CLASS, hiddenKeys.has(key));
+            const hidden = hiddenKeys.has(key);
+            child.classList.toggle(HIDDEN_CLASS, hidden);
+            prevHidden = hidden;
         }
 
         moreBtn.hidden = hiddenKeys.size === 0;
