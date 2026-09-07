@@ -12,7 +12,7 @@ import type { Node as ProseNode } from "@milkdown/kit/prose/model";
 import { IconChevronDown, IconChevronRight } from "./ui/icons";
 import { applyTooltip, hideTooltip } from "./ui/tooltip";
 import { t } from "./i18n";
-import { findHeadingFoldRange, getHeadingLevel, isHeadingNode } from "./utils/headingFold";
+import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, computeAllHeadingFoldRanges } from "./utils/headingFold";
 
 export type HeadingFoldMeta = { type: "toggle"; pos: number };
 type HeadingFoldRange = { from: number; to: number };
@@ -75,16 +75,18 @@ function createFoldGutter(
     return gutter;
 }
 
-function buildFoldDecorations(doc: ProseNode, folded: ReadonlySet<number>): DecorationSet {
+export function buildFoldDecorations(doc: ProseNode, folded: ReadonlySet<number>): DecorationSet {
     const decorations: Decoration[] = [];
     const hiddenRanges: HeadingFoldRange[] = [];
+    // 单遍 O(n) 计算所有标题折叠范围（回归：曾每标题全量扫描，1 万行 315ms/次）
+    const foldRanges = computeAllHeadingFoldRanges(doc);
 
     doc.forEach((node, offset) => {
         if (!isHeadingNode(node)) return;
 
         const level = getHeadingLevel(node);
         const collapsed = folded.has(offset);
-        const range = findHeadingFoldRange(doc, offset, level);
+        const range = foldRanges.get(offset) ?? null;
         const foldable = Boolean(range);
 
         decorations.push(

@@ -42,3 +42,35 @@ export function findHeadingFoldRange(
 
     return from < to ? { from, to } : null;
 }
+
+/**
+ * 单遍计算所有标题的折叠范围（O(n)）。
+ * 回归：buildFoldDecorations 曾对每个标题调用 findHeadingFoldRange（内部全量扫描），
+ * 1 万行文档 O(n²) 实测 315ms/次（jsdom），每键输入重建 decorations 即输入卡顿主因。
+ * 栈式算法：遍历块，当前标题截断栈中所有层级 ≥ 自身的等待标题（与
+ * findHeadingFoldRange 语义完全一致：下一个 level ≤ 当前的标题为截断点）。
+ */
+export function computeAllHeadingFoldRanges(
+    doc: ProseNode,
+): Map<number, HeadingFoldRange | null> {
+    const ranges = new Map<number, HeadingFoldRange | null>();
+    const stack: { pos: number; level: number; size: number }[] = [];
+
+    doc.forEach((node, offset) => {
+        if (!isHeadingNode(node)) return;
+        const level = getHeadingLevel(node);
+        while (stack.length > 0 && stack[stack.length - 1].level >= level) {
+            const top = stack.pop()!;
+            const from = top.pos + top.size;
+            ranges.set(top.pos, from < offset ? { from, to: offset } : null);
+        }
+        stack.push({ pos: offset, level, size: node.nodeSize });
+    });
+
+    for (const top of stack) {
+        const to = doc.content.size;
+        const from = top.pos + top.size;
+        ranges.set(top.pos, from < to ? { from, to } : null);
+    }
+    return ranges;
+}

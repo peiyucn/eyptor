@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CrepeBuilder } from "@milkdown/crepe";
 import { editorViewCtx } from "@milkdown/kit/core";
 import type { EditorView } from "@milkdown/kit/prose/view";
-import { findHeadingFoldRange, getHeadingLevel, isHeadingNode } from "../utils/headingFold";
+import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, computeAllHeadingFoldRanges } from "../utils/headingFold";
 
 if (typeof (window as unknown as Record<string, unknown>).ResizeObserver === "undefined") {
     (window as unknown as Record<string, unknown>).ResizeObserver = class {
@@ -92,5 +92,32 @@ describe("findHeadingFoldRange", () => {
         const editor = await makeEditor("para\n");
         const view = getView(editor);
         expect(findHeadingFoldRange(view.state.doc, 0, 2)).toBeNull();
+    });
+});
+
+describe("computeAllHeadingFoldRanges（单遍 O(n)，与 findHeadingFoldRange 等价）", () => {
+    it("多层混合标题 应该 与逐标题计算结果完全一致", async () => {
+        const editor = await makeEditor(
+            "# Top\ncontent top\n## A\ncontent A\n### Sub\ncontent Sub\n## B\ncontent B\n# Bottom\ncontent bottom\n",
+        );
+        const view = getView(editor);
+        const doc = view.state.doc;
+        const headings = headingPositions(view);
+        const all = computeAllHeadingFoldRanges(doc);
+
+        // 每个标题的 ranges 都应与旧实现一致
+        for (const { pos, level } of headings) {
+            expect(all.get(pos)).toEqual(findHeadingFoldRange(doc, pos, level));
+        }
+        // 全部标题都在 map 中
+        expect(all.size).toBe(headings.length);
+    });
+
+    it("叶子标题（无后续内容） 应该 为 null", async () => {
+        const editor = await makeEditor("## A\n");
+        const view = getView(editor);
+        const all = computeAllHeadingFoldRanges(view.state.doc);
+        const headings = headingPositions(view);
+        expect(all.get(headings[0].pos)).toBeNull();
     });
 });
