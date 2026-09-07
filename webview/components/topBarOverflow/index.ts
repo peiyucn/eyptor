@@ -44,6 +44,8 @@ const ITEM_LABELS: Record<string, string> = {
 const PINNED_KEYS = new Set(["heading", "undo", "redo"]);
 
 const MORE_BTN_WIDTH = 34;
+/** 安全边距：居中布局下右侧空隙不可预知，多扣 12px 防「⋯」与最后一个按钮重叠 */
+const MORE_BTN_SAFETY_GAP_PX = 12;
 const HIDDEN_CLASS = "top-bar-item--overflow-hidden";
 
 let _meta: TopBarButtonMeta[] = [];
@@ -190,7 +192,12 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
             }
         }
 
-        hiddenKeys = computeOverflow({ items, containerWidth, moreBtnWidth: MORE_BTN_WIDTH, pinnedKeys: PINNED_KEYS });
+        hiddenKeys = computeOverflow({
+            items,
+            containerWidth,
+            moreBtnWidth: MORE_BTN_WIDTH + MORE_BTN_SAFETY_GAP_PX,
+            pinnedKeys: PINNED_KEYS,
+        });
 
         // 应用隐藏 class（DOM 与 meta 顺序一致）；
         // 分割线跟随其左侧按钮：左侧按钮被收起时一并隐藏（防宽度收窄后一串孤立分割线）

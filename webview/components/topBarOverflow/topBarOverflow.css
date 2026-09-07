@@ -71,14 +71,10 @@
     width: 16px;
     height: 16px;
     flex-shrink: 0;
-    /* 图标统一用菜单前景色：顶栏图标 SVG 带硬编码 fill（黑/彩色），
-       进菜单后颜色不一致（有黑有变色） */
-    fill: currentColor !important;
+    /* 图标统一菜单前景色：图标均为 stroke=currentColor 风格，
+       只设 color 让 stroke 继承；禁止 CSS fill 强制——会覆盖 fill="none"
+       把描边图标（如设置齿轮）填成实心块（回归：白色填充满） */
     color: var(--vscode-menu-foreground, #cccccc);
-}
-
-.epytor-topbar-overflow-item svg * {
-    fill: currentColor !important;
 }
 
 .epytor-topbar-overflow-label {
