@@ -467,7 +467,7 @@ export class MarkdownEditorProvider
                 try {
                     fs.appendFileSync(
                         path.join(os.tmpdir(), "epytor-frontmatter-debug.log"),
-                        `[${new Date().toISOString()}] rows=${frontmatter.split("\n").filter((l) => l.includes(":")).length} same=${newContent === null} fm=${JSON.stringify(frontmatter)}\n`,
+                        `[${new Date().toISOString()}] rows=${frontmatter.split("\n").filter((l) => l.includes(":")).length} same=${newContent === null} active=${JSON.stringify(message.debug ?? {})} fm=${JSON.stringify(frontmatter)}\n`,
                     );
                 } catch {
                     // 忽略

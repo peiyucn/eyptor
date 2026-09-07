@@ -285,7 +285,12 @@ function renderFrontmatterPanel(frontmatter: string | undefined): void {
     // 重建前先 dispose 旧实例，取消其防抖 timer（防止 revert 后旧编辑写回）
     _frontmatterPanelHandle?.dispose();
     _frontmatterPanelHandle = createFrontmatterPanel(frontmatter, (serialized) => {
-        notifyFrontmatterUpdate(serialized);
+        // 诊断（临时）：把保存瞬间的焦点快照一并送回，定位「加行输入不进新行」
+        const active = document.activeElement;
+        notifyFrontmatterUpdate(serialized, {
+            activeClass: active instanceof HTMLElement ? active.className : String(active?.nodeName ?? ""),
+            activeValue: active instanceof HTMLInputElement ? active.value : "",
+        });
     });
     if (!_frontmatterPanelHandle) {
         if (editorEl) { editorEl.style.paddingTop = ''; }

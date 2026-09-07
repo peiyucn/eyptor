@@ -124,9 +124,11 @@ export function createFrontmatterPanel(
     addBtn.className = "fm-add-btn";
     addBtn.textContent = "+";
     addBtn.setAttribute("aria-label", t("Add"));
-    // 阻止按钮在 mousedown 时夺取焦点（焦点保持原处，click 内再显式转移）
+    // 阻止按钮在 mousedown 时夺取焦点并阻断冒泡（防 document 级监听抢焦点，
+    // click 内显式转移焦点到新行）
     addBtn.addEventListener("mousedown", (event) => {
         event.preventDefault();
+        event.stopPropagation();
     });
     addBtn.addEventListener("click", () => {
         addRow();

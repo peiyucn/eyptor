@@ -25,7 +25,7 @@ export type PathSuggestionItem = {
 export type ToExtensionMessage =
     | { type: "ready" }
     | { type: "update"; content: string }
-    | { type: "frontmatterUpdate"; frontmatter: string }
+    | { type: "frontmatterUpdate"; frontmatter: string; debug?: { activeClass: string; activeValue: string } }
     | { type: "openUrl"; url: string }
     | { type: "openFile"; path: string }
     | { type: "debug"; message: string }
