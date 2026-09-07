@@ -84,8 +84,8 @@ describe("WebView 样式", () => {
     });
 
     it("表格整行/整列选中工具栏 应该 有 VSCode 变量主题适配规则（回归：官方浅色/独立配色未适配）", () => {
-        // 组件手柄由 Vue 渲染在独立容器，类名直配；规则直写 --vscode-* 变量
-        expect(styleCss).toContain(".cell-handle .button-group");
+        // cell-handle 是 Vue overlay，祖先链含 .milkdown-table-block；与官方同前缀靠后覆盖
+        expect(styleCss).toContain(".milkdown-table-block .cell-handle .button-group");
         expect(styleCss).toContain("--vscode-editorWidget-background");
         expect(styleCss).toContain("--vscode-toolbar-hoverBackground");
     });

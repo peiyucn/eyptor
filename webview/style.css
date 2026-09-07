@@ -962,40 +962,41 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     overflow-wrap: break-word;
 }
 
-/* 行列手柄与整行/整列选中工具栏：组件类名直配（对齐编辑器浮层风格）；
-   !important 兜底——官方规则（--crepe 变量）在打包 CSS 中与裸类同特异性，
-   部分 hover/:has 状态会反超导致样式回退 */
-.cell-handle {
+/* 行列手柄与整行/整列选中工具栏：对齐编辑器浮层风格。
+   回归：cell-handle 是 Vue 渲染的 overlay，其祖先链含 .milkdown-table-block
+   （官方同前缀规则能命中即是证明）；此前降为裸类导致特异性输给官方，
+   「之前改对过又回去」——恢复与官方同前缀 + 靠后覆盖，关键属性 !important 兜底 */
+.milkdown .milkdown-table-block .cell-handle {
     background-color: var(--vscode-editor-background) !important;
     border-radius: 6px !important;
 }
-.cell-handle:hover {
+.milkdown .milkdown-table-block .cell-handle:hover {
     background-color: var(--vscode-editorWidget-background) !important;
 }
-.line-handle .add-button {
+.milkdown .milkdown-table-block .line-handle .add-button {
     border-radius: 4px;
 }
-.cell-handle .button-group {
+.milkdown .milkdown-table-block .cell-handle .button-group {
     background-color: var(--vscode-editorWidget-background, var(--vscode-editor-background)) !important;
     border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, rgba(128,128,128,0.35))) !important;
     border-radius: 5px !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
 }
-.cell-handle .button-group button {
-    margin: 3px;
-    padding: 3px;
+.milkdown .milkdown-table-block .cell-handle .button-group button {
+    margin: 3px !important;
+    padding: 3px !important;
     border-radius: 3px;
 }
-.cell-handle .button-group button svg {
-    width: 18px;
-    height: 18px;
+.milkdown .milkdown-table-block .cell-handle .button-group button svg {
+    width: 18px !important;
+    height: 18px !important;
     fill: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
 }
-.cell-handle .button-group button:hover {
-    border-radius: 3px;
+.milkdown .milkdown-table-block .cell-handle .button-group button:hover {
+    border-radius: 3px !important;
     background-color: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2)) !important;
 }
-.cell-handle .button-group button:active {
+.milkdown .milkdown-table-block .cell-handle .button-group button:active {
     background: var(--vscode-toolbar-activeBackground, rgba(128,128,128,0.3));
 }
 
