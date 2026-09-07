@@ -49,6 +49,7 @@ export type ToWebviewMessage =
     | { type: "lineMapUpdate"; lineMap: number[] }
     | { type: "setDebugMode"; enabled: boolean }
     | { type: "setSerializationMode"; mode: "clean" | "compatible" }
+    | { type: "tableWrapModeChanged"; mode: string }
     | { type: "imageUploaded"; id: string; url: string }
     | { type: "imageUploadError"; id: string; error: string }
     | { type: "projectImagesList"; id: string; images: ProjectImage[] }

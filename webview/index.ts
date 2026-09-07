@@ -11,6 +11,8 @@ import "@milkdown/crepe/theme/common/toolbar.css";
 import "@milkdown/crepe/theme/common/link-tooltip.css";
 import "./style.css"; // 必须在 Crepe CSS 之后加载，用 VSCode 变量覆盖 Crepe 主题
 import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../shared/constants";
+import { resolveTableWrapVars } from "../shared/tableWrap";
+import { applyTableWrapVars } from "./utils/tableWrap";
 import {
     createEditor,
     getEditorView,
@@ -854,6 +856,8 @@ onMessage(async (msg) => {
         setSerializationDebug(msg.enabled);
     } else if (msg.type === "setSerializationMode") {
         setSerializationMode(msg.mode);
+    } else if (msg.type === "tableWrapModeChanged") {
+        applyTableWrapVars(resolveTableWrapVars(msg.mode));
     } else if (msg.type === "imageUploaded") {
         const cb = _pendingUploads.get(msg.id);
         if (cb) {

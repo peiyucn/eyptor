@@ -8,6 +8,7 @@ import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
 import { computeLineMap } from "./utils/lineMap";
 import { extractFrontmatter, restoreContentForSave } from "./utils/contentTransform";
 import type { ToExtensionMessage, ToWebviewMessage } from "../shared/messages";
+import { resolveTableWrapVars } from "../shared/tableWrap";
 
 // ─── 常量 ────────────────────────────────────────────────────
 const GLOBAL_REVEAL_LINE_TTL_MS = 10_000;
@@ -154,7 +155,7 @@ export class MarkdownEditorProvider
     ): vscode.Disposable {
         const provider = new MarkdownEditorProvider(context);
         MarkdownEditorProvider.current = provider;
-        return vscode.window.registerCustomEditorProvider(
+        const disposable = vscode.window.registerCustomEditorProvider(
             MarkdownEditorProvider.viewType,
             provider,
             {
@@ -164,6 +165,15 @@ export class MarkdownEditorProvider
                 supportsMultipleEditorsPerDocument: false,
             },
         );
+        // 表格换行档位变更：广播给所有打开的 WebView 即时更新 CSS 变量（无需重开文档）
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeConfiguration((e) => {
+                if (!e.affectsConfiguration("epytor.tableWrapMode")) return;
+                const mode = vscode.workspace.getConfiguration("epytor").get<string>("tableWrapMode", "normal");
+                provider.postToAll({ type: "tableWrapModeChanged", mode });
+            }),
+        );
+        return disposable;
     }
 
     private readonly _statusBarItem: vscode.StatusBarItem;
@@ -666,9 +676,10 @@ export class MarkdownEditorProvider
         const fontFamily = cfg.get<string>("fontFamily", "");
         const imageSelectionColor = cfg.get<string>("imageSelectionColor", "rgba(52, 211, 153, 0.6)");
         const tableWrapMode = cfg.get<string>("tableWrapMode", "normal");
-        const tableWordBreak = tableWrapMode === "aggressive" ? "break-all" : "keep-all";
-        const tableWhiteSpace = tableWrapMode === "none" ? "nowrap" : "normal";
-        const tableOverflowX = tableWrapMode === "none" ? "auto" : "visible";
+        const tableWrapVars = resolveTableWrapVars(tableWrapMode);
+        const tableWordBreak = tableWrapVars.wordBreak;
+        const tableWhiteSpace = tableWrapVars.whiteSpace;
+        const tableOverflowX = tableWrapVars.overflowX;
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(
                 this.context.extensionUri,
