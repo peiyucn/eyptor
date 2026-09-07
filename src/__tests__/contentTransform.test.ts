@@ -3,6 +3,7 @@ import {
     extractFrontmatter,
     restoreContentForSave,
     convertTableBrForDisplay,
+    buildContentWithFrontmatter,
 } from "../../src/utils/contentTransform";
 import { computeLineMap } from "../../src/utils/lineMap";
 
@@ -211,5 +212,36 @@ describe("convertTableBrForDisplay", () => {
     it("无 <br> 的表格 应该 原样返回", () => {
         const input = "| A | B |\n| --- | --- |\n| 1 | 2 |\n";
         expect(convertTableBrForDisplay(input)).toBe(input);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// buildContentWithFrontmatter
+// ─────────────────────────────────────────────────────────────
+describe("buildContentWithFrontmatter", () => {
+    it("新增 frontmatter 行 应该 替换 YAML 头且正文不变", () => {
+        const current = "---\ntitle: A\n---\n# Body\n";
+        const result = buildContentWithFrontmatter(current, "---\ntitle: A\ntags: x\n---\n", new Map());
+        expect(result).toBe("---\ntitle: A\ntags: x\n---\n# Body\n");
+    });
+
+    it("frontmatter 与现状相同 应该 返回 null（跳过保存）", () => {
+        const current = "---\ntitle: A\n---\n# Body\n";
+        expect(buildContentWithFrontmatter(current, "---\ntitle: A\n---\n", new Map())).toBeNull();
+    });
+
+    it("无 frontmatter 文档新增 YAML 头 应该 前置插入", () => {
+        const result = buildContentWithFrontmatter("# Body\n", "---\ntitle: A\n---\n", new Map());
+        expect(result).toBe("---\ntitle: A\n---\n# Body\n");
+    });
+
+    it("webviewUri 应该 还原为相对路径", () => {
+        const current = "---\ntitle: A\n---\n![alt](vscode-webview://img.png)\n";
+        const result = buildContentWithFrontmatter(
+            current,
+            "---\ntitle: A\n---\n",
+            new Map([["vscode-webview://img.png", "img.png"]]),
+        );
+        expect(result).toBe("---\ntitle: A\n---\n![alt](img.png)\n");
     });
 });

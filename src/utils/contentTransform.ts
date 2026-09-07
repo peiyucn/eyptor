@@ -59,3 +59,17 @@ export function convertTableBrForDisplay(content: string): string {
         })
         .join("\n");
 }
+
+/**
+ * Frontmatter 更新组装：以当前文档内容为底，替换 YAML 头（正文不变，
+ * webviewUri 还原为相对路径）。组装结果与现状相同返回 null（调用方跳过保存）。
+ */
+export function buildContentWithFrontmatter(
+    currentContent: string,
+    newFrontmatter: string,
+    uriMap: Map<string, string>,
+): string | null {
+    const { body } = extractFrontmatter(currentContent);
+    const newContent = restoreContentForSave(body, newFrontmatter, uriMap);
+    return newContent === currentContent ? null : newContent;
+}
