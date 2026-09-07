@@ -224,11 +224,22 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
         moreBtn.hidden = hiddenKeys.size === 0;
         const rect = topBar.getBoundingClientRect();
         moreBtn.style.top = `${Math.max(2, rect.top + (rect.height - 28) / 2)}px`;
-        // 动态定位：紧跟按钮组（top-bar-inner）右缘，而非固定视口右缘——
-        // 居中布局下右缘空隙不可预知，固定右缘会与最后一个按钮重叠（回归）
-        const innerRect = inner.getBoundingClientRect();
-        const innerRight = innerRect.width > 0 ? innerRect.right : rect.right - 40;
-        const desiredLeft = innerRight + 4;
+        // 动态定位：紧跟「最后一个可见按钮」的右缘。
+        // 此前用 top-bar-inner 的右缘：居中 flex 布局 + 按钮收缩下 inner 边界不可预知
+        // （真实引擎实测临界宽度时 inner 右缘与按钮实际占位错位 150px+，more 盖在按钮上）
+        let lastVisible: HTMLElement | null = null;
+        for (const child of Array.from(inner.children) as HTMLElement[]) {
+            if (
+                (child.classList.contains("top-bar-item") ||
+                    child.classList.contains("top-bar-heading-selector")) &&
+                !child.classList.contains(HIDDEN_CLASS)
+            ) {
+                lastVisible = child;
+            }
+        }
+        const desiredLeft = lastVisible
+            ? lastVisible.getBoundingClientRect().right + 4
+            : rect.right - 40;
         moreBtn.style.left = `${Math.min(desiredLeft, window.innerWidth - MORE_BTN_WIDTH - 6)}px`;
         moreBtn.style.right = "auto";
 

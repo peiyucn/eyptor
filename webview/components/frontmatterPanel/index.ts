@@ -124,17 +124,25 @@ export function createFrontmatterPanel(
     addBtn.className = "fm-add-btn";
     addBtn.textContent = "+";
     addBtn.setAttribute("aria-label", t("Add"));
+    // 阻止按钮在 mousedown 时夺取焦点（焦点保持原处，click 内再显式转移）
+    addBtn.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+    });
     addBtn.addEventListener("click", () => {
         addRow();
         const keyInput = tbody.querySelector<HTMLInputElement>("tr:last-child .fm-key-input");
-        // 双保险聚焦新行 key 框：click 内同步 focus 可能被事件循环后的焦点还原打断，
-        // 下一宏任务再补一次（回归：用户点 + 后输入落到上一行 value 框）
+        // 三重聚焦保险：click 同步 + 下一宏任务 + 下一帧；任一环节焦点被夺回都能补回
         keyInput?.focus();
         setTimeout(() => {
             if (document.activeElement !== keyInput) {
                 keyInput?.focus();
             }
         }, 0);
+        requestAnimationFrame(() => {
+            if (document.activeElement !== keyInput) {
+                keyInput?.focus();
+            }
+        });
     });
     panel.appendChild(addBtn);
 
