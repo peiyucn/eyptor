@@ -89,4 +89,9 @@ describe("WebView 样式", () => {
         expect(styleCss).toContain("--vscode-editorWidget-background");
         expect(styleCss).toContain("--vscode-toolbar-hoverBackground");
     });
+
+    it("表格单元格内自动链接 应该 强制任意处断行（回归：inline 元素 break-word 不强制断，长 URL 撑宽页面）", () => {
+        expect(styleCss).toContain(".milkdown-table-block table td a");
+        expect(styleCss).toContain("overflow-wrap: anywhere");
+    });
 });

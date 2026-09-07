@@ -928,6 +928,12 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     width: var(--epytor-table-width, auto);
     min-width: 100%;
 }
+/* 单元格内自动链接（长 URL）：inline 元素上 overflow-wrap:break-word 不强制断行
+   （真实引擎实测表格被 URL 撑到 1602px、页面横向滚动），anywhere 才在任意字符处断 */
+.milkdown .milkdown-table-block table th a,
+.milkdown .milkdown-table-block table td a {
+    overflow-wrap: anywhere;
+}
 .milkdown .milkdown-table-block table th,
 .milkdown .milkdown-table-block table td {
     word-break: var(--epytor-table-word-break, keep-all);
