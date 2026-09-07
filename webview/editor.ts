@@ -142,6 +142,27 @@ const formatKeymapPlugin = $prose((ctx) =>
     }),
 );
 
+// 行内代码行尾方向键退出：inclusive mark 右边界 sticky，行尾（后面无代码内容）
+// 按 ArrowRight 明确移出 code mark——@/ ./ 路径在行内代码尾部编辑完成后按右键退出
+export const exitInlineCodePlugin = $prose(() =>
+    keymap({
+        ArrowRight: (state, dispatch) => {
+            const { $from, empty } = state.selection;
+            if (!empty) return false;
+            const hasCode = $from.marks().some((m) => m.type.name === "inlineCode");
+            if (!hasCode) return false;
+            if ($from.pos + 1 > state.doc.content.size) return false;
+            const $next = state.doc.resolve($from.pos + 1);
+            // 下一位置仍在 code mark 内 → 放行默认（代码内移动）
+            if ($next.marks().some((m) => m.type.name === "inlineCode")) return false;
+            if (dispatch) {
+                dispatch(state.tr.setSelection(TextSelection.create(state.doc, $from.pos + 1)));
+            }
+            return true;
+        },
+    }),
+);
+
 // 选区变更回调（由 index.ts 注入，用于驱动工具栏等外部 UI）
 let _onSelectionChange: ((view: EditorView) => void) | null = null;
 export function registerSelectionChangeHandler(cb: (view: EditorView) => void): void {
@@ -898,6 +919,7 @@ export async function createEditor(
     // 导致行内代码边界的方向指示消失、方向键无法退出——自注册默认行为（7.22.0 一致）
     crepe.editor.use(cursor);
     crepe.editor.use($prose(() => createVirtualCursor()));
+    crepe.editor.use(exitInlineCodePlugin);
 
     // 注入保留的自定义配置
     crepe.editor

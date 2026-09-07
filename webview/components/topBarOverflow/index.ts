@@ -51,8 +51,11 @@ const PINNED_KEYS = new Set(["heading", "undo", "redo"]);
 const ALWAYS_IN_MENU_KEYS = new Set(["settings"]);
 
 const MORE_BTN_WIDTH = 34;
-/** 安全边距：居中布局下右侧空隙不可预知，多扣 32px 防「⋯」与最后一个按钮重叠 */
-const MORE_BTN_SAFETY_GAP_PX = 32;
+/**
+ * 安全边距：固定右缘方案下按钮组实际占位与预算存在系统性偏差
+ * （真实引擎实测重叠 7-40px，来自居中 flex 的 item 收缩/间距），预留 96px 兜底。
+ */
+const MORE_BTN_SAFETY_GAP_PX = 96;
 const HIDDEN_CLASS = "top-bar-item--overflow-hidden";
 
 let _meta: TopBarButtonMeta[] = [];
