@@ -63,9 +63,14 @@ describe("行内代码行尾方向键退出", () => {
 
         const event = pressKey(view, "ArrowRight");
         expect(event.defaultPrevented).toBe(true);
-        // 光标移到 code 之外（下一位置无 code mark）
-        const nextMarks = view.state.doc.resolve(view.state.selection.from).marks();
-        expect(nextMarks.some((m) => m.type.name === "inlineCode")).toBe(false);
+        // 行为级断言：退出后输入 "x"，x 必须是普通文本（不带 inlineCode mark）
+        // （回归：仅移动选区未清 storedMarks，inclusive 边界输入仍是代码——两轮「仍无法移出」）
+        view.dispatch(view.state.tr.insertText("x"));
+        let codeTexts: string[] = [];
+        view.state.doc.descendants((node) => {
+            if (node.marks.some((m) => m.type.name === "inlineCode")) codeTexts.push(node.text ?? "");
+        });
+        expect(codeTexts.some((t) => t.includes("x"))).toBe(false);
     });
 
     it("代码中间按 ArrowRight 应该 放行默认（仍在代码内移动）", async () => {
