@@ -369,6 +369,10 @@ async function initEditor(
         handleRenameImage,
         () => toc.toggle(),
         window.__i18n?.serializationMode ?? "clean",
+        (gaps) => {
+            // 性能探针（临时）：update 间隔落盘，定位中文输入卡顿真实热点
+            notifyDebug(`[perf] gaps=${gaps.join(",")}`);
+        },
     );
     toc.updatePosition(); // 工具栏已就绪，更新 TOC 吸顶位置
     toc.refresh(); // 编辑器初始化完成后刷新一次

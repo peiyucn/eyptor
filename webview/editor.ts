@@ -16,6 +16,7 @@ import {
 } from "@milkdown/kit/preset/commonmark";
 import { toggleStrikethroughCommand, insertTableCommand } from "@milkdown/kit/preset/gfm";
 import type { EditorView } from "@milkdown/kit/prose/view";
+import type { Node as ProseNode } from "@milkdown/kit/prose/model";
 import { undo, redo } from "@milkdown/kit/prose/history";
 import { keymap } from "@milkdown/kit/prose/keymap";
 import { Plugin, NodeSelection, TextSelection, type EditorState } from "@milkdown/kit/prose/state";
@@ -445,6 +446,7 @@ export async function createEditor(
     onRenameImage?: (webviewUri: string, newBasename: string) => Promise<void>,
     onTocToggle?: () => void,
     initialSerializationMode: SerializationMode = "clean",
+    onPerfSample?: (gaps: number[]) => void,
 ): Promise<Editor> {
     _serializationMode = initialSerializationMode;
     _serializationDebug = window.__i18n?.debugMode ?? false;
@@ -457,13 +459,32 @@ export async function createEditor(
     // 架构调整：序列化从「每键推送」（listener markdownUpdated 每键全量序列化，
     // 1 万行基准 52-99ms 尖峰）改为「保存时拉取」——Extension 在自动保存防抖到点
     // 或 Cmd+S 时发 requestContent，webview 才序列化一次回传。输入期间零序列化。
+    // 仅 doc 变化才通知（回归：光标移动/选区变化也是 dispatch，曾误发脏标记，
+    // 未编辑也出现 ● 圆点）
+    let prevDoc: ProseNode | null = null;
+    // 性能探针（临时，发布前移除）：记录两次 update 之间的间隔（ms），
+    // 攒 40 条发一次 debug 消息落盘——定位中文输入卡顿的真实热点
+    let perfLastTs = 0;
+    let perfGaps: number[] = [];
     const updateNotifyPlugin = $prose(() =>
         new Plugin({
             view() {
                 return {
-                    update() {
+                    update(view) {
+                        const now = performance.now();
+                        if (perfLastTs > 0) {
+                            perfGaps.push(Math.round(now - perfLastTs));
+                            if (perfGaps.length >= 40) {
+                                onPerfSample?.(perfGaps);
+                                perfGaps = [];
+                            }
+                        }
+                        perfLastTs = now;
                         if (!isSettled) return;
                         if (!_hasUserInteracted) return;
+                        const doc = view.state.doc;
+                        if (prevDoc !== null && doc.eq(prevDoc)) return;
+                        prevDoc = doc;
                         onDocumentChanged();
                     },
                 };
