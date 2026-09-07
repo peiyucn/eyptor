@@ -82,4 +82,11 @@ describe("WebView 样式", () => {
         expect(getComputedStyle(hiddenBtn).display).toBe("none");
         expect(getComputedStyle(visibleBtn).display).toBe("inline-flex");
     });
+
+    it("表格整行/整列选中工具栏 应该 有 VSCode 变量主题适配规则（回归：官方浅色/独立配色未适配）", () => {
+        // 官方 button-group 依赖 Crepe 变量；本规则直写 --vscode-* 变量对齐编辑器浮层风格
+        expect(styleCss).toContain(".milkdown-table-block .cell-handle .button-group");
+        expect(styleCss).toContain("--vscode-editorWidget-background");
+        expect(styleCss).toContain("--vscode-toolbar-hoverBackground");
+    });
 });

@@ -939,6 +939,31 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     border-radius: 4px;
 }
 
+/* 整行/整列选中工具栏（删除行列 + 对齐按钮）：对齐编辑器浮层风格 */
+.milkdown .milkdown-table-block .cell-handle .button-group {
+    background-color: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+    border: 1px solid var(--vscode-menu-border, var(--vscode-panel-border, rgba(128,128,128,0.35)));
+    border-radius: 5px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+}
+.milkdown .milkdown-table-block .cell-handle .button-group button {
+    margin: 3px;
+    padding: 3px;
+    border-radius: 3px;
+}
+.milkdown .milkdown-table-block .cell-handle .button-group button svg {
+    width: 18px;
+    height: 18px;
+    fill: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
+}
+.milkdown .milkdown-table-block .cell-handle .button-group button:hover {
+    border-radius: 3px;
+    background-color: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2));
+}
+.milkdown .milkdown-table-block .cell-handle .button-group button:active {
+    background: var(--vscode-toolbar-activeBackground, rgba(128,128,128,0.3));
+}
+
 /* 光标 */
 .milkdown .ProseMirror-focused {
     outline: none;
