@@ -21,12 +21,12 @@
   - `normal`（默认）：CJK 文字不拆字断行（`word-break: keep-all`），长英文单词/URL 允许断行（`overflow-wrap: break-word`）
   - `aggressive`：任意字符处断行（`word-break: break-all`），适合长 URL/代码片段
   - `none`：不换行（`white-space: nowrap`），表格横向溢出滚动
-- 配置热更新：沿用现有配置注入机制（`:root` CSS 变量，`_getHtmlForWebview` 按枚举计算 `--epytor-table-word-break` / `--epytor-table-white-space`）
+- 配置热更新：配置变更即时广播（`tableWrapModeChanged` 消息）更新 `:root` CSS 变量，无需重开文档（2026-09-07 补强，此前需重开才生效）
 - 换行模式只影响表格单元格（th/td），不影响表头对齐、单元格手柄等其他表格样式
 
 ## 验收标准
 
-- [ ] 单元格内 Shift+Enter 插入换行，序列化含 `&#10;`（2026-09-07 实证调整：remark-gfm 解析层丢弃 `<br>`，实体往返一致），光标留在单元格内
+- [ ] 单元格内 Shift+Enter 插入换行，序列化含 `<br>`（2026-09-07 实证调整：GFM 标准 `<br>` + 加载时 Extension 转换 `&#10;` 绕过 remark-gfm 解析层丢弃 `<br>` 的上游限制，往返一致），光标留在单元格内
 - [ ] 单元格外 Shift+Enter 行为不变（段落分裂）
 - [ ] 三档切换后单元格换行行为符合预期（含 CJK/长英文/URL 场景）
 - [ ] 表头行同样支持软换行与三档样式
