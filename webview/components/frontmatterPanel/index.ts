@@ -126,7 +126,15 @@ export function createFrontmatterPanel(
     addBtn.setAttribute("aria-label", t("Add"));
     addBtn.addEventListener("click", () => {
         addRow();
-        tbody.querySelector<HTMLInputElement>("tr:last-child .fm-key-input")?.focus();
+        const keyInput = tbody.querySelector<HTMLInputElement>("tr:last-child .fm-key-input");
+        // 双保险聚焦新行 key 框：click 内同步 focus 可能被事件循环后的焦点还原打断，
+        // 下一宏任务再补一次（回归：用户点 + 后输入落到上一行 value 框）
+        keyInput?.focus();
+        setTimeout(() => {
+            if (document.activeElement !== keyInput) {
+                keyInput?.focus();
+            }
+        }, 0);
     });
     panel.appendChild(addBtn);
 

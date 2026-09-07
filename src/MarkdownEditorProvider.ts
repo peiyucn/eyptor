@@ -1,5 +1,4 @@
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 import { MarkdownDocument } from "./MarkdownDocument";
@@ -463,20 +462,6 @@ export class MarkdownEditorProvider
                     frontmatter,
                     this._imageUriMaps.get(uriKey) ?? new Map(),
                 );
-                const debugMode = vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false);
-                if (debugMode) {
-                    console.log("[frontmatterUpdate] received:", JSON.stringify(frontmatter));
-                    console.log("[frontmatterUpdate] assembled-same-as-current:", newContent === null);
-                }
-                // 诊断日志落盘（临时）：定位「新增行无效」断点用，发布前移除
-                try {
-                    fs.appendFileSync(
-                        path.join(os.tmpdir(), "epytor-frontmatter-debug.log"),
-                        `[${new Date().toISOString()}] received=${JSON.stringify(frontmatter)} sameAsCurrent=${newContent === null} uri=${uriKey}\n`,
-                    );
-                } catch {
-                    // 诊断日志失败不影响主流程
-                }
                 if (newContent === null) { break; }
                 document.update(newContent);
                 // 立即写盘而非走 autoSave 防抖：面板编辑（如新增行）后用户往往立刻切到

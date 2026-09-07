@@ -85,4 +85,32 @@ describe("frontmatterPanel 组件", () => {
         vi.advanceTimersByTime(300);
         expect(onChange).toHaveBeenCalledWith("---\ntitle: A\ntags: a, b\n---\n");
     });
+
+    it("点击 + 新增行 应该 聚焦新行 key 输入框（回归：输入落到上一行 value 框）", () => {
+        const onChange = vi.fn();
+        const handle = createFrontmatterPanel("---\ntitle: A\n---\n", onChange)!;
+        document.body.appendChild(handle.panel);
+
+        handle.panel.querySelector<HTMLButtonElement>(".fm-add-btn")!.click();
+
+        const newKey = handle.panel.querySelector<HTMLInputElement>('tr:last-child .fm-key-input')!;
+        expect(document.activeElement).toBe(newKey);
+    });
+
+    it("新增行输入后失焦（blur） 应该 立即回调含新行的序列化结果（不等防抖）", () => {
+        const onChange = vi.fn();
+        const handle = createFrontmatterPanel("---\ntitle: A\n---\n", onChange)!;
+        document.body.appendChild(handle.panel);
+
+        handle.panel.querySelector<HTMLButtonElement>(".fm-add-btn")!.click();
+        const newKey = handle.panel.querySelector<HTMLInputElement>('tr:last-child .fm-key-input')!;
+        const newVal = handle.panel.querySelector<HTMLInputElement>('tr:last-child .fm-val-input')!;
+        newKey.value = "date";
+        newVal.value = "2026-09-07";
+
+        // 失焦立即提交（防抖窗口内切走不丢改动）
+        newVal.dispatchEvent(new FocusEvent("blur"));
+
+        expect(onChange).toHaveBeenCalledWith("---\ntitle: A\ndate: 2026-09-07\n---\n");
+    });
 });
