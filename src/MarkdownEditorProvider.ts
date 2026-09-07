@@ -465,7 +465,24 @@ export class MarkdownEditorProvider
                 );
                 if (newContent === document.getText()) { break; }
                 document.update(newContent);
-                this._scheduleAutoSaveOrMarkDirty(document);
+                // 立即写盘而非走 autoSave 防抖：面板编辑（如新增行）后用户往往立刻切到
+                // 文本编辑器核对源码，防抖窗口内磁盘仍是旧内容 → 误判「新增行无效」
+                const config = vscode.workspace.getConfiguration("epytor");
+                if (config.get<boolean>("autoSave", true)) {
+                    const timer = this._autoSaveTimers.get(uriKey);
+                    if (timer !== undefined) {
+                        clearTimeout(timer);
+                        this._autoSaveTimers.delete(uriKey);
+                    }
+                    const cts = new vscode.CancellationTokenSource();
+                    try {
+                        await this.saveCustomDocument(document, cts.token);
+                    } finally {
+                        cts.dispose();
+                    }
+                } else {
+                    this._markDirty(document);
+                }
                 break;
             }
             case "openUrl":
@@ -571,6 +588,16 @@ export class MarkdownEditorProvider
         }
     }
 
+    /** 手动保存模式：标记 dirty，等待 Cmd+S（autoSave 关闭时用） */
+    private _markDirty(document: MarkdownDocument): void {
+        this._onDidChangeCustomDocument.fire({
+            document,
+            label: "Edit",
+            undo: () => { /* TODO */ },
+            redo: () => { /* TODO */ },
+        });
+    }
+
     private _scheduleAutoSaveOrMarkDirty(document: MarkdownDocument): void {
         const config = vscode.workspace.getConfiguration("epytor");
         const autoSave = config.get<boolean>("autoSave", true);
@@ -603,13 +630,7 @@ export class MarkdownEditorProvider
                 }, delay),
             );
         } else {
-            // 手动保存模式：标记 dirty，等待 Cmd+S
-            this._onDidChangeCustomDocument.fire({
-                document,
-                label: "Edit",
-                undo: () => { /* TODO */ },
-                redo: () => { /* TODO */ },
-            });
+            this._markDirty(document);
         }
     }
 
