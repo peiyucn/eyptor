@@ -143,22 +143,34 @@ const formatKeymapPlugin = $prose((ctx) =>
 );
 
 // 行内代码行尾方向键退出：inclusive mark 右边界 sticky，行尾（后面无代码内容）
-// 按 ArrowRight 明确移出 code mark——@/ ./ 路径在行内代码尾部编辑完成后按右键退出
+// 按 ArrowRight 明确移出 code mark——@/ ./ 路径在行内代码尾部编辑完成后按右键退出。
+// DOM 捕获阶段实现（回归：keymap 方案在真实环境被先注册的官方 keymap/虚拟光标
+// 抢先消费 ArrowRight，行尾退出从未生效；capture + stopPropagation 保证最先处理）
 export const exitInlineCodePlugin = $prose(() =>
-    keymap({
-        ArrowRight: (state, dispatch) => {
-            const { $from, empty } = state.selection;
-            if (!empty) return false;
-            const hasCode = $from.marks().some((m) => m.type.name === "inlineCode");
-            if (!hasCode) return false;
-            if ($from.pos + 1 > state.doc.content.size) return false;
-            const $next = state.doc.resolve($from.pos + 1);
-            // 下一位置仍在 code mark 内 → 放行默认（代码内移动）
-            if ($next.marks().some((m) => m.type.name === "inlineCode")) return false;
-            if (dispatch) {
-                dispatch(state.tr.setSelection(TextSelection.create(state.doc, $from.pos + 1)));
-            }
-            return true;
+    new Plugin({
+        view(view) {
+            const onKeydown = (event: KeyboardEvent) => {
+                if (event.key !== "ArrowRight") return;
+                const { state } = view;
+                const { $from, empty } = state.selection;
+                if (!empty) return;
+                const hasCode = $from.marks().some((m) => m.type.name === "inlineCode");
+                if (!hasCode) return;
+                if ($from.pos + 1 > state.doc.content.size) return;
+                const $next = state.doc.resolve($from.pos + 1);
+                // 下一位置仍在 code mark 内 → 放行默认（代码内移动）
+                if ($next.marks().some((m) => m.type.name === "inlineCode")) return;
+                event.preventDefault();
+                event.stopPropagation();
+                view.dispatch(state.tr.setSelection(TextSelection.create(state.doc, $from.pos + 1)));
+            };
+            view.dom.addEventListener("keydown", onKeydown, true);
+            return {
+                update() { /* noop */ },
+                destroy() {
+                    view.dom.removeEventListener("keydown", onKeydown, true);
+                },
+            };
         },
     }),
 );

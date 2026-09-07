@@ -41,14 +41,10 @@ function getView(editor: Awaited<ReturnType<typeof makeEditor>>): EditorView {
     return editor.action((ctx) => ctx.get(editorViewCtx));
 }
 
-function pressKey(view: EditorView, key: string): boolean {
-    let handled = false;
-    const event = { key, preventDefault() { /* noop */ }, stopPropagation() { /* noop */ } } as unknown as KeyboardEvent;
-    view.someProp("handleKeyDown", (f) => {
-        if (f(view, event)) { handled = true; return true; }
-        return false;
-    });
-    return handled;
+function pressKey(view: EditorView, key: string): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    view.dom.dispatchEvent(event);
+    return event;
 }
 
 afterEach(() => {
@@ -65,8 +61,8 @@ describe("行内代码行尾方向键退出", () => {
         });
         view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, codeEnd)));
 
-        const handled = pressKey(view, "ArrowRight");
-        expect(handled).toBe(true);
+        const event = pressKey(view, "ArrowRight");
+        expect(event.defaultPrevented).toBe(true);
         // 光标移到 code 之外（下一位置无 code mark）
         const nextMarks = view.state.doc.resolve(view.state.selection.from).marks();
         expect(nextMarks.some((m) => m.type.name === "inlineCode")).toBe(false);
@@ -81,8 +77,8 @@ describe("行内代码行尾方向键退出", () => {
         });
         view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, codeStart)));
 
-        const handled = pressKey(view, "ArrowRight");
-        // 下一位置仍在 code mark 内 → 插件放行（返回 false），由内置处理移动
-        expect(handled).toBe(false);
+        const event = pressKey(view, "ArrowRight");
+        // 下一位置仍在 code mark 内 → 插件放行（不拦截），由内置处理移动
+        expect(event.defaultPrevented).toBe(false);
     });
 });
