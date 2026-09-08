@@ -95,17 +95,17 @@
 
 **风险**：低。手测：预览↔文本双向切换、preview（斜体）tab 状态保持、同一文件双 group。
 
-### 🟠 E7 · 图片往返口径不对称：显示侧语法范围替换 vs 保存侧全文 split/join 全局替换；uriMap 五处写入三种 relPath 格式
+### 🟠 E7 · 图片往返口径不对称：显示侧语法范围替换 vs 保存侧全文 split/join 全局替换 ✅ 2026-09-08 已修
 
-**位置**：`src/utils/contentTransform.ts:22-32,86-113`；`src/MarkdownEditorProvider.ts:892-917,935-942,1005-1010,1151-1164,1188-1195`
+**位置**：`src/utils/contentTransform.ts`；`src/MarkdownEditorProvider.ts`（`_prepareContentForDisplay` / `_registerImageMapping`）
 
-**当前机制**：显示侧用 extractImageSyntaxes 只替换图片语法内的 src（两轮回归加固产物）；保存侧 `restoreContentForSave` 对全文做 `split(webviewUri).join(relPath)`——不限定语法位置，**代码围栏/正文里的 webviewUri 字符串也会被改写**。uriMap 由 **6** 处写入（显示预处理 :904、上传 :941、项目图库 :1010、重命名 :1076、路径补全 :1160、按需解析 :1194，已 grep 实证），relPath 归一化口径三种（'./x' / 无 './' / 调用方原样）。
+**原机制**：显示侧用 extractImageSyntaxes 只替换图片语法内的 src（两轮回归加固产物）；保存侧 `restoreContentForSave` 对全文做 `split(webviewUri).join(relPath)`——不限定语法位置，代码围栏/正文里的 webviewUri 字符串也会被改写。uriMap 由 6 处写入，relPath 归一化口径三种。
 
-**为何过度**（④重复路径）：该往返链路已两度真实回归（src 截断写畸形内容、title 被吞 404）——注释自己记录了；保存侧却用比显示侧**更宽**的替换域，是「保存往返改写内容」类事故的第三个潜在入口。webview 侧还镜像维护第二份 _uriToRel/_relToUri。
+**实际修复**：显示侧与保存侧共用单遍 `rewriteImageSources(markdown, resolve)`（唯一替换域 = 图片语法 src）；`extractImageSyntaxes`/`rebuildImageSyntax` 两个只被测试引用的死导出删除（其正则不变量改由 rewriteImageSources 的用例覆盖）。
 
-**简化方案**：保存侧与显示侧对齐——restoreContentForSave 复用 extractImageSyntaxes 语法范围替换；uriMap 写入收敛为单一 `registerImageMapping(uriKey, webviewUri, relPath)`（统一 path.relative 归一化）；补「代码围栏内 webviewUri 字符串不被保存改写」回归用例。
+**顺带修掉的真 bug（复核时实证）**：mdast 序列化会把含括号的目标写成 `\(`、含空格的目标包 `<...>`（probe 实测：`a_b(c).png` → `a_b\(c\).png`、`my file (v2).png` → `<my file (v2).png>`）。旧实现按字面量匹配 → 这两类路径的 webviewUri **会泄漏进磁盘文件**。新增 `normalizeImageDestination`（还原转义 + 去尖括号）用于比对；uriMap 值仍存文件原始写法，往返一字不差。
 
-**风险**：低-中。需覆盖 URI 含括号/空格与序列化转义形态；回退=恢复 split/join。
+**uriMap 写入收敛**：6 处 `get-or-create + set` 样板合并为 `_registerImageMapping(uriKey, webviewUri, displayPath)`。未做「统一 path.relative 归一化」——各调用方的 displayPath 语义本就不同（显示预处理存文件原文、上传/图库/补全/解析存待插入的相对路径），强行归一反而破坏往返。
 
 ### ⚪ E8 · 死机制残留三件：scrollPanelToLine / _pinnedDocuments / ExpiryWindowMap.purgeExpired
 
@@ -272,15 +272,13 @@ mousedown 已 preventDefault+stopPropagation 防夺焦，click 里仍叠三层�
 
 **简化方案**：删二三层保险（保留同步 focus），实测若焦点仍被夺回再单层补回并注释定位到的抢夺者。**风险**：低（前端交互细节）。
 
-### 🟠 P8 · imageView webview 侧 uriMap 双份镜像与 Extension 不同步（重命名后即陈旧，靠三级回退兜底）
+### 🟠 P8 · imageView webview 侧 uriMap 双份镜像与 Extension 不同步（重命名后即陈旧）✅ 2026-09-08 已修
 
-**位置**：`webview/components/imageView/index.ts:30-41,593-604`；`webview/index.ts:707,791-816`；`src/MarkdownEditorProvider.ts:63,518`
+**位置**：`webview/components/imageView/index.ts:29-46,593-604`；`webview/index.ts:697,796-822`
 
-**当前机制**：Extension 单份 `_imageUriMaps` 全量下发；webview 收到后拆成 `_uriToRel`/`_relToUri` 双向两张 Map；确认路径时三级回退链（dataset 缓存 → 查 _relToUri → `resolveToWebviewUri` 异步解析）。**imageRenamed 处理器只改 ProseMirror 文档 src、不更新这两张 Map**——重命名后 _relToUri 旧映射保留到下次 init/revert 才刷新，陈旧镜像靠第③级异步解析兜底。
+**原机制**：Extension 单份 `_imageUriMaps` 全量下发；webview 收到后拆成 `_uriToRel`/`_relToUri` 双向两张 Map；确认路径时三级回退链（dataset 缓存 → 查 _relToUri → `resolveToWebviewUri` 异步解析）。**imageRenamed 处理器只改 ProseMirror 文档 src、不更新这两张 Map**——重命名后 _relToUri 旧映射保留到下次 init/revert 才刷新，陈旧镜像靠第③级异步解析兜底。
 
-**为何过度**（④重复路径 + ①补偿性）：双向镜像 + 三级回退是「本地即时翻译」与「远端权威解析」两套机制并存；rel→uri 方向的即时性收益极小（确认一次图片路径多一跳 ≤3s 超时往返，失败本就回退原值），却引入同步面（rename 漏同步已实锤）。
-
-**简化方案**：webview 只保留 `_uriToRel`（展示用）；确认时一律 `resolveToWebviewUri(displayVal)`，删 `_relToUri` 与回退分支②。**风险**：低（确认路径多一次已有超时兜底的往返）。
+**实际修复**：删 `_relToUri` 与 `toWebviewUri`、删回退分支②——webview 只保留展示用的 `_uriToRel`，确认时一律 `resolveToWebviewUri()`（已有 3s 超时回退）。补 `resolveToWebviewUri` 两例单测（回包解析 + 超时回退原值）。
 
 ### 🟠 P9 · TOC 点击跳转按「level+全文」反查 pos：补偿陈旧 pos 且同文标题必跳错（每次点击 O(n) 扫描）
 
@@ -388,11 +386,14 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 **第三批（结构性收敛）部分完成 2026-09-08**：E3/C2（双生机制整套删除，净删 ~110 行）、E5 部分（1s 复查定时器 + directOnly 语义）、F2（重试计划统一）、C3（生命周期 payload 工厂）、C6/F5（visibilitychange 删除）、E9（状态栏统一刷新）、E10（配置广播表驱动）、P7（聚焦层数）、P9（TOC 改存 DOM 引用）、B4（.markdown 对齐）、B6（CI Job Summary + 文档修正）、B3（debugMode 单命令）、B5（onStartupFinished）、P11（tech-debt 登记）
 
-**剩余（下轮继续）**：E4 保存路径统一、E6/C5 双向命令与快捷键合并、E7 图片往返口径、F4 交互跟踪合一、P4/C4 补全生命周期与注册表统一、P8 图片 uriMap 单向化、P6 TOC 折叠键、P5 表格换行 handler 化、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
+**剩余（下轮继续）**：E4 保存路径统一、E6/C5 双向命令与快捷键合并、F4 交互跟踪合一、P4/C4 补全生命周期与注册表统一、P5 表格换行 handler 化、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
 
-**第四批（用户实测反馈的两项严重问题）**：
+**第四批（用户实测反馈的两项严重问题 + 复核中新发现）**：
 
 * ✅ **F3** CodeMirror 主题补配观察器无限回环（2026-09-08）——观察器抽到 `webview/utils/cmThemeObserver.ts` 并加数量守卫；回归测试 `webview/__tests__/cmThemeObserver.test.ts`（含真实 CodeMirror + 语法高亮的回环复现）。用户反馈「开着 md 页面时整个 VS Code 输入卡顿、切换别的 webview 时整窗口闪动，关闭 md 页面后消失」的根因：观察器对任何 childList 变更都排重配，而 reconfigure 自身产生 childList 变更 → 10ms 一次无限回环。
+* ✅ **P6** TOC 折叠键同名同级共享（2026-09-08）——键加出现序号 `level:text#nth`。
+* ✅ **P8** 图片 uriMap 反向镜像删除（2026-09-08）——确认路径统一走 Extension 解析。
+* ✅ **E7** 图片往返替换域统一（2026-09-08）——并修掉「括号/空格路径的 webviewUri 泄漏进磁盘」真 bug。
 
 ***
 

@@ -6,7 +6,7 @@ import { getNonce } from "./utils/getNonce";
 import { ZH_CN_WEBVIEW } from "./i18n/webviewTranslations";
 import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
 import { computeLineMap } from "./utils/lineMap";
-import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter, extractImageSyntaxes, rebuildImageSyntax } from "./utils/contentTransform";
+import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter, normalizeImageDestination, rewriteImageSources } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
 import { sanitizeBasename } from "./utils/safeBasename";
@@ -843,35 +843,47 @@ export class MarkdownEditorProvider
         const mdDir = path.dirname(document.uri.fsPath);
         const workspaceRoot = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath
             ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const uriMap = this._imageUriMaps.get(uriKey) ?? new Map<string, string>();
-        this._imageUriMaps.set(uriKey, uriMap);
-        // 逐图替换：extractImageSyntaxes 的 src 捕获支持空格与嵌套括号、title 单独捕获
+        // 逐图替换：rewriteImageSources 的 src 捕获支持空格与嵌套括号、title 单独捕获
         // （回归①：旧正则 [^)\s"]+ 在空格/括号处截断，显示破裂且保存往返改写畸形内容；
-        //  回归②：src 吞 title 致带引号路径 404 图片不显示，rebuildImageSyntax 只换 src 保 title）
-        let result = content;
-        for (const m of extractImageSyntaxes(content)) {
-            if (/^(https?:|data:|vscode-resource:|vscode-webview-)/.test(m.src)) { continue; }
+        //  回归②：src 吞 title 致带引号路径 404 图片不显示，只换 src 保 title）
+        // 归一化：文件里 `<...>` 包裹或 `\(` 转义的目标按可解析路径处理，uriMap 仍存原始写法
+        return rewriteImageSources(content, (rawSrc) => {
+            if (/^(https?:|data:|vscode-resource:|vscode-webview-)/.test(rawSrc)) { return undefined; }
+            const src = normalizeImageDestination(rawSrc);
             try {
                 let absPath: string;
-                if (m.src.startsWith('@/')) {
+                if (src.startsWith('@/')) {
                     // @/ 是 workspace root 别名，解析到工作区根目录
                     const root = workspaceRoot ?? mdDir;
-                    absPath = path.join(root, m.src.slice(2));
+                    absPath = path.join(root, src.slice(2));
                 } else {
-                    absPath = path.resolve(mdDir, m.src);
+                    absPath = path.resolve(mdDir, src);
                 }
                 const webviewUri = panel.webview.asWebviewUri(vscode.Uri.file(absPath)).toString();
-                uriMap.set(webviewUri, m.src);
-                result = result.split(m.fullMatch).join(rebuildImageSyntax(m, webviewUri));
+                this._registerImageMapping(uriKey, webviewUri, rawSrc);
+                return webviewUri;
             } catch {
                 // 解析失败：原样保留（不登记 uriMap）
+                return undefined;
             }
-        }
-        return result;
+        });
     }
 
-    private _prepareContentForSave(content: string, uriKey: string): string {
-        const frontmatter = this._frontmatterMap.get(uriKey) ?? "";
+    /**
+     * 登记图片映射（本文件 uriMap 的唯一写入入口）：webviewUri → 文档里的显示写法。
+     * 各调用方的 displayPath 语义不同但都必须是「写进文档的那个字符串」——显示预处理
+     * 存文件原文（含 `<...>`/转义），上传/图库/补全/解析存待插入的相对路径。
+     */
+    private _registerImageMapping(uriKey: string, webviewUri: string, displayPath: string): void {
+        let uriMap = this._imageUriMaps.get(uriKey);
+        if (!uriMap) {
+            uriMap = new Map<string, string>();
+            this._imageUriMaps.set(uriKey, uriMap);
+        }
+        uriMap.set(webviewUri, displayPath);
+    }
+
+    private _prepareContentForSave(content: string, uriKey: string): string {        const frontmatter = this._frontmatterMap.get(uriKey) ?? "";
         const uriMap = this._imageUriMaps.get(uriKey) ?? new Map<string, string>();
         return restoreContentForSave(content, frontmatter, uriMap);
     }
@@ -896,9 +908,7 @@ export class MarkdownEditorProvider
                 const webviewUri = panel.webview.asWebviewUri(absUri);
                 url = webviewUri.toString();
                 // 存储映射，供保存时将 webviewUri 替换回 relPath
-                const uriMap = this._imageUriMaps.get(uriKey) ?? new Map<string, string>();
-                this._imageUriMaps.set(uriKey, uriMap);
-                uriMap.set(url, relPath);
+                this._registerImageMapping(uriKey, url, relPath);
             }
             panel.webview.postMessage({ type: 'imageUploaded', id, url });
         } catch (e) {
@@ -952,8 +962,6 @@ export class MarkdownEditorProvider
 
         if (targetDir) {
             const mdDir = document.uri.scheme === 'file' ? path.dirname(document.uri.fsPath) : '';
-            const uriMap = this._imageUriMaps.get(uriKey) ?? new Map<string, string>();
-            this._imageUriMaps.set(uriKey, uriMap);
             try {
                 const entries = await vscode.workspace.fs.readDirectory(targetDir);
                 for (const [name, type] of entries) {
@@ -967,7 +975,7 @@ export class MarkdownEditorProvider
                         const rel = path.relative(mdDir, fileUri.fsPath).replace(/\\/g, '/');
                         relPath = rel.startsWith('.') ? rel : './' + rel;
                     }
-                    uriMap.set(wvUri, relPath);
+                    this._registerImageMapping(uriKey, wvUri, relPath);
                     images.push({ relPath, webviewUri: wvUri, name });
                 }
             } catch { /* directory not accessible */ }
@@ -1033,7 +1041,7 @@ export class MarkdownEditorProvider
             const newWebviewUri = panel.webview.asWebviewUri(targetUri).toString();
 
             uriMap.delete(webviewUri);
-            uriMap.set(newWebviewUri, newRelPath);
+            this._registerImageMapping(uriKey, newWebviewUri, newRelPath);
 
             panel.webview.postMessage({ type: 'imageRenamed', id, oldWebviewUri: webviewUri, newWebviewUri });
         } catch (e) {
@@ -1092,8 +1100,6 @@ export class MarkdownEditorProvider
         const IGNORE = new Set(['node_modules', '.git', 'dist', '.DS_Store', 'out', '.vscode-test']);
         const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.tiff', '.ico']);
         const uriKey = document.uri.toString();
-        const uriMap = this._imageUriMaps.get(uriKey) ?? new Map<string, string>();
-        this._imageUriMaps.set(uriKey, uriMap);
         const items = entries
             .filter(([name, type]) =>
                 !IGNORE.has(name) &&
@@ -1117,7 +1123,7 @@ export class MarkdownEditorProvider
                         const absFilePath = path.join(absDir, name);
                         webviewUri = panel.webview.asWebviewUri(vscode.Uri.file(absFilePath)).toString();
                         // 登记映射，供 _prepareContentForSave 在保存时转换回相对路径
-                        uriMap.set(webviewUri, fullPath);
+                        this._registerImageMapping(uriKey, webviewUri, fullPath);
                     }
                 }
                 return { path: fullPath, isDir: type === vscode.FileType.Directory, webviewUri };
@@ -1149,9 +1155,7 @@ export class MarkdownEditorProvider
             if (!fs.existsSync(absPath)) { return; }
             const webviewUri = panel.webview.asWebviewUri(vscode.Uri.file(absPath)).toString();
             // 登记映射供保存时还原
-            const uriMap = this._imageUriMaps.get(uriKey) ?? new Map<string, string>();
-            this._imageUriMaps.set(uriKey, uriMap);
-            uriMap.set(webviewUri, relPath);
+            this._registerImageMapping(uriKey, webviewUri, relPath);
             panel.webview.postMessage({ type: 'imagePathResolved', id, webviewUri });
         } catch { /* 路径非法，不响应 */ }
     }
