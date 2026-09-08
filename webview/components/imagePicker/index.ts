@@ -2,7 +2,7 @@ import "./imagePicker.css";
 import { t } from "@/i18n";
 import { attachImgPathComplete } from "../imageView/imgPathComplete";
 
-type OnPick = (file: File) => void;
+type OnPick = (file: File) => Promise<unknown>;
 type OnSelectProject = (relPath: string) => void;
 type OnUrl = (url: string) => void;
 
@@ -55,8 +55,15 @@ export function showImagePicker(
     const fileInput = document.createElement("input");
     fileInput.type = "file"; fileInput.accept = "image/*";
     fileInput.style.display = "none";
-    dropZone.appendChild(fileInput);
+    // 不放进 dropZone：dropZone 的 click 处理器会调 fileInput.click()，若 input 嵌套其内，
+    // 合成 click 冒泡回 dropZone 将形成无界递归（回归：RangeError call stack 溢出）
+    panelUpload.appendChild(fileInput);
     panelUpload.appendChild(dropZone);
+    // 上传状态行（进行中/失败提示；默认隐藏）
+    const uploadStatus = document.createElement("div");
+    uploadStatus.className = "epytor-img-picker-status";
+    uploadStatus.style.display = "none";
+    panelUpload.appendChild(uploadStatus);
 
     // URL panel
     const panelUrl = document.createElement("div");
@@ -106,6 +113,21 @@ export function showImagePicker(
     };
     overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) close(); });
 
+    // 上传提交：对话框保持打开直到成功（成功才关闭），失败展示错误并允许重试——
+    // 回归：选完文件立即关闭 + 宿主空 catch，上传失败完全静默、用户反复重试不知原因
+    async function submitFile(file: File): Promise<void> {
+        dropZone.style.pointerEvents = "none";
+        uploadStatus.style.display = "";
+        uploadStatus.textContent = t("Uploading...");
+        try {
+            await onPick(file);
+            close();
+        } catch {
+            dropZone.style.pointerEvents = "";
+            uploadStatus.textContent = t("Upload failed");
+        }
+    }
+
     // Upload events
     dropZone.addEventListener("click", () => fileInput.click());
     dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); });
@@ -114,11 +136,12 @@ export function showImagePicker(
         e.preventDefault();
         dropZone.classList.remove("drag-over");
         const f = e.dataTransfer?.files?.[0];
-        if (f?.type.startsWith("image/")) { onPick(f); close(); }
+        if (f?.type.startsWith("image/")) { void submitFile(f); }
     });
     fileInput.addEventListener("change", () => {
         const f = fileInput.files?.[0];
-        if (f) { onPick(f); close(); }
+        fileInput.value = ""; // 同一文件重选也能再次触发 change（失败重试用）
+        if (f) { void submitFile(f); }
     });
 
     // Project images

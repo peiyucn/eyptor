@@ -442,7 +442,8 @@ if (editorContainer) {
     document.addEventListener('epytor:insertImage', () => {
         showImagePicker(
             (file) => {
-                handleImageFile(file, '').then(url => insertImageNode(url, '')).catch(() => {});
+                // 错误向上传播给选择器展示（回归：此处空 catch 吞掉失败，选完文件无事发生）
+                return handleImageFile(file, '').then(url => insertImageNode(url, ''));
             },
             (relPath) => {
                 insertImageNode(relPath, '');

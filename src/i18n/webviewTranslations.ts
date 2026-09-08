@@ -56,6 +56,7 @@ export const ZH_CN_WEBVIEW: Record<string, string> = {
     'Selecting...': '选择中...',
     'Click to select or drag image here': '点击选择或拖拽图片到此处',
     'Uploading...': '上传中...',
+    'Upload failed': '图片上传失败',
     'Loading...': '加载中...',
     'No images found': '未找到图片',
     'Failed to load images': '图片加载失败',
