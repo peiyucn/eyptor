@@ -372,6 +372,10 @@ let _editor: Editor | null = null;
 let _savedMarkdown = '';
 /** CodeMirror 主题补配 MutationObserver（编辑器重建时先断开旧的） */
 let _cmObserver: MutationObserver | null = null;
+/** 主题订阅退订句柄（createEditor 订阅、destroyEditor 退订）——
+ * 回归：退订函数曾被丢弃，init/revert 每次重建向 themeBus 泄漏一个监听器，
+ * 闭包持有整篇旧文档的 mermaidCodeMap 且主题切换时重放全部旧回调 */
+let _unsubscribeTheme: (() => void) | null = null;
 let _hasUserInteracted = false;
 let _interactionListenerAdded = false;
 let _serializationMode: SerializationMode = "clean";
@@ -426,6 +430,19 @@ function setupInteractionTracking(): void {
 export function getEditorView(): EditorView | null {
     if (!_editor) return null;
     return _editor.action((ctx) => ctx.get(editorViewCtx));
+}
+
+/**
+ * 销毁当前编辑器并清理其侧效应（主题订阅、CodeMirror 观察器、模块引用）；幂等。
+ * revert/重建前由宿主调用（替代直接 _editor.destroy()）。
+ */
+export function destroyEditor(): void {
+    _unsubscribeTheme?.();
+    _unsubscribeTheme = null;
+    _cmObserver?.disconnect();
+    _cmObserver = null;
+    _editor?.destroy();
+    _editor = null;
 }
 
 /**
@@ -517,7 +534,7 @@ export async function createEditor(
         return mermaid.render(id, code).then(({ svg }) => svg);
     };
 
-    onThemeChange((dark) => {
+    _unsubscribeTheme = onThemeChange((dark) => {
         isDark = dark;
         mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
         // 重绘已有 mermaid 预览

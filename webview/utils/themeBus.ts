@@ -14,6 +14,11 @@ export function onThemeChange(fn: ThemeListener): () => void {
     return () => listeners.delete(fn);
 }
 
+/** 当前订阅者数量（测试观测口：编辑器重建泄漏回归断言「重建 N 次后数量不变」） */
+export function getThemeListenerCount(): number {
+    return listeners.size;
+}
+
 // 单例 Observer 监听 body class 变化
 let started = false;
 function start(): void {

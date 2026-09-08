@@ -16,6 +16,7 @@ import { applyTableWrapVars } from "./utils/tableWrap";
 import { computeHeadingSignature } from "./utils/headingFold";
 import {
     createEditor,
+    destroyEditor,
     getEditorView,
     getMarkdownForSave,
     registerSelectionChangeHandler,
@@ -283,6 +284,20 @@ let _tocRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 /** 上次 TOC 刷新的标题签名（标题结构未变则跳过重建） */
 let _lastTocSignature = "";
 
+/** 释放两个防抖 timer（编辑器销毁/重建前调用）——旧防抖回调会污染新文档：
+ * 回归：revert 重建编辑器未清理 timer，≤300ms 后旧回调把已还原的文档标脏、
+ * 旧 _tocRefreshTimer 对新 view 做多余全量刷新 */
+function releaseDocTimers(): void {
+    if (_docChangedTimer !== null) {
+        clearTimeout(_docChangedTimer);
+        _docChangedTimer = null;
+    }
+    if (_tocRefreshTimer !== null) {
+        clearTimeout(_tocRefreshTimer);
+        _tocRefreshTimer = null;
+    }
+}
+
 function renderFrontmatterPanel(frontmatter: string | undefined): void {
     const editorEl = document.getElementById('editor');
     if (!frontmatter) {
@@ -344,11 +359,12 @@ async function initEditor(
     container: HTMLElement,
     markdown: string,
 ): Promise<void> {
-    // 销毁旧编辑器（revert 时使用）
+    // 销毁旧编辑器（revert 时使用）；destroyEditor 会连带清理主题订阅与观察器
     if (currentEditor) {
-        currentEditor.destroy();
+        destroyEditor();
         currentEditor = null;
         container.innerHTML = "";
+        releaseDocTimers();
         _topBarOverflowCtl?.dispose();
         _topBarOverflowCtl = null;
     }
