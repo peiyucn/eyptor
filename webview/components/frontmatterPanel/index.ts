@@ -187,18 +187,10 @@ export function createFrontmatterPanel(
     addBtn.addEventListener("click", () => {
         appendRow();
         const keyInput = tbody.querySelector<HTMLInputElement>("tr:last-child .fm-key-input");
-        // 三重聚焦保险：click 同步 + 下一宏任务 + 下一帧；任一环节焦点被夺回都能补回
+        // 聚焦新行 key 框：mousedown 的 preventDefault 已消除按钮夺焦的根因，
+        // 同步 focus 即可（回归 P7：此前叠了「同步 + setTimeout(0) + rAF」三层保险，
+        // 但从未定位到具体夺焦者；若实测仍被夺焦，再按定位到的原因补一层）
         keyInput?.focus();
-        setTimeout(() => {
-            if (document.activeElement !== keyInput) {
-                keyInput?.focus();
-            }
-        }, 0);
-        requestAnimationFrame(() => {
-            if (document.activeElement !== keyInput) {
-                keyInput?.focus();
-            }
-        });
     });
     panel.appendChild(addBtn);
 
