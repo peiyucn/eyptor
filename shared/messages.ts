@@ -27,10 +27,9 @@ export type ToExtensionMessage =
     | { type: "update"; content: string }
     | { type: "markDirty" }
     | { type: "contentResponse"; content: string }
-    | { type: "frontmatterUpdate"; frontmatter: string; debug?: { activeClass: string; activeValue: string } }
+    | { type: "frontmatterUpdate"; frontmatter: string }
     | { type: "openUrl"; url: string }
     | { type: "openFile"; path: string }
-    | { type: "debug"; message: string }
     | { type: "switchToTextEditor"; line?: number }
     | { type: "openSettings" }
     | { type: "uploadImage"; id: string; data: Uint8Array; mimeType: string; altText: string }

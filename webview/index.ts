@@ -30,7 +30,6 @@ import {
     notifyMarkDirty,
     notifyContentResponse,
     notifyFrontmatterUpdate,
-    notifyDebug,
     onMessage,
     notifySwitchToTextEditor,
     notifyUploadImage,
@@ -295,12 +294,7 @@ function renderFrontmatterPanel(frontmatter: string | undefined): void {
     // 重建前先 dispose 旧实例，取消其防抖 timer（防止 revert 后旧编辑写回）
     _frontmatterPanelHandle?.dispose();
     _frontmatterPanelHandle = createFrontmatterPanel(frontmatter, (serialized) => {
-        // 诊断（临时）：把保存瞬间的焦点快照一并送回，定位「加行输入不进新行」
-        const active = document.activeElement;
-        notifyFrontmatterUpdate(serialized, {
-            activeClass: active instanceof HTMLElement ? active.className : String(active?.nodeName ?? ""),
-            activeValue: active instanceof HTMLInputElement ? active.value : "",
-        });
+        notifyFrontmatterUpdate(serialized);
     });
     if (!_frontmatterPanelHandle) {
         if (editorEl) { editorEl.style.paddingTop = ''; }
@@ -387,10 +381,6 @@ async function initEditor(
         handleRenameImage,
         () => toc.toggle(),
         window.__i18n?.serializationMode ?? "clean",
-        (gaps) => {
-            // 性能探针（临时）：update 间隔落盘，定位中文输入卡顿真实热点
-            notifyDebug(`[perf] gaps=${gaps.join(",")}`);
-        },
     );
     toc.updatePosition(); // 工具栏已就绪，更新 TOC 吸顶位置
     toc.refresh(); // 编辑器初始化完成后刷新一次
@@ -841,27 +831,6 @@ for (const evt of ["wheel", "mousedown", "keydown", "touchstart"] as const) {
         { passive: true },
     );
 }
-
-// 焦点诊断（临时，发布前移除）：记录焦点/可见性事件，定位「切回后焦点异常」
-// （删除一个字再编辑 / IME 候选框跑到左上角 / 有时无焦点）
-for (const evt of ["focusin", "focusout"] as const) {
-    document.addEventListener(evt, (e) => {
-        const t = e.target as Element;
-        const desc =
-            t instanceof HTMLElement
-                ? `${t.tagName.toLowerCase()}.${t.className}`
-                : String(t?.nodeName ?? "unknown");
-        notifyDebug(`[focus] ${evt} -> ${desc}`);
-    });
-}
-document.addEventListener("visibilitychange", () => {
-    const active = document.activeElement;
-    const desc =
-        active instanceof HTMLElement
-            ? `${active.tagName.toLowerCase()}.${active.className}`
-            : String(active?.nodeName ?? "none");
-    notifyDebug(`[visibility] ${document.visibilityState} active=${desc}`);
-});
 
 // 监听来自 Extension 侧的消息
 onMessage(async (msg) => {

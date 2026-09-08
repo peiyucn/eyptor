@@ -1,5 +1,4 @@
 import * as fs from "fs";
-import * as os from "os";
 import * as path from "path";
 import * as vscode from "vscode";
 import { MarkdownDocument } from "./MarkdownDocument";
@@ -493,15 +492,6 @@ export class MarkdownEditorProvider
                     frontmatter,
                     this._imageUriMaps.get(uriKey) ?? new Map(),
                 );
-                // 诊断日志落盘（临时，发布前移除）
-                try {
-                    fs.appendFileSync(
-                        path.join(os.tmpdir(), "epytor-frontmatter-debug.log"),
-                        `[${new Date().toISOString()}] rows=${frontmatter.split("\n").filter((l) => l.includes(":")).length} same=${newContent === null} active=${JSON.stringify(message.debug ?? {})} fm=${JSON.stringify(frontmatter)}\n`,
-                    );
-                } catch {
-                    // 忽略
-                }
                 if (newContent === null) { break; }
                 document.update(newContent);
                 // 立即写盘：面板编辑后用户往往立刻切到文本编辑器核对源码。
@@ -516,18 +506,6 @@ export class MarkdownEditorProvider
                     }
                 } finally {
                     cts.dispose();
-                }
-                break;
-            }
-            case "debug": {
-                // 诊断日志落盘（临时，发布前移除）：焦点/可见性事件，定位切回后焦点异常
-                try {
-                    fs.appendFileSync(
-                        path.join(os.tmpdir(), "epytor-focus-debug.log"),
-                        `[${new Date().toISOString()}] ${message.message}\n`,
-                    );
-                } catch {
-                    // 忽略
                 }
                 break;
             }

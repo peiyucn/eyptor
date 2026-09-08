@@ -30,15 +30,8 @@ export function notifyContentResponse(content: string): void {
     vscode.postMessage({ type: "contentResponse", content });
 }
 
-export function notifyFrontmatterUpdate(
-    frontmatter: string,
-    debug?: { activeClass: string; activeValue: string },
-): void {
-    vscode.postMessage({ type: "frontmatterUpdate", frontmatter, debug });
-}
-
-export function notifyDebug(message: string): void {
-    vscode.postMessage({ type: "debug", message });
+export function notifyFrontmatterUpdate(frontmatter: string): void {
+    vscode.postMessage({ type: "frontmatterUpdate", frontmatter });
 }
 
 export function notifyOpenUrl(url: string): void {

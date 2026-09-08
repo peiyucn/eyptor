@@ -448,7 +448,6 @@ export async function createEditor(
     onRenameImage?: (webviewUri: string, newBasename: string) => Promise<void>,
     onTocToggle?: () => void,
     initialSerializationMode: SerializationMode = "clean",
-    onPerfSample?: (gaps: number[]) => void,
 ): Promise<Editor> {
     _serializationMode = initialSerializationMode;
     _serializationDebug = window.__i18n?.debugMode ?? false;
@@ -464,24 +463,11 @@ export async function createEditor(
     // 仅 doc 变化才通知（回归：光标移动/选区变化也是 dispatch，曾误发脏标记，
     // 未编辑也出现 ● 圆点）
     let prevDoc: ProseNode | null = null;
-    // 性能探针（临时，发布前移除）：记录两次 update 之间的间隔（ms），
-    // 攒 40 条发一次 debug 消息落盘——定位中文输入卡顿的真实热点
-    let perfLastTs = 0;
-    let perfGaps: number[] = [];
     const updateNotifyPlugin = $prose(() =>
         new Plugin({
             view() {
                 return {
                     update(view) {
-                        const now = performance.now();
-                        if (perfLastTs > 0) {
-                            perfGaps.push(Math.round(now - perfLastTs));
-                            if (perfGaps.length >= 40) {
-                                onPerfSample?.(perfGaps);
-                                perfGaps = [];
-                            }
-                        }
-                        perfLastTs = now;
                         if (!isSettled) return;
                         if (!_hasUserInteracted) return;
                         const doc = view.state.doc;
