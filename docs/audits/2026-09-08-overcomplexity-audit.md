@@ -231,17 +231,17 @@ serializeCleanMarkdown 全是 split/map/replace 纯字符串操作，无 throw �
 
 **风险**：极低。
 
-### 🟠 P4 · 补全下拉请求生命周期仍双份逐行镜像（防抖/超时/过期守卫/retrigger/失焦关闭）；pathSuggestions 双派发；tech-debt「剩余镜像全清」账实不符
+### 🟠 P4/C4 · 补全请求生命周期两套手写实现 + pathSuggestions 双派发 ✅ 2026-09-08 已修（请求生命周期部分）
 
-**位置**：`webview/components/pathLink/pathComplete.ts` vs `webview/components/imageView/imgPathComplete.ts`；`webview/ui/pathCompleteCore.ts`；`webview/index.ts:820-822`；`docs/tech-debt.md:39`
+**位置**：`webview/utils/pathSuggestionRequests.ts`（新）；`webview/components/pathLink/pathComplete.ts`；`webview/components/imageView/imgPathComplete.ts`；`webview/index.ts`；`shared/constants.ts`
 
-**当前机制**：pathCompleteCore 只收敛了「下拉渲染 + 键盘导航」；两个调用方各自保留逐字相同的 PATH_PREFIX_REGEX、id 生成 + pending map + 5s 超时清理、50ms retrigger、200ms 防抖、blur/doc-mousedown 关闭（约 100 行/文件镜像）。index.ts 对每条 pathSuggestions 同时派发两个模块。
+**原机制**：两个调用方各自保留「手写 id 生成 + pending Map + 5s 超时清理」——与 `PendingRequestRegistry` 是同一套逻辑的第三、第四份实现（且更弱：无 settled 双保险）；`PATH_PREFIX_REGEX`、防抖/超时常量双份；index.ts 对每条 pathSuggestions 同时派发给两个模块。
 
-**为何过度**（④重复路径）：修一处（过期守卫/超时值/防抖时长）必须改两处；tech-debt.md:39 记录的「剩余镜像全清」与代码事实不符；双派发是 ps_/ips_ 前缀命名空间硬造出的补偿。
+**实际修复**：新增 `utils/pathSuggestionRequests.ts`——单一 `PendingRequestRegistry<PathSuggestionItem[]>` + 单一回包入口 `resolvePathSuggestionRequest(id, items)`；两处手写 Map/setTimeout 删除；index.ts 双派发变单调用；`PATH_PREFIX_REGEX`/`PATH_SUGGESTION_TIMEOUT_MS`/`PATH_COMPLETE_DEBOUNCE_MS`/`PATH_COMPLETE_RETRIGGER_DELAY_MS` 收编 `shared/constants.ts`。
 
-**简化方案**：提取 `createSuggestionRequester({ idPrefix, filter, onItems })` 到 pathCompleteCore，两调用方只留 input 绑定与差异化渲染；删双派发改单注册表；修正 tech-debt 记录口径。
+**未做（记录理由）**：原方案还要求提取 `createSuggestionRequester({idPrefix, filter, onItems})` 把两个组件的「防抖 / 过期守卫 / retrigger / 失焦关闭」也合一。复核后判定不划算：两者触发源不同（ProseMirror 选区 inlineCode vs `<input>`）、过期守卫语义不同（比对 DOM 元素 vs 比对请求 id）、关闭时机不同（blur + 文档 mousedown vs 仅文档 mousedown），强行合并会引入回调参数与分支，反而比两份各自 40 行的直白实现更难读。请求生命周期（真正重复的部分）已合一。
 
-**风险**：低-中。纯重构、行为零变化；全量跑 imgPathComplete.test.ts + 补全手测。
+**回归测试**：`imgPathComplete.test.ts` 6 例（含 P8 新增 2 例）——回包结算改为微任务后，断言前统一 `await flush()`。
 
 ### 🟠 P5 · 表格换行一个关注点跨三层 4 个全文件遍历 ✅ 2026-09-08 已修（③ handler 化）
 
@@ -387,7 +387,7 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 **第三批（结构性收敛）部分完成 2026-09-08**：E3/C2（双生机制整套删除，净删 ~110 行）、E5 部分（1s 复查定时器 + directOnly 语义）、F2（重试计划统一）、C3（生命周期 payload 工厂）、C6/F5（visibilitychange 删除）、E9（状态栏统一刷新）、E10（配置广播表驱动）、P7（聚焦层数）、P9（TOC 改存 DOM 引用）、B4（.markdown 对齐）、B6（CI Job Summary + 文档修正）、B3（debugMode 单命令）、B5（onStartupFinished）、P11（tech-debt 登记）
 
-**剩余（下轮继续）**：P4/C4 补全生命周期与注册表统一、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
+**剩余（下轮继续）**：P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
 
 **第四批（用户实测反馈的两项严重问题 + 复核中新发现）**：
 
@@ -399,6 +399,7 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 * ✅ **E6** switchToTextEditor 兜底改真实面板检查 + switchToPreview 改先开后关（2026-09-08）；**C5** 复核后判定为必要复杂度。
 * ✅ **F4** 用户交互跟踪统一为 `utils/userInteraction.ts` 的 epoch（2026-09-08）。
 * ✅ **P5** 表格换行后处理 handler 化，删除 cleanTableBreaks/splitTableCells（2026-09-08）。
+* ✅ **P4/C4** 补全请求生命周期统一到单一注册表 + 单派发（2026-09-08）。
 
 ***
 

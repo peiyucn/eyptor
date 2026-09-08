@@ -47,8 +47,9 @@ import {
 } from "./messaging";
 import { showImagePicker } from "./components/imagePicker";
 import { setupPathLink } from "./components/pathLink";
-import { initPathComplete, dispatchPathSuggestions } from "./components/pathLink/pathComplete";
-import { dispatchImgPathSuggestions, dispatchImagePathResolved } from "./components/imageView/imgPathComplete";
+import { initPathComplete } from "./components/pathLink/pathComplete";
+import { dispatchImagePathResolved } from "./components/imageView/imgPathComplete";
+import { resolvePathSuggestionRequest } from "./utils/pathSuggestionRequests";
 import { setImageUriMap, showGlobalLightbox } from "./components/imageView";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
 import { initFindBar } from "./components/findBar";
@@ -815,8 +816,7 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
     } else if (msg.type === "imageRenameError") {
         _renameRequests.reject(msg.id, msg.error);
     } else if (msg.type === "pathSuggestions") {
-        dispatchPathSuggestions(msg.id, msg.items);
-        dispatchImgPathSuggestions(msg.id, msg.items);
+        resolvePathSuggestionRequest(msg.id, msg.items);
     } else if (msg.type === "imagePathResolved") {
         dispatchImagePathResolved(msg.id, msg.webviewUri);
     } else {

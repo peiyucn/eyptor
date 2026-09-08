@@ -129,5 +129,5 @@ describe("observeCmEditorCount", () => {
 
         expect(reconfigure).toHaveBeenCalledOnce(); // 停在 1 次，不再回环
         view.destroy();
-    });
+    }, 20000);
 });

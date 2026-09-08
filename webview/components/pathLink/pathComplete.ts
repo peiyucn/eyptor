@@ -2,31 +2,13 @@ import { notifyGetPathSuggestions } from "@/messaging";
 import { getFileIcon } from "./fileIcons";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { createPathDropdown } from "@/ui/pathCompleteCore";
+import { PATH_COMPLETE_DEBOUNCE_MS, PATH_COMPLETE_RETRIGGER_DELAY_MS, PATH_PREFIX_REGEX } from "../../../shared/constants";
+import { beginPathSuggestionRequest } from "@/utils/pathSuggestionRequests";
+import type { PathSuggestionItem } from "../../../shared/messages";
 
 const PATH_ACTIVE_CLASS = "path-complete-item--active";
 
-// ─── 常量 ────────────────────────────────────────────────────
-const PATH_RETRIGGER_DELAY_MS = 50;
-const PATH_SUGGESTION_TIMEOUT_MS = 5000;
-const PATH_DEBOUNCE_MS = 200;
-
-// 触发补全的路径前缀检测
-const PATH_PREFIX_REGEX = /^(@\/|\.{1,2}\/|[a-zA-Z0-9_-][a-zA-Z0-9._-]*\/)/;
-
-type SuggestionItem = { path: string; isDir: boolean };
-type SuggestCallback = (items: SuggestionItem[]) => void;
-
-// 路径补全回调 map：id → resolve
-const _pendingSuggestions = new Map<string, SuggestCallback>();
-
-/** 外部调用此函数分发 pathSuggestions 消息 */
-export function dispatchPathSuggestions(id: string, items: SuggestionItem[]): void {
-    const cb = _pendingSuggestions.get(id);
-    if (cb) {
-        _pendingSuggestions.delete(id);
-        cb(items);
-    }
-}
+type SuggestionItem = PathSuggestionItem;
 
 /** 获取当前光标所在的 inline code 元素（排除 pre>code 和 a>code） */
 function getActiveInlineCode(): HTMLElement | null {
@@ -111,7 +93,7 @@ export function initPathComplete(getEditorViewFn: () => EditorView | null): void
             setTimeout(() => {
                 const newCode = getActiveInlineCode();
                 if (newCode) { triggerSuggest(newCode); }
-            }, PATH_RETRIGGER_DELAY_MS);
+            }, PATH_COMPLETE_RETRIGGER_DELAY_MS);
         } else {
             dropdown.close();
         }
@@ -124,27 +106,20 @@ export function initPathComplete(getEditorViewFn: () => EditorView | null): void
             return;
         }
 
-        const id = `ps_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-        _pendingSuggestions.set(id, (items) => {
+        // 请求登记与超时清理统一走 pathSuggestionRequests（回归 P4：此前手写 Map + setTimeout）
+        const handle = beginPathSuggestionRequest();
+        handle.promise.then((items) => {
             const currentCode = getActiveInlineCode();
-            if (currentCode === code) {
-                const view = getEditorViewFn();
-                if (view) { savedRange = getCodeNodeRangeFromSelection(view); }
-                const rect = code.getBoundingClientRect();
-                dropdown.show(
-                    { left: rect.left + window.scrollX, top: rect.bottom + window.scrollY + 2 },
-                    items,
-                );
-            }
-        });
-        notifyGetPathSuggestions(id, query);
-
-        // 超时清理
-        setTimeout(() => {
-            if (_pendingSuggestions.has(id)) {
-                _pendingSuggestions.delete(id);
-            }
-        }, PATH_SUGGESTION_TIMEOUT_MS);
+            if (currentCode !== code) { return; }
+            const view = getEditorViewFn();
+            if (view) { savedRange = getCodeNodeRangeFromSelection(view); }
+            const rect = code.getBoundingClientRect();
+            dropdown.show(
+                { left: rect.left + window.scrollX, top: rect.bottom + window.scrollY + 2 },
+                items,
+            );
+        }).catch(() => { /* 超时/取消：静默放弃，下拉不复活 */ });
+        notifyGetPathSuggestions(handle.id, query);
     }
 
     // 键盘导航（capture 阶段，优先于编辑器处理）
@@ -166,7 +141,7 @@ export function initPathComplete(getEditorViewFn: () => EditorView | null): void
         debounceTimer = setTimeout(() => {
             debounceTimer = null;
             triggerSuggest(code);
-        }, PATH_DEBOUNCE_MS);
+        }, PATH_COMPLETE_DEBOUNCE_MS);
     });
 
     // 点击其他区域关闭下拉

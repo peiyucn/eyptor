@@ -2,14 +2,13 @@ import { notifyGetPathSuggestions, notifyResolveImagePath } from "@/messaging";
 import { getFileIcon } from "../pathLink/fileIcons";
 import type { PathSuggestionItem } from "../../../shared/messages";
 import { createPathDropdown } from "@/ui/pathCompleteCore";
+import { PATH_COMPLETE_DEBOUNCE_MS, PATH_COMPLETE_RETRIGGER_DELAY_MS, PATH_PREFIX_REGEX } from "../../../shared/constants";
+import { beginPathSuggestionRequest } from "@/utils/pathSuggestionRequests";
 
 const IMG_ACTIVE_CLASS = "img-path-complete-item--active";
 
 // ─── 常量 ────────────────────────────────────────────────────
 const RESOLVE_IMAGE_TIMEOUT_MS = 3000;
-const PATH_SUGGESTION_TIMEOUT_MS = 5000;
-const PATH_COMPLETE_RETRIGGER_DELAY_MS = 50;
-const PATH_COMPLETE_DEBOUNCE_MS = 200;
 const IMAGE_BLUR_CLOSE_DELAY_MS = 150;
 
 // ─── resolveImagePath 异步机制 ────────────────────────────────
@@ -37,22 +36,7 @@ export function resolveToWebviewUri(relPath: string): Promise<string> {
     });
 }
 
-// 触发路径补全的前缀检测（与 pathComplete.ts 保持一致）
-const PATH_PREFIX_REGEX = /^(@\/|\.{1,2}\/|[a-zA-Z0-9_-][a-zA-Z0-9._-]*\/)/;
-
-type SuggestCallback = (items: PathSuggestionItem[]) => void;
-
-// 回调 map：id → resolve（全局唯一，各 input 通过 id 区分）
-const _pendingImgSuggestions = new Map<string, SuggestCallback>();
-
-/** 外部调用此函数分发 pathSuggestions 消息到本模块 */
-export function dispatchImgPathSuggestions(id: string, items: PathSuggestionItem[]): void {
-    const cb = _pendingImgSuggestions.get(id);
-    if (cb) {
-        _pendingImgSuggestions.delete(id);
-        cb(items);
-    }
-}
+// 触发路径补全的前缀检测与超时/防抖常量统一在 shared/constants.ts
 
 /**
  * 为一个 <input> 元素附加图片路径自动补全。
@@ -134,29 +118,24 @@ export function attachImgPathComplete(
             return;
         }
 
-        const id = `ips_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-        latestSuggestionId = id;
-        _pendingImgSuggestions.set(id, (items) => {
+        // 请求登记与超时清理统一走 pathSuggestionRequests（回归 P4：此前手写 Map + setTimeout）
+        const handle = beginPathSuggestionRequest();
+        latestSuggestionId = handle.id;
+        handle.promise.then((items) => {
             // 过期守卫：目录大时请求 A 后发 B，A 晚回会覆盖 B 的下拉（回归）
-            if (!isDestroyed && id === latestSuggestionId) {
-                // 双保险：输入框已脱离文档（宿主关闭对话框）时拒绝渲染，防游离下拉复活
-                if (!input.isConnected) return;
-                const filtered = items.filter(item => item.isDir || item.webviewUri !== undefined);
-                if (filtered.length === 0) return;
-                const rect = input.getBoundingClientRect();
-                dropdown.show(
-                    { left: rect.left, top: rect.bottom + 2 },
-                    filtered,
-                    `${rect.width}px`,
-                );
-            }
-        });
-        notifyGetPathSuggestions(id, query);
-
-        // 超时清理
-        setTimeout(() => {
-            _pendingImgSuggestions.delete(id);
-        }, PATH_SUGGESTION_TIMEOUT_MS);
+            if (isDestroyed || handle.id !== latestSuggestionId) { return; }
+            // 双保险：输入框已脱离文档（宿主关闭对话框）时拒绝渲染，防游离下拉复活
+            if (!input.isConnected) return;
+            const filtered = items.filter(item => item.isDir || item.webviewUri !== undefined);
+            if (filtered.length === 0) return;
+            const rect = input.getBoundingClientRect();
+            dropdown.show(
+                { left: rect.left, top: rect.bottom + 2 },
+                filtered,
+                `${rect.width}px`,
+            );
+        }).catch(() => { /* 超时/取消：静默放弃，下拉不复活 */ });
+        notifyGetPathSuggestions(handle.id, query);
     }
 
     // ── 事件监听 ───────────────────────────────────────────────

@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mockVscodeApi } from "./setup";
-import { attachImgPathComplete, dispatchImgPathSuggestions, dispatchImagePathResolved, resolveToWebviewUri } from "../components/imageView/imgPathComplete";
+import { attachImgPathComplete, dispatchImagePathResolved, resolveToWebviewUri } from "../components/imageView/imgPathComplete";
+import { resolvePathSuggestionRequest } from "../utils/pathSuggestionRequests";
 import type { PathSuggestionItem } from "../../shared/messages";
 
 const item = (path: string, isDir = false, webviewUri?: string): PathSuggestionItem => ({ path, isDir, webviewUri });
+
+/** 补全回包经 PendingRequestRegistry 结算，回调在微任务里执行 */
+const flush = () => new Promise<void>((resolve) => { queueMicrotask(resolve); });
 
 // jsdom 未实现 scrollIntoView（dropdownComplete 激活项时调用），补 no-op 桩
 HTMLElement.prototype.scrollIntoView = HTMLElement.prototype.scrollIntoView ?? (() => {});
@@ -32,7 +36,7 @@ describe("imgPathComplete 补全竞态防护", () => {
         document.body.innerHTML = "";
     });
 
-    it("晚到的旧请求响应 应该 被丢弃，不覆盖当前下拉（回归：A 先发 B 后发，A 晚回覆盖 B）", () => {
+    it("晚到的旧请求响应 应该 被丢弃，不覆盖当前下拉（回归：A 先发 B 后发，A 晚回覆盖 B）", async () => {
         const input = document.createElement("input");
         document.body.appendChild(input);
         attachImgPathComplete(input);
@@ -42,16 +46,18 @@ describe("imgPathComplete 补全竞态防护", () => {
         expect(idA).not.toBe(idB);
 
         // 旧请求 A 晚回：下拉不得出现
-        dispatchImgPathSuggestions(idA, [item("a.md"), item("a-dir", true)]);
+        resolvePathSuggestionRequest(idA, [item("a.md"), item("a-dir", true)]);
+        await flush();
         expect(document.querySelector(".img-path-complete-list")).toBeNull();
 
         // 新请求 B 回包：正常渲染（无 webviewUri 的普通文件被过滤，仅目录项渲染）
-        dispatchImgPathSuggestions(idB, [item("b.md"), item("b-dir", true)]);
+        resolvePathSuggestionRequest(idB, [item("b.md"), item("b-dir", true)]);
+        await flush();
         expect(document.querySelector(".img-path-complete-list")).not.toBeNull();
         expect(document.querySelector(".img-complete-label")?.textContent).toBe("b-dir");
     });
 
-    it("查询被清空后 应该 使 in-flight 响应失效（下拉不复活）", () => {
+    it("查询被清空后 应该 使 in-flight 响应失效（下拉不复活）", async () => {
         const input = document.createElement("input");
         document.body.appendChild(input);
         attachImgPathComplete(input);
@@ -59,11 +65,12 @@ describe("imgPathComplete 补全竞态防护", () => {
         const id = typeAndGetRequestId(input, "@/a");
         // 用户清空输入：触发一次防抖后的 triggerSuggest（非匹配 → 关闭 + 失效）
         typeAndGetRequestId(input, "");
-        dispatchImgPathSuggestions(id, [item("a.md"), item("a-dir", true)]);
+        resolvePathSuggestionRequest(id, [item("a.md"), item("a-dir", true)]);
+        await flush();
         expect(document.querySelector(".img-path-complete-list")).toBeNull();
     });
 
-    it("detach 后 应该 拒绝渲染（输入框销毁后不游离复活；回归：imagePicker 丢弃 detach 泄漏监听）", () => {
+    it("detach 后 应该 拒绝渲染（输入框销毁后不游离复活；回归：imagePicker 丢弃 detach 泄漏监听）", async () => {
         const input = document.createElement("input");
         document.body.appendChild(input);
         const detach = attachImgPathComplete(input);
@@ -71,18 +78,20 @@ describe("imgPathComplete 补全竞态防护", () => {
         const id = typeAndGetRequestId(input, "@/a");
         detach();
         input.remove(); // 宿主关闭对话框
-        dispatchImgPathSuggestions(id, [item("a.md"), item("a-dir", true)]);
+        resolvePathSuggestionRequest(id, [item("a.md"), item("a-dir", true)]);
+        await flush();
         expect(document.querySelector(".img-path-complete-list")).toBeNull();
     });
 
-    it("isConnected 双保险：输入框脱离文档后响应 应该 不渲染", () => {
+    it("isConnected 双保险：输入框脱离文档后响应 应该 不渲染", async () => {
         const input = document.createElement("input");
         document.body.appendChild(input);
         attachImgPathComplete(input);
 
         const id = typeAndGetRequestId(input, "@/a");
         input.remove(); // 未 detach（模拟宿主异常路径）但输入框已脱离文档
-        dispatchImgPathSuggestions(id, [item("a.md"), item("a-dir", true)]);
+        resolvePathSuggestionRequest(id, [item("a.md"), item("a-dir", true)]);
+        await flush();
         expect(document.querySelector(".img-path-complete-list")).toBeNull();
     });
 });
