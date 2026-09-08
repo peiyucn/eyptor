@@ -1,11 +1,7 @@
 import { notifyGetPathSuggestions, notifyResolveImagePath } from "@/messaging";
 import { getFileIcon } from "../pathLink/fileIcons";
 import type { PathSuggestionItem } from "../../../shared/messages";
-import {
-    closeDropdown as closeDropdownState,
-    updateActiveItem,
-    type DropdownState,
-} from "@/ui/dropdownComplete";
+import { createPathDropdown } from "@/ui/pathCompleteCore";
 
 const IMG_ACTIVE_CLASS = "img-path-complete-item--active";
 
@@ -69,16 +65,44 @@ export function attachImgPathComplete(
     onEnter?: () => void,
     onEscape?: () => void,
 ): () => void {
-    const state: DropdownState = { el: null, activeIndex: -1 };
-    let lastItems: PathSuggestionItem[] = [];
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let suppressMouseover = false;
     let isDestroyed = false;
     let skipDatasetClear = false;
     /** 最近一次发出的补全请求 id（过期守卫：晚到的旧响应不得覆盖当前下拉） */
     let latestSuggestionId = "";
 
-    function closeDropdown(): void { closeDropdownState(state); lastItems = []; }
+    const dropdown = createPathDropdown<PathSuggestionItem>({
+        listClass: "img-path-complete-list",
+        itemClass: "img-path-complete-item",
+        activeClass: IMG_ACTIVE_CLASS,
+        renderItem: (item) => {
+            if (item.webviewUri) {
+                return `<img class="img-complete-thumb" src="${item.webviewUri}" alt=""><span class="img-complete-label">${escapeHtml(lastSeg(item.path))}</span>`;
+            }
+            const iconEl = document.createElement("span");
+            iconEl.className = "img-complete-icon";
+            iconEl.innerHTML = getFileIcon(item.path, item.isDir);
+            const label = document.createElement("span");
+            label.className = "img-complete-label";
+            label.textContent = lastSeg(item.path);
+            return `${iconEl.outerHTML}${label.outerHTML}`;
+        },
+        getTitle: (item) => item.path,
+        onSelect: (item) => applySelection(item),
+    });
+
+    function lastSeg(path: string): string {
+        return path.replace(/\/$/, "").split("/").pop() ?? path;
+    }
+
+    /** 最小 HTML 转义（缩略图分支以 innerHTML 拼装 label 文本） */
+    function escapeHtml(text: string): string {
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
 
     function applySelection(item: PathSuggestionItem): void {
         input.value = item.path;
@@ -92,71 +116,11 @@ export function attachImgPathComplete(
         input.focus();
 
         if (item.isDir) {
-            closeDropdown();
+            dropdown.close();
             setTimeout(() => { triggerSuggest(); }, PATH_COMPLETE_RETRIGGER_DELAY_MS);
         } else {
-            closeDropdown();
+            dropdown.close();
         }
-    }
-
-    function showDropdown(items: PathSuggestionItem[]): void {
-        closeDropdown();
-        // 双保险：输入框已脱离文档（宿主关闭对话框）时拒绝渲染，防游离下拉复活
-        if (!input.isConnected) { return; }
-        const filtered = items.filter(item => item.isDir || item.webviewUri !== undefined);
-        if (filtered.length === 0) { return; }
-        lastItems = filtered;
-
-        const rect = input.getBoundingClientRect();
-        const ul = document.createElement("ul");
-        ul.className = "img-path-complete-list";
-        ul.style.top = `${rect.bottom + 2}px`;
-        ul.style.left = `${rect.left}px`;
-        ul.style.minWidth = `${rect.width}px`;
-
-        filtered.forEach((item, i) => {
-            const li = document.createElement("li");
-            li.className = "img-path-complete-item";
-
-            if (item.webviewUri) {
-                const thumb = document.createElement("img");
-                thumb.className = "img-complete-thumb";
-                thumb.src = item.webviewUri;
-                thumb.alt = "";
-                li.appendChild(thumb);
-            } else {
-                const iconEl = document.createElement("span");
-                iconEl.className = "img-complete-icon";
-                iconEl.innerHTML = getFileIcon(item.path, item.isDir);
-                li.appendChild(iconEl);
-            }
-
-            const lastSeg = item.path.replace(/\/$/, "").split("/").pop() ?? item.path;
-            const label = document.createElement("span");
-            label.className = "img-complete-label";
-            label.textContent = lastSeg;
-            li.title = item.path;
-            li.appendChild(label);
-
-            li.addEventListener("mousedown", (e) => {
-                e.preventDefault();
-                state.activeIndex = i;
-                applySelection(item);
-            });
-            li.addEventListener("mousemove", () => { suppressMouseover = false; });
-            li.addEventListener("mouseover", () => {
-                if (suppressMouseover) { return; }
-                state.activeIndex = i;
-                updateActiveItem(state, IMG_ACTIVE_CLASS);
-            });
-
-            ul.appendChild(li);
-        });
-
-        document.body.appendChild(ul);
-        state.el = ul;
-        state.activeIndex = 0;
-        updateActiveItem(state, IMG_ACTIVE_CLASS);
     }
 
     // ── 触发补全请求 ───────────────────────────────────────────
@@ -166,7 +130,7 @@ export function attachImgPathComplete(
         if (!query || !PATH_PREFIX_REGEX.test(query)) {
             // 使 in-flight 旧响应失效（查询已不匹配），防下拉复活
             latestSuggestionId = "";
-            closeDropdown();
+            dropdown.close();
             return;
         }
 
@@ -175,7 +139,16 @@ export function attachImgPathComplete(
         _pendingImgSuggestions.set(id, (items) => {
             // 过期守卫：目录大时请求 A 后发 B，A 晚回会覆盖 B 的下拉（回归）
             if (!isDestroyed && id === latestSuggestionId) {
-                showDropdown(items);
+                // 双保险：输入框已脱离文档（宿主关闭对话框）时拒绝渲染，防游离下拉复活
+                if (!input.isConnected) return;
+                const filtered = items.filter(item => item.isDir || item.webviewUri !== undefined);
+                if (filtered.length === 0) return;
+                const rect = input.getBoundingClientRect();
+                dropdown.show(
+                    { left: rect.left, top: rect.bottom + 2 },
+                    filtered,
+                    `${rect.width}px`,
+                );
             }
         });
         notifyGetPathSuggestions(id, query);
@@ -208,8 +181,8 @@ export function attachImgPathComplete(
         if (e.key === "Enter") {
             e.preventDefault();
             e.stopPropagation();
-            if (state.el && state.activeIndex >= 0 && state.activeIndex < lastItems.length) {
-                applySelection(lastItems[state.activeIndex]);
+            if (dropdown.isOpen()) {
+                dropdown.handleKeydown(e); // 选中当前高亮项
             } else {
                 onEnter?.();
             }
@@ -219,52 +192,28 @@ export function attachImgPathComplete(
         if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
-            if (state.el) {
-                closeDropdown();
+            if (dropdown.isOpen()) {
+                dropdown.close();
             } else {
                 onEscape?.();
             }
             return;
         }
 
-        if (!state.el) { return; }
-
-        if (e.key === "ArrowDown") {
-            e.preventDefault();
-            e.stopPropagation();
-            suppressMouseover = true;
-            state.activeIndex = state.activeIndex >= lastItems.length - 1 ? 0 : state.activeIndex + 1;
-            updateActiveItem(state, IMG_ACTIVE_CLASS);
-            return;
-        }
-        if (e.key === "ArrowUp") {
-            e.preventDefault();
-            e.stopPropagation();
-            suppressMouseover = true;
-            state.activeIndex = state.activeIndex <= 0 ? lastItems.length - 1 : state.activeIndex - 1;
-            updateActiveItem(state, IMG_ACTIVE_CLASS);
-            return;
-        }
-        if (e.key === "Tab") {
-            if (state.activeIndex >= 0 && state.activeIndex < lastItems.length) {
-                e.preventDefault();
-                e.stopPropagation();
-                applySelection(lastItems[state.activeIndex]);
-            }
-            return;
-        }
+        if (!dropdown.isOpen()) { return; }
+        dropdown.handleKeydown(e); // 方向键 / Tab
     }
 
     function onDocMousedown(e: MouseEvent): void {
-        if (state.el && !state.el.contains(e.target as Node) && e.target !== input) {
-            closeDropdown();
+        if (dropdown.isOpen() && !dropdown.contains(e.target as Node) && e.target !== input) {
+            dropdown.close();
         }
     }
 
     function onBlur(): void {
         // 延迟关闭，让 mousedown 的 applySelection 先执行
         setTimeout(() => {
-            if (!isDestroyed) { closeDropdown(); }
+            if (!isDestroyed) { dropdown.close(); }
         }, IMAGE_BLUR_CLOSE_DELAY_MS);
     }
 
@@ -278,7 +227,7 @@ export function attachImgPathComplete(
     return function detach(): void {
         isDestroyed = true;
         if (debounceTimer) { clearTimeout(debounceTimer); }
-        closeDropdown();
+        dropdown.close();
         input.removeEventListener("input", onInput);
         input.removeEventListener("keydown", onKeydown, true);
         input.removeEventListener("blur", onBlur);
