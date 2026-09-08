@@ -9,6 +9,8 @@ import * as vscode from "vscode";
 const MAX_ALT_TEXT_LENGTH = 20;
 const UPLOAD_TIMEOUT_MS = 30_000;
 const ERROR_RESPONSE_PREVIEW_LENGTH = 200;
+/** 上传响应体大小上限（回归：chunks 无界累积可造成内存峰值） */
+const MAX_UPLOAD_RESPONSE_BYTES = 1024 * 1024;
 
 // 按点分路径从对象中提取值
 export function getByPath(obj: unknown, dotPath: string): unknown {
@@ -262,7 +264,17 @@ export async function uploadImageToServer(
 
         const req = transport.request(options, (res) => {
             const chunks: Buffer[] = [];
-            res.on("data", (chunk: Buffer) => chunks.push(chunk));
+            let totalBytes = 0;
+            res.on("data", (chunk: Buffer) => {
+                totalBytes += chunk.length;
+                if (totalBytes > MAX_UPLOAD_RESPONSE_BYTES) {
+                    // 响应体大小上限：直接结算（不依赖 error 事件），destroy 断开连接
+                    req.destroy();
+                    reject(new Error(`Upload response exceeds ${MAX_UPLOAD_RESPONSE_BYTES} bytes`));
+                    return;
+                }
+                chunks.push(chunk);
+            });
             res.on("end", () =>
                 resolve(Buffer.concat(chunks).toString("utf-8")),
             );
@@ -283,15 +295,15 @@ export async function uploadImageToServer(
     try {
         parsed = JSON.parse(responseBody);
     } catch {
-        throw new Error(
-            `Server returned non-JSON response: ${responseBody.slice(0, ERROR_RESPONSE_PREVIEW_LENGTH)}`,
-        );
+        // 不回显响应体（回归：服务器响应可能回显请求参数——imageServerExtraParams
+        // 可能含 token，原样进错误提示与 WebView 面板）
+        throw new Error("Server returned non-JSON response");
     }
 
     const imageUrl = getByPath(parsed, responsePath);
     if (typeof imageUrl !== "string" || !imageUrl) {
         throw new Error(
-            `Cannot extract URL using path "${responsePath}" from response: ${responseBody.slice(0, ERROR_RESPONSE_PREVIEW_LENGTH)}`,
+            `Cannot extract URL using path "${responsePath}" from response`,
         );
     }
 

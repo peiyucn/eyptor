@@ -455,6 +455,21 @@ describe("uploadImageToServer", () => {
         expect(result).toBe("https://cdn.example.com/img.png");
     });
 
+    it("响应体超过 1MB 上限 应该 destroy 连接并报错（回归：chunks 无界累积内存峰值）", async () => {
+        const big = "x".repeat(1024 * 1024 + 1);
+        const { mockRes, mockReq } = createSuccessMockTransport(big);
+        vi.mocked(https.request).mockImplementation((_opts, cb) => {
+            (cb as (r: typeof mockRes) => void)(mockRes);
+            return mockReq as never;
+        });
+
+        const cfg = makeCfg({ imageServerUrl: "https://upload.example.com/api" });
+        await expect(
+            uploadImageToServer(cfg as never, imageData, "image/png", "photo"),
+        ).rejects.toThrow("exceeds");
+        expect(mockReq.destroy).toHaveBeenCalled();
+    });
+
     it("HTTP URL 使用 http 模块而非 https 模块", async () => {
         const { mockRes, mockReq } = createSuccessMockTransport('{"url":"http://cdn.example.com/img.png"}');
         vi.mocked(http.request).mockImplementation((_opts, cb) => {

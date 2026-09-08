@@ -34,6 +34,8 @@ const SAVE_COOLDOWN_MS = 1500;
 const FS_WATCH_DEBOUNCE_MS = 200;
 /** 保存时拉取内容（requestContent → contentResponse）的超时兜底：超时用内存内容 */
 const CONTENT_REQUEST_TIMEOUT_MS = 3000;
+/** 单张图片上传载荷大小上限（20MB） */
+const MAX_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 export class MarkdownEditorProvider
     implements vscode.CustomEditorProvider<MarkdownDocument> {
@@ -627,6 +629,18 @@ export class MarkdownEditorProvider
                 break;
             case "uploadImage":
                 if (message.id && message.data) {
+                    // 载荷大小上限（回归：无上限，超大图片整块 postMessage 可造成内存峰值）
+                    if (message.data.byteLength > MAX_IMAGE_UPLOAD_BYTES) {
+                        panel.webview.postMessage({
+                            type: "imageUploadError",
+                            id: message.id,
+                            error: vscode.l10n.t(
+                                "Image too large: maximum size is {0} MB",
+                                Math.round(MAX_IMAGE_UPLOAD_BYTES / 1024 / 1024),
+                            ),
+                        });
+                        break;
+                    }
                     this._handleImageUpload(
                         document, panel,
                         message.id,
