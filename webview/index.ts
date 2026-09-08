@@ -612,16 +612,11 @@ const restoreEditorFocus = () => {
     });
 };
 window.addEventListener("focus", restoreEditorFocus);
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
-    const state = getWebviewState();
-    if (state?.scrollY !== undefined) {
-        requestAnimationFrame(() => {
-            window.scrollTo({ top: state.scrollY as number });
-        });
-    }
-    restoreEditorFocus();
-});
+// 回归（C6/F5）：此处原有 visibilitychange 处理器（visible 时恢复滚动位置 + 再调
+// restoreEditorFocus）——其自身注释已诊断「VS Code 切 tab 时 visibilitychange 不触发
+// （visibility 恒 visible）」，实际仅窗口级最小化/恢复可达；而页面隐藏/恢复不会丢失
+// 滚动位置（无需恢复）、焦点恢复由 window focus 事件与 panelActiveState 消息覆盖，
+// 处理器已删除。滚动位置恢复仍由 init 路径（scheduleDelayedScroll + 交互守卫）负责。
 // ─────────────────────────────────────────────────────────────
 
 // ── 用户交互保护：延迟定位滚动不得覆盖用户已开始的交互 ──────
