@@ -200,7 +200,7 @@ serializeCleanMarkdown 全是 split/map/replace 纯字符串操作，无 throw �
 
 **为何过度**（④重复路径 + ①补偿）：fold/sticky 只认顶层标题，TOC 却无 depth 过滤 → TOC 里可点击跳转的嵌套标题永不出现折叠箭头、也永不吸顶；签名有两份独立缓存；sticky 与 fold 之间以 **CSS class 字符串**（`.heading-fold-hidden`/`.heading-fold-heading--foldable`）为跨插件契约——类名是样式细节，改样式即可静默打断吸顶；身份键三套并存（pos / level:text / DOM class）。D7 回归与 TOC pos 漂移回归都源于各口径各自演化。
 
-**简化方案**：在 utils/headingFold 增加导出的 `buildHeadingIndex(doc)`（一趟遍历产出 level/text/pos/foldRange）；fold 插件导出签名/隐藏判定；sticky 的 getVisibleHeadings 改由索引过滤（删 class 嗅探与 posAtDOM 反查）；TOC 消费同一索引并统一口径（建议与 fold 一致只收顶层）；index.ts 删 `_lastTocSignature` 与签名重算，改问插件暴露的签名。CSS class 回归纯样式职责。
+**简化方案**：在 utils/headingFold 增加导出的 `buildHeadingIndex(doc)`（一趟遍历产出 level/text/pos/foldRange）；fold 插件导出签名/隐藏判定；sticky 的 getVisibleHeadings 改由索引过滤（删 class 嗅探与 posAtDOM 反查——补跑审计指出 sticky 已 import 却未使用 `findHeadingFoldRange`（headingStickyPlugin.ts:13），foldable 判定本可直接用它从 doc+pos 算出，绕道 DOM class 纯属多余）；TOC 消费同一索引并统一口径（建议与 fold 一致只收顶层）；index.ts 删 `_lastTocSignature` 与签名重算，改问插件暴露的签名。CSS class 回归纯样式职责。
 
 **风险**：中。涉及 4 文件与三个用户可见功能；「TOC 不再显示嵌套标题」是行为变更需入 CHANGELOG。分两步落地（先共享索引、再统一口径），每步独立 commit。
 
@@ -212,7 +212,7 @@ serializeCleanMarkdown 全是 split/map/replace 纯字符串操作，无 throw �
 
 **为何过度**（③对抗平台 + ⑥死重的陈旧动机）：**已查上游源码实证**：GFM 7.22.1 的 tableKeymap 只含 NextCell（Mod-]/Tab）/PrevCell（Mod-[/Shift-Tab）/ExitTable（Mod-Enter/Enter）——**已无 Shift-Enter 绑定**；commonmark 7.22.1 自带 `hardbreakKeymap`（Shift-Enter → insertHardbreakCommand）与可配置 ctx `hardbreakFilterNodes = $ctx(["table", "code_block"], ...)`，其 filterTransaction 遍历祖先阻止 table/code_block 内 hardbreak。插件的最初动机（官方 tableKeymap 把 Shift+Enter 绑 goToNextCell）在 7.22.1 已不存在。插件不仅重复实现上游键位，还因缺 meta 跳过上游 hardbreakClearMarkPlugin 的收尾。
 
-**简化方案**：删除 tableSoftBreakPlugin.ts 与注册；在 editor.ts 的 config 回调里加一行 `ctx.update(hardbreakFilterNodes, (nodes) => nodes.filter((n) => n !== "table"))`（保留 code_block 拦截），上游自带 Shift-Enter→hardbreak 即在表格内生效。序列化侧 withTableBreakHandler 与加载侧 convertTableBrForDisplay 不动（那是上游 #2463 的真实边界）。同步改写 tableSoftBreak.test.ts 为该配置的断言并更新过时注释。
+**简化方案**：删除 tableSoftBreakPlugin.ts 与注册；在 editor.ts 的 config 回调里加一行 `ctx.set(hardbreakFilterNodes.key, ["code_block"])`（import 自 `@milkdown/kit/preset/commonmark`，上游导出实证 index.js:2142）——该 ctx 语义即「哪些节点类型禁 hardbreak」，正是为配置而设的扩展点。序列化侧 withTableBreakHandler 与加载侧 convertTableBrForDisplay 不动（那是上游 #2463 的真实边界，见 P11）。同步改写 tableSoftBreak.test.ts 为该配置的断言并更新过时注释。补跑审计补充：旧插件还**丢失**了上游命令的 `setMeta("hardbreak", true)`（驱动 hardbreakClearMarkPlugin 清 marks），改走后一并恢复。
 
 **风险**：低-中。行为差异仅一处：上游在「行尾已有 hardbreak 再按 Shift+Enter」时替换为段落（旧实现连插两个）；需手测确认可接受。回退=revert 单 commit。
 
@@ -269,6 +269,42 @@ serializeCleanMarkdown 全是 split/map/replace 纯字符串操作，无 throw �
 mousedown 已 preventDefault+stopPropagation 防夺焦，click 里仍叠三层聚焦。对照同仓库 imageView 的 startToolbarInlineEdit 只 focus 一次。
 
 **简化方案**：删二三层保险（保留同步 focus），实测若焦点仍被夺回再单层补回并注释定位到的抢夺者。**风险**：低（前端交互细节）。
+
+### 🟠 P8 · imageView webview 侧 uriMap 双份镜像与 Extension 不同步（重命名后即陈旧，靠三级回退兜底）
+
+**位置**：`webview/components/imageView/index.ts:30-41,593-604`；`webview/index.ts:707,791-816`；`src/MarkdownEditorProvider.ts:63,518`
+
+**当前机制**：Extension 单份 `_imageUriMaps` 全量下发；webview 收到后拆成 `_uriToRel`/`_relToUri` 双向两张 Map；确认路径时三级回退链（dataset 缓存 → 查 _relToUri → `resolveToWebviewUri` 异步解析）。**imageRenamed 处理器只改 ProseMirror 文档 src、不更新这两张 Map**——重命名后 _relToUri 旧映射保留到下次 init/revert 才刷新，陈旧镜像靠第③级异步解析兜底。
+
+**为何过度**（④重复路径 + ①补偿性）：双向镜像 + 三级回退是「本地即时翻译」与「远端权威解析」两套机制并存；rel→uri 方向的即时性收益极小（确认一次图片路径多一跳 ≤3s 超时往返，失败本就回退原值），却引入同步面（rename 漏同步已实锤）。
+
+**简化方案**：webview 只保留 `_uriToRel`（展示用）；确认时一律 `resolveToWebviewUri(displayVal)`，删 `_relToUri` 与回退分支②。**风险**：低（确认路径多一次已有超时兜底的往返）。
+
+### 🟠 P9 · TOC 点击跳转按「level+全文」反查 pos：补偿陈旧 pos 且同文标题必跳错（每次点击 O(n) 扫描）
+
+**位置**：`webview/components/toc/index.ts:44-57,261-268`
+
+**当前机制**：列表项存 pos，但注释自认「pos 会随编辑漂移」，于是点击时 `findHeadingPosByText` 全文档 descendants 按 level:text 重查——两个同文同层标题（如两个「## 安装」）永远命中第一个，且这是每次点击的 O(n) 扫描。
+
+**为何过度**（①补偿性机制）：用「按文本反查」补偿「存 pos 会漂移」，而更简且语义正确的方式是**存 DOM 元素引用**：refresh() 重建列表时经 `view.nodeDOM(pos)` 关联 heading 元素，点击时 `view.posAtDOM(el, 0)` 直接得当前 pos——无漂移、无歧义、无全量扫描；findHeadingElement 的 fallback 链一并退役。
+
+**简化方案**：refresh() 存 el 引用；点击分支改 posAtDOM + `view.dom.contains(el)` 守卫；删 findHeadingPosByText/findHeadingElement。**风险**：低（posAtDOM 异常时 try/catch 忽略即可）。
+
+### ⚪ P10 · TOC updatePanelPosition 死重函数 + 硬编码 36px 与共享常量 40px 打架
+
+**位置**：`webview/components/toc/index.ts:390-409`；`shared/constants.ts:5`
+
+`updatePanelPosition()` 每次调用都设置相同两个常量值（`top='36px'`、`height='calc(100vh - 36px)'`），注释却写「动态对齐到 topbar 底部」；被 rAF 初始化与 resize 重复调用，永不产生不同结果；且 36px 与同文件点击跳转处使用的 `DEFAULT_TOPBAR_HEIGHT = 40` 不一致。
+
+**简化方案**：删函数与 resize 调用（保留 checkAutoShow）；两条 style 移入 toc.css 静态声明；36px 对齐 DEFAULT_TOPBAR_HEIGHT。**风险**：无（纯样式落位）。
+
+### ⚪ P11 · 表格 `<br>` 四层往返链路未登记 tech-debt（上游修复后无移除清单）
+
+**位置**：`src/utils/contentTransform.ts:43-61`；`webview/utils/markdownSerializer.ts:219-258,122-160,199-207`；`docs/tech-debt.md`
+
+加载转换 → 序列化双 handler → clean 后处理 → 风格统一，共 4 层全部绕同一个上游 bug（remark-gfm 丢弃表格内 `<br>`，Milkdown#2463）——判定为**有真实依据的必要复杂度**（P5 建议 handler 化③；本条的独特发现是**登记缺口**）：该 workaround 未进入 tech-debt，AGENTS「上游限制」表也没有 #2463，上游合并后无人知道该删哪几层、回归测试应随哪层退役。
+
+**简化方案**：tech-debt 增补「表格 `<br>` 往返闭环（四层）——上游 Milkdown#2463 修复后整链移除」+ 关联测试标注。代码不动。**风险**：零。
 
 ## 四、构建与配置（主会话补审）
 
@@ -360,3 +396,6 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 - **字数/TOC 双 rAF 延迟 + 签名缓存**：firstRender.bench 首帧依据
 - **PendingRequestRegistry**：已完成的样板统一（替代三处手写不一致）
 - **cellClickFixPlugin**：已登记 tech-debt「上游修复后移除」类 workaround，不重复报告
+- **topBarOverflow MutationObserver 自愈 / setupTopBarTooltips / codeBlockEnhance**：已登记 tech-debt；补跑审计实证上游 7.22.1 确无 per-item hidden/overflow 能力（crepe top-bar 硬编码 class、groupInfo computed 重建），观察器为必需补偿
+- **headingFold 签名缓存 + 折叠区间双指针 / headingSticky 缓存与抑制兜底**：均有万行文档实测回归依据
+- **findBar MAX_MATCHES 封顶与防抖本身**：必要（仅 close 清理缺失见 P3）
