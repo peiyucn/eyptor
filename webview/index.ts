@@ -10,7 +10,7 @@ import "@milkdown/crepe/theme/common/top-bar.css";
 import "@milkdown/crepe/theme/common/toolbar.css";
 import "@milkdown/crepe/theme/common/link-tooltip.css";
 import "./style.css"; // 必须在 Crepe CSS 之后加载，用 VSCode 变量覆盖 Crepe 主题
-import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../shared/constants";
+import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING, OPEN_URL_SCHEMES, extractUrlScheme } from "../shared/constants";
 import { resolveTableWrapVars } from "../shared/tableWrap";
 import type { ToWebviewMessage } from "../shared/messages";
 import { PendingRequestRegistry } from "./utils/pendingRequest";
@@ -361,7 +361,10 @@ if (editorContainer) {
 	        }
 	        if (e.ctrlKey || e.metaKey) {
 	            const clean = href.split("#")[0];
-	            if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(clean)) notifyOpenUrl(clean);
+	            if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(clean)) {
+	                // 协议白名单：file:/javascript:/自定义协议不发往 Extension（回归：无白名单）
+	                if (OPEN_URL_SCHEMES.has(extractUrlScheme(clean))) notifyOpenUrl(clean);
+	            }
 	            else notifyOpenFile(clean);
 	        }
 	    }, true);

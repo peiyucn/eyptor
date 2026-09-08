@@ -11,6 +11,7 @@ import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
 import { ExpiryWindowMap } from "./utils/expiryWindowMap";
 import { sanitizeBasename } from "./utils/safeBasename";
+import { OPEN_URL_SCHEMES, extractUrlScheme } from "../shared/constants";
 import {
     DEFAULT_CODE_BLOCK_MAX_HEIGHT,
     DEFAULT_EDITOR_MAX_WIDTH,
@@ -562,7 +563,8 @@ export class MarkdownEditorProvider
                 break;
             }
             case "openUrl":
-                if (message.url) {
+                // 协议白名单（回归：任意 URI 直接 openExternal，file:/javascript:/自定义协议无防护）
+                if (message.url && OPEN_URL_SCHEMES.has(extractUrlScheme(message.url))) {
                     vscode.env.openExternal(vscode.Uri.parse(message.url));
                 }
                 break;
