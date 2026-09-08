@@ -8,7 +8,6 @@ import * as vscode from "vscode";
 // ─── 常量 ────────────────────────────────────────────────────
 const MAX_ALT_TEXT_LENGTH = 20;
 const UPLOAD_TIMEOUT_MS = 30_000;
-const ERROR_RESPONSE_PREVIEW_LENGTH = 200;
 /** 上传响应体大小上限（回归：chunks 无界累积可造成内存峰值） */
 const MAX_UPLOAD_RESPONSE_BYTES = 1024 * 1024;
 
