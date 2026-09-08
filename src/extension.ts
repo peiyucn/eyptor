@@ -216,10 +216,15 @@ export function activate(context: vscode.ExtensionContext) {
                 if (!target) {
                     return;
                 }
-                // 切换前保存当前光标行号，供 WYSIWYG 面板激活时定位
-                const currentLine = activeEditor?.selection.active.line ?? -1;
-                if (currentLine >= 0) {
-                    MarkdownEditorProvider.current?.setPendingNavigation(target.fsPath, currentLine + 1);
+                // 切换前保存**视口顶部行号**（不是光标行）：与 VS Code 内置 Markdown 预览
+                // 的滚动同步同口径，供 WYSIWYG 面板激活时定位。
+                // 回归（用户实测「文本→预览定位位置错误」）：此前用 selection.active.line，
+                // 光标被滚动到视口外时会跳到完全不同的位置。
+                const topVisibleLine = activeEditor?.visibleRanges[0]?.start.line
+                    ?? activeEditor?.selection.active.line
+                    ?? -1;
+                if (topVisibleLine >= 0) {
+                    MarkdownEditorProvider.current?.setPendingNavigation(target.fsPath, topVisibleLine + 1);
                 }
                 // 读取文本编辑器 tab 的 preview 状态和所在列（兜底路径用）
                 let isPreview = false;

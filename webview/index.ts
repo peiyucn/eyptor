@@ -93,10 +93,12 @@ document.addEventListener('keyup', (e) => {
 });
 window.addEventListener('blur', () => document.body.classList.remove('epytor-modifier-active'));
 
-// 存储原始 markdown 内容（来自 init/revert 消息，未经 Milkdown 序列化）
-let markdownSource = "";
-
-/** 将 lineMap 中的源码行号（1-indexed）对应的块滚动到视口顶部，段内做比例插值 */
+/**
+ * 将 lineMap 中源码行号（1-indexed）对应的块滚动到视口顶部。
+ * 元素级定位（不做段内比例插值）——与 VS Code 内置 Markdown 预览的滚动同步同口径
+ * （markdown-it 的 data-line 只标到块级）：比例插值会在长段落/长代码块里滚过目标块，
+ * 且来回切换不可逆（用户实测「文本→预览定位位置错误」）。
+ */
 function scrollToSourceLine(view: EditorView, lineMap: number[], targetLine: number): void {
     if (!lineMap.length) { return; }
     let blockIdx = 0;
@@ -109,19 +111,10 @@ function scrollToSourceLine(view: EditorView, lineMap: number[], targetLine: num
     const el = children[blockIdx] as HTMLElement;
     if (!el) { return; }
 
-    // 段内比例插值：目标行在段落源码中的位置比例 → 对应渲染块中的滚动偏移
-    const blockStartLine = lineMap[blockIdx];
-    const totalSourceLines = markdownSource.split('\n').length;
-    const nextBlockStartLine = blockIdx + 1 < lineMap.length ? lineMap[blockIdx + 1] : totalSourceLines + 1;
-    const blockLineCount = nextBlockStartLine - blockStartLine;
-    const lineOffset = targetLine - blockStartLine;
-    const proportion = blockLineCount > 1 ? Math.min(lineOffset / (blockLineCount - 1), 1) : 0;
-
     const topbarH = document.querySelector(".milkdown-top-bar")?.getBoundingClientRect().height ?? DEFAULT_TOPBAR_HEIGHT;
-    const elRect = el.getBoundingClientRect();
-    const scrollTarget = elRect.top + window.scrollY + elRect.height * proportion - topbarH - VIEWPORT_PADDING * 2;
+    const scrollTarget = el.getBoundingClientRect().top + window.scrollY - topbarH - VIEWPORT_PADDING;
 
-    if (_debugLog) console.log('[scrollToLine] targetLine:', targetLine, 'blockIdx:', blockIdx, 'lineMap[blockIdx]:', lineMap[blockIdx], 'proportion:', proportion.toFixed(2));
+    if (_debugLog) console.log('[scrollToLine] targetLine:', targetLine, 'blockIdx:', blockIdx, 'lineMap[blockIdx]:', lineMap[blockIdx]);
     window.scrollTo({ top: scrollTarget });
 }
 
@@ -142,6 +135,24 @@ function getFirstVisibleSourceLine(view: EditorView, lineMap: number[]): number 
     const fallback = lineMap[Math.min(lineMap.length - 1, children.length - 1)] ?? 1;
     if (_debugLog) console.log('[getFirstVisible] fallback result:', fallback, 'lineMap.length:', lineMap.length);
     return fallback;
+}
+
+/** 上次由 Extension 导航到的源码行（init 的 scrollToLine）；切换回文本时用于保持精确位置 */
+let _lastNavLine: number | null = null;
+
+/**
+ * 切换到文本编辑器时要定位的源码行：
+ * 优先「视口顶部块的行号」；若用户没滚动（视口仍停在导航到的那个块），
+ * 回导航时的原始行而不是块首——否则长代码块/长段落来回切换会逐次漂到块首。
+ */
+function getSwitchTargetLine(view: EditorView): number | undefined {
+    const visible = getFirstVisibleSourceLine(view, currentLineMap);
+    if (_lastNavLine === null) { return visible; }
+    let blockStart = 0;
+    for (const line of currentLineMap) {
+        if (line <= _lastNavLine) { blockStart = line; } else { break; }
+    }
+    return blockStart === visible ? _lastNavLine : visible;
 }
 
 // ── 图片上传：pending promise map ────────────────────
@@ -566,7 +577,7 @@ window.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === "KeyM") {
         e.preventDefault();
         const view = getEditorView();
-        const line = view ? getFirstVisibleSourceLine(view, currentLineMap) : undefined;
+        const line = view ? getSwitchTargetLine(view) : undefined;
         notifySwitchToTextEditor(line);
     }
 });
@@ -698,7 +709,6 @@ async function handleEditorLifecycleMessage(
 ): Promise<void> {
     // 类型已由签名收窄（回归 C3：此前在函数体内重查 msg.type === init || revert）
     const isInit = msg.type === "init";
-    markdownSource = msg.content; // 保存原始内容，供行号搜索使用
     currentLineMap = msg.lineMap ?? [];
     renderFrontmatterPanel(msg.frontmatter);
     if (msg.imageUriMap) { setImageUriMap(msg.imageUriMap); }
@@ -731,6 +741,7 @@ async function handleEditorLifecycleMessage(
     // Milkdown 渲染 + 浏览器布局需要时间，统一走 scheduleDelayedScroll 重试
     if (isInit && msg.scrollToLine) {
         const targetLine = msg.scrollToLine;
+        _lastNavLine = targetLine; // 供切回文本时保持精确行（见 getSwitchTargetLine）
         scheduleDelayedScroll((view) => {
             scrollToSourceLine(view, currentLineMap, targetLine);
         });
@@ -763,7 +774,7 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         // 来自菜单按钮/命令面板的"切换到文本编辑器"请求
         // 与 Cmd+Shift+M 快捷键逻辑相同：先获取当前可见行再通知 Extension
         const view = getEditorView();
-        const line = view ? getFirstVisibleSourceLine(view, currentLineMap) : undefined;
+        const line = view ? getSwitchTargetLine(view) : undefined;
         notifySwitchToTextEditor(line);
     } else if (msg.type === "scrollToLine") {
         // 面板已打开时（如全局搜索点击已打开文件）直接滚动；编辑器重建中则按计划重试。
