@@ -388,7 +388,11 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 **第三批（结构性收敛）部分完成 2026-09-08**：E3/C2（双生机制整套删除，净删 ~110 行）、E5 部分（1s 复查定时器 + directOnly 语义）、F2（重试计划统一）、C3（生命周期 payload 工厂）、C6/F5（visibilitychange 删除）、E9（状态栏统一刷新）、E10（配置广播表驱动）、P7（聚焦层数）、P9（TOC 改存 DOM 引用）、B4（.markdown 对齐）、B6（CI Job Summary + 文档修正）、B3（debugMode 单命令）、B5（onStartupFinished）、P11（tech-debt 登记）
 
-**剩余（下轮继续）**：E4 保存路径统一、E6/C5 双向命令与快捷键合并、E7 图片往返口径、F4 交互跟踪合一、P4/C4 补全生命周期与注册表统一、P8 图片 uriMap 单向化、P6 TOC 折叠键、F3 cmObserver 走正路、P5 表格换行 handler 化、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
+**剩余（下轮继续）**：E4 保存路径统一、E6/C5 双向命令与快捷键合并、E7 图片往返口径、F4 交互跟踪合一、P4/C4 补全生命周期与注册表统一、P8 图片 uriMap 单向化、P6 TOC 折叠键、P5 表格换行 handler 化、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
+
+**第四批（用户实测反馈的两项严重问题）**：
+
+* ✅ **F3** CodeMirror 主题补配观察器无限回环（2026-09-08）——观察器抽到 `webview/utils/cmThemeObserver.ts` 并加数量守卫；回归测试 `webview/__tests__/cmThemeObserver.test.ts`（含真实 CodeMirror + 语法高亮的回环复现）。用户反馈「开着 md 页面时整个 VS Code 输入卡顿、切换别的 webview 时整窗口闪动，关闭 md 页面后消失」的根因：观察器对任何 childList 变更都排重配，而 reconfigure 自身产生 childList 变更 → 10ms 一次无限回环。
 
 ***
 
