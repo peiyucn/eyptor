@@ -69,22 +69,10 @@ export function activate(context: vscode.ExtensionContext) {
     // 该转换机制曾是打开闪动/双 tab/焦点互抢的根源，见 2026-09-08 简化设计）；
     // defaultMode:"source" 由 syncEditorAssociation 注入 editorAssociations 实现。
     // 全局搜索行号由 revealLine 命令拦截 + pendingNavigation 处理（见下）。
-
-    // 监听文本编辑器激活事件：捕获全局搜索导航时短暂出现的 .md 文本编辑器光标位置
-    context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor((editor) => {
-            if (!editor) { return; }
-            const { uri } = editor.document;
-            if (!uri.fsPath.endsWith('.md')) { return; }
-            // 切换到文本编辑器期间（按文档抑制窗口），跳过行号回传
-            // 避免主动切走时行号被反馈给 WebView 触发多余的 scrollToLine
-            if (MarkdownEditorProvider.current?.isNavFromTextEditorSuppressed(uri.toString())) { return; }
-            const line = editor.selection.active.line + 1; // 转为 1-indexed
-            if (line >= 1) {
-                MarkdownEditorProvider.current?.setPendingNavigation(uri.fsPath, line);
-            }
-        }),
-    );
+    // 回归（E3/C2）：此处原有 onDidChangeActiveTextEditor 行号回传监听器 + 配套
+    // ExpiryWindowMap 抑制窗口——监听器的存在理由是 priority:option 时代「文本 tab
+    // 先开再转换」的中间态，根治后已消失；其唯一触发流程 switchToTextEditor 又被
+    // 抑制窗口屏蔽，且 switchToPreview 已显式捕获当前行号（数据完全冗余），两者已删。
 
     // 拦截 revealLine 命令：全局搜索点击结果时 VS Code 会调此命令导航到指定行。
     // 归属由「谁持有 activeTextEditor」自然区分：

@@ -9,7 +9,6 @@ import { computeLineMap } from "./utils/lineMap";
 import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter, extractImageSyntaxes, rebuildImageSyntax } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
-import { ExpiryWindowMap } from "./utils/expiryWindowMap";
 import { sanitizeBasename } from "./utils/safeBasename";
 import { isPathWithinBase } from "./utils/pathGuard";
 import { OPEN_URL_SCHEMES, extractUrlScheme } from "../shared/constants";
@@ -27,7 +26,6 @@ import { resolveTableWrapVars } from "../shared/tableWrap";
 
 // ─── 常量 ────────────────────────────────────────────────────
 const GLOBAL_REVEAL_LINE_TTL_MS = 10_000;
-const NAV_SUPPRESS_DURATION_MS = 1500;
 const PENDING_NAVIGATION_TTL_MS = 5000;
 const REVEAL_LINE_DELAYED_CHECK_MS = 1000;
 const SAVE_COOLDOWN_MS = 1500;
@@ -61,9 +59,6 @@ export class MarkdownEditorProvider
     private readonly _frontmatterMap = new Map<string, string>(); // uriKey → raw frontmatter string
     // 最近一次已知的盘上内容快照（外部写盘回退决策的基准，key: docUri.toString()）
     private readonly _lastDiskContents = new Map<string, string>();
-    /** 切换到文本编辑器期间按文档抑制 onDidChangeActiveTextEditor 的行号回传
-     * （回归：曾为全局单布尔——切文档 A 时文档 B 的搜索导航行号一并被吞） */
-    private readonly _navSuppressionWindow = new ExpiryWindowMap(NAV_SUPPRESS_DURATION_MS);
 
     // 待跳转行号（全局搜索点击 / 切换编辑器时临时存储）key: fsPath
     private readonly _pendingNavigations = new Map<string, { line: number; ts: number }>();
@@ -88,16 +83,6 @@ export class MarkdownEditorProvider
         this._pendingRevealLine = undefined;
         if (Date.now() - p.ts > GLOBAL_REVEAL_LINE_TTL_MS) { return undefined; }
         return p.line;
-    }
-
-    /** 切换到文本编辑器时调用：按文档屏蔽来自文本编辑器的行号回传（NAV_SUPPRESS_DURATION_MS 内） */
-    public suppressNavFromTextEditor(uriKey: string): void {
-        this._navSuppressionWindow.mark(uriKey);
-    }
-
-    /** extension.ts 检查是否需要跳过 onDidChangeActiveTextEditor 的行号回传（按文档） */
-    public isNavFromTextEditorSuppressed(uriKey: string): boolean {
-        return this._navSuppressionWindow.isActive(uriKey);
     }
 
     /**
@@ -271,7 +256,6 @@ export class MarkdownEditorProvider
             this._wordCounts.delete(uriKey);
             this._lastDiskContents.delete(uriKey);
             this._fallbackWarnedUris.delete(uriKey);
-            this._navSuppressionWindow.delete(uriKey);
             // 兜底结算未完成的拉取（面板已销毁，用内存内容）
             this._contentRequests.settleAll(uriKey);
             // 面板关闭（含预览被替换、切文本编辑器）时隐藏状态栏
@@ -571,8 +555,6 @@ export class MarkdownEditorProvider
                 } finally {
                     flushCts.dispose();
                 }
-                // 抑制接下来 onDidChangeActiveTextEditor 的行号回传（按文档，1.5s 窗口）
-                this.suppressNavFromTextEditor(uriKey);
                 const textDoc = await vscode.workspace.openTextDocument(document.uri);
                 const viewCol = webviewPanel.viewColumn;
 
