@@ -21,9 +21,24 @@ function getTopbarBottom(): number {
 }
 
 function getVisibleHeadings(view: EditorView): HTMLElement[] {
+    // 仅顶层标题（与折叠能力口径一致）：doc.forEach 只遍历顶层块——嵌套在引用/列表内
+    // 的标题 DOM 也会被 querySelectorAll 命中，吸顶条可见却永无折叠按钮（回归 D7）。
+    // 探针证实 7.22.1 schema 允许 blockquote 内标题，口径不一致真实存在。
+    const topLevel = new Set<number>();
+    view.state.doc.forEach((node, offset) => {
+        if (node.type.name === "heading") topLevel.add(offset);
+    });
     return Array.from(view.dom.querySelectorAll<HTMLElement>(HEADING_SELECTOR)).filter((heading) => {
         const rect = heading.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && !heading.classList.contains("heading-fold-hidden");
+        if (!(rect.width > 0 && rect.height > 0)) return false;
+        if (heading.classList.contains("heading-fold-hidden")) return false;
+        let pos: number;
+        try {
+            pos = view.posAtDOM(heading, 0);
+        } catch {
+            return false;
+        }
+        return topLevel.has(pos);
     });
 }
 
