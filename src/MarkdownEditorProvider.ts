@@ -328,6 +328,14 @@ export class MarkdownEditorProvider
         uriKey: string,
     ): void {
         webviewPanel.onDidChangeViewState(({ webviewPanel: p }) => {
+            // 焦点真相同步：面板激活态变化推送给 webview（多 webview 焦点互抢的
+            // 根因修复——webview 内 window.focus()/view.focus() 无法判断自己是否
+            // 当前激活文档，后台 webview 迟到的 focus 会抢走焦点致当前文档无法输入）
+            try {
+                p.webview.postMessage({ type: "panelActiveState", active: p.active });
+            } catch {
+                // panel 已销毁（切换/关闭竞态），忽略
+            }
             if (!p.active) {
                 // 延迟检查：切换出 md 面板后若无活跃面板则隐藏状态栏
                 setTimeout(() => {
@@ -520,6 +528,9 @@ export class MarkdownEditorProvider
                 webviewPanel.webview.postMessage({
                     type: "init",
                     content: displayContent,
+                    // 发送时的面板激活态（webview 侧焦点守卫用；后续变化由
+                    // panelActiveState 消息实时同步）
+                    active: webviewPanel.active,
                     lineMap: computeLineMap(initContent),
                     frontmatter: this._frontmatterMap.get(uriKey) || undefined,
                     imageUriMap: Object.fromEntries(this._imageUriMaps.get(uriKey) ?? []),

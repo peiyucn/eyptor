@@ -584,8 +584,15 @@ window.addEventListener('scroll', () => {
 // 切回 webview 时恢复编辑器焦点（不滚动）。
 // 诊断日志证实：VS Code 切 tab 时 webview 的 visibilitychange 不触发（visibility 恒 visible），
 // 必须用 window focus 事件（webview 重新激活时触发）
+// 根因修复（多 webview 焦点互抢）：一切焦点动作都以 Extension 推送的面板激活态
+// （panelActiveState 消息）为准——后台 webview 迟到的 window.focus()/view.focus()
+// 会抢走当前文档焦点，导致「切过去无法输入、点击无光标」（对照 VS Code 上游
+// #61489 同类问题：webviews stealing focus when not last focused）
+let _isActivePanel = true;
 const restoreEditorFocus = () => {
+    if (!_isActivePanel) return; // 非激活面板不抢焦点
     requestAnimationFrame(() => {
+        if (!_isActivePanel) return;
         const view = getEditorView();
         if (view && !view.hasFocus()) {
             // 面板输入框有焦点时不抢（用户可能正在编辑 frontmatter/查找框）
@@ -694,14 +701,23 @@ async function handleEditorLifecycleMessage(
         currentLineMap = msg.lineMap ?? [];
         renderFrontmatterPanel(msg.frontmatter);
         if (msg.imageUriMap) { setImageUriMap(msg.imageUriMap); }
+        if (msg.type === "init") {
+            _isActivePanel = msg.active ?? true;
+        }
         await initEditor(container, msg.content);
         // 新 WebView 打开时主动获取 DOM 焦点。
         // 若不调用：旧 WebView（path-link-test.md）在 Cmd+Click 后 blur() 释放了焦点，
         // 但新 WebView（README.md）的 iframe 未必自动获得焦点；
         // VS Code 可能仍将 Cmd+W 路由到旧 iframe，导致两个 .md 标签都被关闭。
         // init 仅在首次打开时触发（revert 是内容变更），此处只对首次打开生效。
+        // 根因修复：延迟到下一帧并按面板激活态守卫——多 webview 时后台 webview 的
+        // 迟到 window.focus() 会抢走当前文档焦点（帧前消息队列已同步最新激活态）。
         if (msg.type === "init") {
-            window.focus();
+            requestAnimationFrame(() => {
+                if (_isActivePanel) {
+                    window.focus();
+                }
+            });
         }
         // 全局搜索导航或切换回预览时，滚动到指定源码行
         // Milkdown 渲染 + 浏览器布局需要时间，统一走 scheduleDelayedScroll 重试
@@ -725,7 +741,14 @@ async function handleEditorLifecycleMessage(
 
 /** 非生命周期消息：直接分发（无编辑器重建副作用，可并行处理） */
 function handleRegularMessage(msg: ToWebviewMessage): void {
-    if (msg.type === "requestSwitchToTextEditor") {
+    if (msg.type === "panelActiveState") {
+        // 面板激活态同步（多 webview 焦点互抢根因修复）：变激活时驱动焦点恢复
+        const wasActive = _isActivePanel;
+        _isActivePanel = msg.active;
+        if (msg.active && !wasActive) {
+            restoreEditorFocus();
+        }
+    } else if (msg.type === "requestSwitchToTextEditor") {
         // 来自菜单按钮/命令面板的"切换到文本编辑器"请求
         // 与 Cmd+Shift+M 快捷键逻辑相同：先获取当前可见行再通知 Extension
         const view = getEditorView();
