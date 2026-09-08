@@ -270,9 +270,7 @@
   实测证据：修复前 `.cm-content` 内高亮 span **0** 个、`reconfigure` 调用记录里根本没有语言那次；修复后同一文档 js 块 **21** 个高亮 span，reconfigure 记录出现 LanguageSupport。
   修复：`pnpm-workspace.yaml` 的 overrides 加 `"@codemirror/state": ^6.7.1`（全树单副本）。顺带入口 1021.3kb → 973.2kb。
   渲染截图（真实 Chromium）：`_poc/TEMP/epytor-harness-shot.png`
-
 * **源码/预览来回切光标回到 1 行 1 列 —— 修好了（`701204a`）**：Provider 对**完整内容**（含 frontmatter）算行号映射，frontmatter 占掉了 `lineMap[0]`；而 webview 的 DOM 顶层块只有正文，块索引整体错位一格——「预览 → 文本」取到上一块的行号（首块时正好是第 1 行），「文本 → 预览」的滚动同样落在上一块。新增 `computeDisplayLineMap`（剥掉 frontmatter 后按正文块算行号 + frontmatter 行数偏移），四处行号映射统一改用它，补 3 例测试。
-
 * **源码/预览切换闪动 —— 改成零闪动（`0f9da43`）**：你说得对，VS Code 自带预览不闪是因为它**从不销毁再重建**。两条命令都改成「只激活、不重建」：预览 → 文本不再 `dispose()` 面板（面板随标签隐藏但存活），文本 → 预览不再关闭文本 tab、只 `openWith` 复用已有标签。这样来回切换只是激活标签，零闪动、无重复标签、标签顺序也不变。代价：同一文件会同时存在文本与预览两个标签——这也是 VS Code 自带 Markdown 预览的行为。
 
 > 同一次真实浏览器测量的其余三条（都已是修复后的值）：
@@ -284,4 +282,13 @@
 > 仍未解决的一条：
 
 * **非 markdown 标签 → markdown 标签切换仍闪**（md ↔ md 之间不闪，只有从文本标签切过来才闪）：这是 webview iframe 从隐藏到可见时的重排，属于 VS Code 宿主侧行为，我目前没有找到可干预的入口。我会继续查，但不敢先给你「已修」的承诺。
+
+## 14. 开发者回复（2026-09-08 第五轮，提交 `a968603`）
+
+* **「两个标签完全不能接受」——已按官方做法重做（`a968603`）**：我去读了 VS Code 内置 `markdown.togglePreview` 的实现，它执行的是 `reopenActiveEditorWith`——**原地把当前标签的编辑器类型换掉**，既不新建也不关闭标签。上一轮我搞的「保留两个标签、只激活」模型是错的，撤回。
+  现在两条命令都改成：
+  - 预览 → 文本：落盘后 `reopenActiveEditorWith('default')`，随后把光标放到视口顶部行（该命令不接受定位参数，事后设置 selection + 滚到顶）
+  - 文本 → 预览：`reopenActiveEditorWith('epytor.editor')`（定位请求照旧先写入，面板重建后消费并滚动到该行）
+  效果：**单标签、原地替换**，无重复标签、标签顺序不变，与内置 Markdown 预览一致；旧版 VS Code 无该命令时自动回退到原实现。
+  → 请复测：切过去切回来是否只剩一个标签、是否还有闪动。
 
