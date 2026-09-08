@@ -100,9 +100,15 @@ export class MarkdownEditorProvider
         return this._navSuppressionWindow.isActive(uriKey);
     }
 
-    /** 从 extension.ts 调用：暂存待跳转行号；如果面板可见且已就绪则直接发送 */
-    public setPendingNavigation(fsPath: string, line: number): void {
-        this._pendingNavigations.set(fsPath, { line, ts: Date.now() });
+    /**
+     * 从 extension.ts 调用：暂存待跳转行号；如果面板可见且已就绪则直接发送。
+     * @param opts.directOnly 只做「已可见面板」的直接投递、不暂存（用于「目标就是当前
+     *   激活面板」的场景：投递错了也只是即将被替换的旧文档，且不留 5s 陈旧条目）
+     */
+    public setPendingNavigation(fsPath: string, line: number, opts?: { directOnly?: boolean }): void {
+        if (!opts?.directOnly) {
+            this._pendingNavigations.set(fsPath, { line, ts: Date.now() });
+        }
         // 面板已存在且已初始化 → 直接发送，无需等待 onDidChangeViewState
         const uriKey = vscode.Uri.file(fsPath).toString();
         const initialized = this._initializedPanels.has(uriKey);

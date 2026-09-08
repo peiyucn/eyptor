@@ -101,6 +101,15 @@ export function activate(context: vscode.ExtensionContext) {
                 const targetLine = args.lineNumber + 1; // 转为 1-indexed
                 // 全局兜底槽：md 面板 ready / viewState 激活时消费（10s TTL）
                 MarkdownEditorProvider.current?.setGlobalRevealLine(targetLine);
+                // 目标就是当前激活的 md 面板（同文档搜索结果）→ 直接投递，立即可见；
+                // directOnly 不暂存：即便此刻还是即将被替换的旧文档，也不会留下
+                // 5s 陈旧条目污染后续激活
+                const activeTab = vscode.window.tabGroups.activeTabGroup?.activeTab;
+                if (activeTab?.input instanceof vscode.TabInputCustom
+                    && activeTab.input.viewType === MarkdownEditorProvider.viewType) {
+                    MarkdownEditorProvider.current?.setPendingNavigation(
+                        activeTab.input.uri.fsPath, targetLine, { directOnly: true });
+                }
                 // 文本编辑器兜底：无条件执行（custom md tab 激活时 activeTextEditor 为 undefined，天然 no-op）
                 const editor = vscode.window.activeTextEditor;
                 if (editor) {
