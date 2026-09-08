@@ -870,6 +870,33 @@ onMessage((msg) => {
     return handleRegularMessage(msg);
 });
 
+/**
+ * 延迟执行滚动类动作的统一状态机（三处调用合一：搜索定位 / 恢复滚动位置 / 打开面板时的行定位）：
+ * 按 delays 计划重试；DOM 未就绪（view 缺失或首块高度为 0）时等待下一次；用户一旦开始交互
+ * 即放弃，避免渲染慢时延迟定位突然跳动页面。调用时重置 _userInteracted 起算。
+ */
+function scheduleDelayedScroll(
+    action: (view: EditorView) => void,
+    delays: number[] = [300, 600, 1100, 2000],
+): void {
+    _userInteracted = false; // 本次定位请求起算
+    let done = false;
+    const tryOnce = () => {
+        if (done) return;
+        if (_userInteracted) { done = true; return; }
+        const view = getEditorView();
+        if (!view) return;
+        // 检查第一个块的 DOM 高度：若为 0 说明布局尚未完成
+        const firstChild = view.dom.children[0] as HTMLElement | undefined;
+        if (!firstChild || firstChild.getBoundingClientRect().height === 0) return;
+        action(view);
+        done = true;
+    };
+    for (const delay of delays) {
+        setTimeout(tryOnce, delay);
+    }
+}
+
 /** init/revert：编辑器重建（串行执行，见 _editorLifecycleChain） */
 async function handleEditorLifecycleMessage(
     msg: Extract<ToWebviewMessage, { type: "init" | "revert" }>,
@@ -890,48 +917,20 @@ async function handleEditorLifecycleMessage(
             window.focus();
         }
         // 全局搜索导航或切换回预览时，滚动到指定源码行
-        // Milkdown 渲染 + 浏览器布局需要时间，多次重试确保 DOM 就绪后才滚动
+        // Milkdown 渲染 + 浏览器布局需要时间，统一走 scheduleDelayedScroll 重试
         if (msg.type === "init" && msg.scrollToLine) {
             const targetLine = msg.scrollToLine;
-            _userInteracted = false; // 本次定位请求起算
-            let scrollDone = false;
-            const tryScroll = () => {
-                if (scrollDone) { return; }
-                // 用户已开始交互（滚动/点击/输入）→ 放弃延迟定位，避免页面突然跳动
-                if (_userInteracted) { scrollDone = true; return; }
-                const view = getEditorView();
-                if (!view) { return; }
-                // 检查第一个块的 DOM 高度：若为 0 说明布局尚未完成
-                const firstChild = view.dom.children[0] as HTMLElement | undefined;
-                if (!firstChild || firstChild.getBoundingClientRect().height === 0) { return; }
+            scheduleDelayedScroll((view) => {
                 scrollToSourceLine(view, currentLineMap, targetLine);
-                scrollDone = true;
-            };
-            // 300ms 首试（Milkdown 渲染需要时间），若失败则在 600ms / 1100ms / 2000ms 继续重试
-            for (const delay of [300, 600, 1100, 2000]) {
-                setTimeout(tryScroll, delay);
-            }
+            });
         } else if (msg.type === "init") {
             // WebView 重建场景（VSCode 重启恢复标签页等）：从持久状态恢复滚动位置
-            _userInteracted = false; // 本次恢复请求起算
             const saved = getWebviewState();
             if (saved?.scrollY) {
                 const targetY = saved.scrollY as number;
-                let restoreDone = false;
-                const tryRestore = () => {
-                    if (restoreDone) return;
-                    // 用户已开始交互 → 放弃恢复，避免覆盖当前位置
-                    if (_userInteracted) { restoreDone = true; return; }
-                    const view = getEditorView();
-                    if (!view) return;
-                    const firstChild = view.dom.children[0] as HTMLElement | undefined;
-                    if (!firstChild || firstChild.getBoundingClientRect().height === 0) return;
+                scheduleDelayedScroll(() => {
                     window.scrollTo({ top: targetY });
-                    restoreDone = true;
-                };
-                for (const delay of [300, 600, 1100, 2000]) {
-                    setTimeout(tryRestore, delay);
-                }
+                });
             }
         }
     }
@@ -946,23 +945,16 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         const line = view ? getFirstVisibleSourceLine(view, currentLineMap) : undefined;
         notifySwitchToTextEditor(line);
     } else if (msg.type === "scrollToLine") {
-        // 面板已打开时（如全局搜索点击已打开文件）直接滚动
-        // 若 initEditor 正在重建（getEditorView 返回 null），最多重试 8 次
+        // 面板已打开时（如全局搜索点击已打开文件）直接滚动；编辑器重建中则按计划重试。
+        // 与 init 定位统一走 scheduleDelayedScroll（补上了首块高度检查：此前 view 一出现
+        // 就滚动，布局未完成时定位不准）
         const scrollLine = msg.line;
-        _userInteracted = false; // 本次定位请求起算
-        let scrollAttempts = 0;
-        const tryScrollNow = () => {
-            // 用户已开始交互 → 放弃定位（回归：渲染慢时延迟定位突然跳动页面）
-            if (_userInteracted) return;
-            const view = getEditorView();
-            if (view) {
+        scheduleDelayedScroll(
+            (view) => {
                 scrollToSourceLine(view, currentLineMap, scrollLine);
-            } else if (scrollAttempts < 8) {
-                scrollAttempts++;
-                setTimeout(tryScrollNow, 250);
-            }
-        };
-        tryScrollNow();
+            },
+            [0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000],
+        );
     } else if (msg.type === "lineMapUpdate") {
         currentLineMap = msg.lineMap;
     } else if (msg.type === "setDebugMode") {
