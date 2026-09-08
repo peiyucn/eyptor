@@ -1,9 +1,10 @@
 /**
- * 标题吸顶完整链路回归测试：真实 createEditor + 桩测布局 rect，
- * 滚动后吸顶条必须显示。
+ * 标题吸顶完整链路回归测试：真实 createEditor + 桩测布局 rect。
  * 回归：D7 顶层标题过滤用 doc.forEach offset（节点起始）与
  * posAtDOM(元素, 0)（起始 + 1）直接比对，恒差 1 → 缓存恒空 →
  * 吸顶条永远隐藏（用户报告「标题吸顶整个没了」）。
+ * 回归（本轮）：切换时机改为「标题顶边碰到吸顶行即固定」（对齐 VS Code 内置编辑器），
+ * 旧实现要等标题整体滚出顶栏，晚一个标题高度。
  */
 import { describe, expect, it } from "vitest";
 import { createEditor, destroyEditor } from "../editor";
@@ -28,7 +29,6 @@ if (typeof window.matchMedia === "undefined") {
     serializationMode: "clean",
 };
 
-/** 模拟布局：scrollY=150 时第一个标题（60..100）已滚出顶栏（36），应吸顶「标题 0」 */
 let scrollY = 150;
 Object.defineProperty(window, "scrollY", { get: () => scrollY, configurable: true });
 
@@ -46,52 +46,112 @@ class FakeResizeObserver {
 }
 (window as unknown as Record<string, unknown>).ResizeObserver = FakeResizeObserver;
 
+const HEADING_HEIGHT = 40;
+const TOPBAR_BOTTOM = 36;
+
+/** 建编辑器 + 桩测每个标题的布局（docTop 由调用方给，视口坐标随 scrollY 换算） */
+async function mountWithStubLayout(
+    lines: string[],
+    docTopOf: (index: number) => number,
+): Promise<HTMLElement> {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    const editor = await createEditor(root, lines.join("\n"), () => {});
+    void editor;
+
+    let index = 0;
+    root.querySelectorAll("h1,h2,h3,h4,h5,h6").forEach((el) => {
+        const docTop = docTopOf(index++);
+        (el as HTMLElement).getBoundingClientRect = () =>
+            ({
+                width: 800,
+                height: HEADING_HEIGHT,
+                top: docTop - scrollY,
+                bottom: docTop + HEADING_HEIGHT - scrollY,
+                left: 100,
+                right: 900,
+                x: 100,
+                y: docTop - scrollY,
+                toJSON: () => ({}),
+            }) as DOMRect;
+    });
+    const topbar = root.querySelector(".milkdown-top-bar") as HTMLElement | null;
+    if (topbar) {
+        topbar.getBoundingClientRect = () =>
+            ({ width: 800, height: TOPBAR_BOTTOM, top: 0, bottom: TOPBAR_BOTTOM, left: 0, right: 800, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    }
+    // 正文容器要够高（最后一个章节的底边取内容底边；jsdom 无布局会得到 0）
+    const prose = root.querySelector(".ProseMirror") as HTMLElement | null;
+    if (prose) {
+        prose.getBoundingClientRect = () =>
+            ({ width: 800, height: 5000, top: 0, bottom: 5000, left: 0, right: 800, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    }
+    return root;
+}
+
+/** 触发一次滚动更新，等 RO 初始回调 + 300ms 缓存重建 + rAF */
+async function settle(): Promise<void> {
+    window.dispatchEvent(new Event("scroll"));
+    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+}
+
+const stickyEl = () => document.querySelector<HTMLElement>(".heading-sticky-title");
+
 describe("标题吸顶完整链路", () => {
-    it("滚动后 应该 显示吸顶条且内容为已滚出的标题", async () => {
-        const root = document.createElement("div");
-        document.body.appendChild(root);
-        const lines: string[] = [];
-        for (let i = 0; i < 10; i++) {
-            lines.push(`## 标题 ${i}`);
-            lines.push("正文一行");
-            lines.push("正文两行");
-        }
-        const editor = await createEditor(root, lines.join("\n"), () => {});
-        void editor;
+    it("标题顶边碰到吸顶行 应该 立即吸顶该标题（旧实现要等整体滚出，晚一个标题高度）", async () => {
+        // 标题 i 的 docTop = 60 + i*120；scrollY=150 时标题 1 的顶边 = 30（已越过顶栏底 36）
+        scrollY = 150;
+        const root = await mountWithStubLayout(
+            Array.from({ length: 10 }, (_, i) => `## 标题 ${i}\n正文一行\n正文两行`).flatMap((s) => s.split("\n")),
+            (i) => 60 + i * 120,
+        );
+        await settle();
 
-        // 桩测布局 rect：标题 i 的文档坐标 = 60 + i*120（标题块高度 40）
-        let headingIndex = 0;
-        root.querySelectorAll("h1,h2,h3,h4,h5,h6").forEach((el) => {
-            const i = headingIndex++;
-            const docTop = 60 + i * 120;
-            (el as HTMLElement).getBoundingClientRect = () =>
-                ({
-                    width: 800,
-                    height: 40,
-                    top: docTop - scrollY,
-                    bottom: docTop + 40 - scrollY,
-                    left: 100,
-                    right: 900,
-                    x: 100,
-                    y: docTop - scrollY,
-                    toJSON: () => ({}),
-                }) as DOMRect;
-        });
-        const topbar = root.querySelector(".milkdown-top-bar") as HTMLElement | null;
-        if (topbar) {
-            topbar.getBoundingClientRect = () =>
-                ({ width: 800, height: 36, top: 0, bottom: 36, left: 0, right: 800, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
-        }
-
-        // 触发滚动更新（插件监听 window scroll）；等待 RO 初始回调 + 300ms 缓存重建 + rAF
-        window.dispatchEvent(new Event("scroll"));
-        await new Promise((r) => setTimeout(r, 500));
-        await new Promise((r) => requestAnimationFrame(() => r(null)));
-
-        const sticky = document.querySelector<HTMLElement>(".heading-sticky-title");
+        const sticky = stickyEl();
         expect(sticky).not.toBeNull();
         expect(sticky!.hidden).toBe(false);
+        expect(sticky!.textContent).toContain("标题 1");
+
+        destroyEditor();
+        root.remove();
+    }, 60000);
+
+    it("下一个标题尚未碰到吸顶行 应该 保持上一个标题", async () => {
+        // scrollY=100 时标题 1 的顶边 = 80（仍在吸顶行下方）
+        scrollY = 100;
+        const root = await mountWithStubLayout(
+            Array.from({ length: 10 }, (_, i) => `## 标题 ${i}\n正文一行\n正文两行`).flatMap((s) => s.split("\n")),
+            (i) => 60 + i * 120,
+        );
+        await settle();
+
+        const sticky = stickyEl();
+        expect(sticky!.hidden).toBe(false);
         expect(sticky!.textContent).toContain("标题 0");
+        expect(sticky!.textContent).not.toContain("标题 1");
+
+        destroyEditor();
+        root.remove();
+    }, 60000);
+
+    it("多级标题 应该 逐级显示（源码形式行：外层在上、内层在下）", async () => {
+        // h1@60、h3@190；scrollY=150 → 第一行 y=36 落在 h1 章节内，第二行 y=58 落在 h3 内
+        scrollY = 150;
+        const root = await mountWithStubLayout(
+            ["# 一级", "正文", "### 三级", "正文"],
+            (i) => (i === 0 ? 60 : 190),
+        );
+        await settle();
+
+        const sticky = stickyEl();
+        expect(sticky!.hidden).toBe(false);
+        const rows = Array.from(sticky!.querySelectorAll<HTMLElement>(".heading-sticky-row"));
+        expect(rows).toHaveLength(2);
+        expect(rows[0].textContent).toContain("一级");
+        expect(rows[1].textContent).toContain("三级");
+        expect(rows[0].querySelector(".heading-sticky-marker")?.textContent).toBe("#");
+        expect(rows[1].querySelector(".heading-sticky-marker")?.textContent).toBe("###");
 
         destroyEditor();
         root.remove();

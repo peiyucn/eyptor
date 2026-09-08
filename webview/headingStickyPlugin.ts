@@ -1,6 +1,11 @@
 /**
- * 标题吸顶插件：滚动时在顶栏下方显示当前章节标题，点击跳回；与 headingFold 联动折叠开关。
- * 参考 git-xing/md-wysiwyg-editor v0.3.2 最终方案（含推挤过渡与布局修复教训）。
+ * 标题吸顶插件：滚动时在顶栏下方显示当前章节路径（最多 3 级），点击跳回；
+ * 与 headingFold 联动折叠开关。
+ *
+ * 几何口径对齐 VS Code 内置编辑器的吸顶滚动（见 utils/headingSticky.ts）：
+ * 标题顶边碰到它那一行就进入固定状态，本章节末尾划过该行时让位给下一个标题。
+ * 回归（用户反馈）：旧实现要等标题**整体**滚出顶栏才切换，晚了一个标题高度，
+ * 「新章节都已经滑出可见范围后才切换」，反直觉。
  */
 import { Plugin } from "@milkdown/kit/prose/state";
 import { $prose } from "@milkdown/kit/utils";
@@ -12,7 +17,7 @@ import { t } from "./i18n";
 import { headingFoldPluginKey, type HeadingFoldMeta } from "./headingFoldPlugin";
 import { shouldSkipViewportWork } from "./utils/viewportFreeze";
 import { buildHeadingIndex, type HeadingIndexEntry } from "./utils/headingFold";
-import { computeStickyActiveIndex } from "./utils/headingSticky";
+import { computeStickyRows, STICKY_MAX_ROWS, STICKY_ROW_HEIGHT_PX } from "./utils/headingSticky";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
 
 /** 隐藏吸顶条直到用户下一次交互（TOC 跳转用；插件实例挂载时赋值） */
@@ -54,11 +59,10 @@ export const headingStickyPlugin = $prose(() =>
             sticky.className = "heading-sticky-title";
             sticky.hidden = true;
             sticky.style.display = "none";
+            sticky.style.setProperty("--epytor-sticky-row-height", `${STICKY_ROW_HEIGHT_PX}px`);
             document.body.appendChild(sticky);
 
             let rafId: number | null = null;
-            let activeHeading: HTMLElement | null = null;
-            let activeHeadingPos: number | null = null;
             // 跳转后抑制吸顶显示（跳转的 scroll 事件会立即重算，目标标题完整可见时
             // 仍会吸顶前一个标题并遮挡目标）。解除条件 = 用户下一次交互（wheel /
             // 键盘 / 滚动条拖拽的 mousedown）——统一用 userInteraction 的 epoch 判定，
@@ -87,85 +91,57 @@ export const headingStickyPlugin = $prose(() =>
                 });
             };
 
-            // 点击吸顶条跳回标题：只绑定一次（标题变化仅更新内容，避免监听器累积）
+            // 点击某一级跳回该标题：只绑定一次（层级变化仅重建行内容，避免监听器累积）
             sticky.addEventListener("click", (event) => {
-                if ((event.target as HTMLElement).closest(".heading-sticky-toggle")) return;
-                const pos = Number(sticky.dataset["headingPos"]);
+                const target = event.target as HTMLElement | null;
+                if (target?.closest(".heading-sticky-toggle")) return;
+                const row = target?.closest<HTMLElement>(".heading-sticky-row");
+                const pos = Number(row?.dataset["headingPos"]);
                 if (Number.isFinite(pos) && pos > 0) {
                     suppressUntilNextInteraction();
                     scrollHeadingIntoStickyPosition(pos);
                 }
             });
 
-            const setStickyContent = (
-                heading: HTMLElement,
-                headingPos: number,
-                collapsed: boolean,
-                foldable: boolean,
-                level: number,
-                text: string,
-            ): void => {
-                sticky.innerHTML = "";
-
-                if (foldable) {
-                    const button = document.createElement("button");
-                    button.type = "button";
-                    button.className = "heading-sticky-toggle";
-                    button.innerHTML = collapsed ? IconChevronRight : IconChevronDown;
-                    const tipText = collapsed ? t("Expand content") : t("Collapse content");
-                    button.setAttribute("aria-label", tipText);
-                    button.setAttribute("aria-expanded", collapsed ? "false" : "true");
-                    applyTooltip(button, tipText, { placement: "above" });
-                    button.addEventListener("mousedown", (event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                    });
-                    button.addEventListener("click", (event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        const tr = view.state.tr
-                            .setMeta(headingFoldPluginKey, {
-                                type: "toggle",
-                                pos: headingPos,
-                            } satisfies HeadingFoldMeta)
-                            .setMeta("addToHistory", false);
-                        view.dispatch(tr);
-                        view.focus();
-                        hideTooltip();
-                        scrollHeadingIntoStickyPosition(headingPos);
-                    });
-                    sticky.appendChild(button);
-                }
-
-                const marker = document.createElement("span");
-                marker.className = "heading-sticky-marker";
-                marker.textContent = `H${level}`;
-
-                const label = document.createElement("span");
-                label.className = "heading-sticky-text";
-                label.textContent = text;
-
-                sticky.append(marker, label);
-            };
-
-            const syncTypography = (heading: HTMLElement) => {
-                const style = window.getComputedStyle(heading);
-                sticky.style.fontSize = style.fontSize;
-                sticky.style.lineHeight = style.lineHeight;
-                sticky.style.fontWeight = style.fontWeight;
+            const makeFoldToggle = (headingPos: number, collapsed: boolean): HTMLButtonElement => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "heading-sticky-toggle";
+                button.innerHTML = collapsed ? IconChevronRight : IconChevronDown;
+                const tipText = collapsed ? t("Expand content") : t("Collapse content");
+                button.setAttribute("aria-label", tipText);
+                button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+                applyTooltip(button, tipText, { placement: "above" });
+                button.addEventListener("mousedown", (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+                button.addEventListener("click", (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const tr = view.state.tr
+                        .setMeta(headingFoldPluginKey, {
+                            type: "toggle",
+                            pos: headingPos,
+                        } satisfies HeadingFoldMeta)
+                        .setMeta("addToHistory", false);
+                    view.dispatch(tr);
+                    view.focus();
+                    hideTooltip();
+                    scrollHeadingIntoStickyPosition(headingPos);
+                });
+                return button;
             };
 
             const hideSticky = () => {
-                activeHeading = null;
-                activeHeadingPos = null;
                 sticky.hidden = true;
                 // 双保险：heading.css 的 display:flex 会覆盖 hidden 属性的 UA 样式，
                 // 必须显式控制 display 才能真正隐藏
                 sticky.style.display = "none";
-                delete sticky.dataset["headingPos"];
+                lastRowSignature = "";
             };
 
-            // ── 标题缓存（性能）：文档坐标（docTop/docBottom 相对文档顶部，与滚动无关） ──
+            // ── 标题缓存（性能）：文档坐标（docTop/docSectionBottom 相对文档顶部，与滚动无关） ──
             // 回归：1 万行文档输入/滚动卡顿——此前每次 updateSticky 全量
             // querySelectorAll + getBoundingClientRect（几百标题 × 每帧）；
             // 现改为文档变更后防抖重建缓存，滚动时仅纯数字比较
@@ -174,21 +150,33 @@ export const headingStickyPlugin = $prose(() =>
                 /** 节点起始位置（共享索引口径，不再靠 posAtDOM 反查） */
                 pos: number;
                 level: number;
+                /** 嵌套深度（1 = 顶层标题；h1 → h3 的跨级标题记为 2 层） */
+                depth: number;
                 text: string;
                 /** 可折叠（索引的 foldRange 非空；不再嗅探 CSS class） */
                 foldable: boolean;
                 docTop: number;
-                docBottom: number;
+                /** 本章节底边的文档坐标（下一个 level ≤ 本标题 的可见标题顶边；末尾取内容底边） */
+                docSectionBottom: number;
             }
             let cachedHeadings: CachedHeading[] = [];
             let cacheDirty = true;
             let rebuildTimer: ReturnType<typeof setTimeout> | null = null;
+            let lastRowSignature = "";
 
             const rebuildCache = () => {
                 rebuildTimer = null;
                 const scrollOffset = window.scrollY;
+                const contentBottom = view.dom.getBoundingClientRect().bottom + scrollOffset;
+                const levelStack: number[] = [];
                 cachedHeadings = [];
                 for (const { el, entry } of getTopLevelHeadings(view)) {
+                    // 嵌套深度按标题层级栈算：先弹出层级 ≥ 自己的标题，再入栈
+                    while (levelStack.length > 0 && levelStack[levelStack.length - 1] >= entry.level) {
+                        levelStack.pop();
+                    }
+                    levelStack.push(entry.level);
+                    const depth = levelStack.length;
                     const rect = el.getBoundingClientRect();
                     // 未渲染 / 被折叠隐藏（display:none 时 rect 为 0）
                     if (!(rect.width > 0 && rect.height > 0)) continue;
@@ -197,11 +185,22 @@ export const headingStickyPlugin = $prose(() =>
                         el,
                         pos: entry.pos,
                         level: entry.level,
+                        depth,
                         text: entry.text,
                         foldable: entry.foldRange !== null,
                         docTop: rect.top + scrollOffset,
-                        docBottom: rect.bottom + scrollOffset,
+                        docSectionBottom: contentBottom,
                     });
+                }
+                // 章节底边 = 下一个「level ≤ 自己」的可见标题顶边（栈式 O(n)；折叠隐藏的内容
+                // 已从列表剔除，视觉上章节就断在那里）
+                const pending: number[] = [];
+                for (let i = 0; i < cachedHeadings.length; i++) {
+                    while (pending.length > 0
+                        && cachedHeadings[pending[pending.length - 1]].level >= cachedHeadings[i].level) {
+                        cachedHeadings[pending.pop()!].docSectionBottom = cachedHeadings[i].docTop;
+                    }
+                    pending.push(i);
                 }
                 cacheDirty = false;
             };
@@ -214,6 +213,36 @@ export const headingStickyPlugin = $prose(() =>
                     rebuildCache();
                     scheduleUpdate();
                 }, CACHE_REBUILD_DEBOUNCE_MS);
+            };
+
+            /** 最多显示几行：不超过 3 行，且不超过视口高度的 25%（对照内置编辑器） */
+            const maxStickyRows = (): number => Math.min(
+                STICKY_MAX_ROWS,
+                Math.max(1, Math.floor((window.innerHeight * 0.25) / STICKY_ROW_HEIGHT_PX)),
+            );
+
+            /** 重建吸顶行内容（源码形式：`##` 前缀 + 纯文本，一级一行，不再渲染标题字号） */
+            const renderRows = (indices: number[]): void => {
+                const folded = headingFoldPluginKey.getState(view.state);
+                const frag = document.createDocumentFragment();
+                for (const idx of indices) {
+                    const cached = cachedHeadings[idx];
+                    const row = document.createElement("div");
+                    row.className = "heading-sticky-row";
+                    row.dataset["headingPos"] = String(cached.pos);
+                    if (cached.foldable) {
+                        row.appendChild(makeFoldToggle(cached.pos, folded?.has(cached.pos) ?? false));
+                    }
+                    const marker = document.createElement("span");
+                    marker.className = "heading-sticky-marker";
+                    marker.textContent = "#".repeat(cached.level);
+                    const label = document.createElement("span");
+                    label.className = "heading-sticky-text";
+                    label.textContent = cached.text;
+                    row.append(marker, label);
+                    frag.appendChild(row);
+                }
+                sticky.replaceChildren(frag);
             };
 
             const updateSticky = () => {
@@ -229,7 +258,7 @@ export const headingStickyPlugin = $prose(() =>
                     }
                 }
 
-                const top = getTopbarBottom();
+                const topbarBottom = getTopbarBottom();
                 if (cacheDirty) rebuildCache();
                 if (cachedHeadings.length === 0) {
                     hideSticky();
@@ -238,50 +267,37 @@ export const headingStickyPlugin = $prose(() =>
 
                 // 文档坐标 + 当前 scrollY 换算为视口坐标：纯数字计算，零 DOM 查询
                 const scrollY = window.scrollY;
-                let activeIndex = computeStickyActiveIndex(
-                    cachedHeadings.map((h) => ({ top: h.docTop - scrollY, bottom: h.docBottom - scrollY })),
-                    top,
+                const rows = computeStickyRows(
+                    cachedHeadings.map((h) => ({
+                        depth: h.depth,
+                        top: h.docTop - scrollY,
+                        sectionBottom: h.docSectionBottom - scrollY,
+                    })),
+                    topbarBottom,
+                    STICKY_ROW_HEIGHT_PX,
+                    maxStickyRows(),
                 );
-
-                if (activeIndex < 0) {
+                if (rows.length === 0) {
                     hideSticky();
                     return;
                 }
 
-                const cached = cachedHeadings[activeIndex];
-                const heading = cached.el;
-                const text = cached.text;
-                if (!text) {
-                    hideSticky();
-                    return;
-                }
-
-                const headingPos = cached.pos;
-                activeHeadingPos = headingPos;
-                const foldable = cached.foldable;
-                const collapsed = headingFoldPluginKey.getState(view.state)?.has(headingPos) ?? false;
-                const rect = heading.getBoundingClientRect();
+                const innermost = cachedHeadings[rows[rows.length - 1]];
+                const rect = innermost.el.getBoundingClientRect();
                 sticky.hidden = false;
                 sticky.style.display = "";
-                sticky.dataset["headingPos"] = String(headingPos);
-                sticky.style.top = `${top}px`;
+                sticky.style.top = `${topbarBottom}px`;
                 sticky.style.left = `${rect.left}px`;
                 sticky.style.width = `${rect.width}px`;
 
-                if (
-                    heading !== activeHeading ||
-                    sticky.dataset["headingText"] !== text ||
-                    sticky.dataset["collapsed"] !== String(collapsed)
-                ) {
-                    activeHeading = heading;
-                    sticky.dataset["headingText"] = text;
-                    sticky.dataset["collapsed"] = String(collapsed);
-                    syncTypography(heading);
-                    setStickyContent(heading, headingPos, collapsed, foldable, cached.level, text);
+                const folded = headingFoldPluginKey.getState(view.state);
+                const signature = rows
+                    .map((idx) => `${cachedHeadings[idx].pos}:${folded?.has(cachedHeadings[idx].pos) ? 1 : 0}`)
+                    .join(",");
+                if (signature !== lastRowSignature) {
+                    lastRowSignature = signature;
+                    renderRows(rows);
                 }
-
-                // 无推挤过渡：下一标题顶到时直接切换（推挤曾导致吸顶条被顶栏遮挡）
-                sticky.style.transform = "";
             };
 
             const scheduleUpdate = () => {

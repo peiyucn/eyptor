@@ -47,7 +47,7 @@
     opacity: 0.6;
 }
 
-/* ── 吸顶标题条 ──────────────────────────────────────── */
+/* ── 吸顶标题条（多级：外层在上，内层在下；源码形式纯文本行） ─────────── */
 /* hidden 属性兜底：display:flex 会覆盖 UA 的 [hidden]{display:none}，需显式声明 */
 .heading-sticky-title[hidden] {
     display: none !important;
@@ -57,27 +57,40 @@
     position: fixed;
     z-index: 90;
     display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 2px 10px 2px 6px;
+    flex-direction: column;
+    /* 行高与 JS 的 STICKY_ROW_HEIGHT_PX 同源（几何判定按行高算，务必一致） */
+    --epytor-sticky-row-height: 22px;
+    padding: 0;
     box-sizing: border-box;
     background: var(--vscode-editor-background, #1e1e1e);
     border-left: 3px solid var(--vscode-focusBorder, #007fd4);
     border-radius: 0 3px 3px 0;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.heading-sticky-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: var(--epytor-sticky-row-height);
+    padding: 0 10px 0 6px;
+    box-sizing: border-box;
+    font-size: 12px;
+    line-height: var(--epytor-sticky-row-height);
     cursor: pointer;
     overflow: hidden;
 }
 
+.heading-sticky-row:hover {
+    background: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.05));
+}
+
 .heading-sticky-marker {
     flex-shrink: 0;
-    font-size: 10px;
-    line-height: 1;
-    padding: 2px 5px;
-    border-radius: 3px;
-    background: var(--vscode-badge-background, #4d4d4d);
-    color: var(--vscode-badge-foreground, #ffffff);
-    letter-spacing: 0.05em;
+    font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+    color: var(--vscode-descriptionForeground, #858585);
+    letter-spacing: -0.05em;
 }
 
 .heading-sticky-text {
@@ -92,8 +105,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     padding: 0;
     border: none;
     border-radius: 3px;
@@ -107,6 +120,6 @@
 }
 
 .heading-sticky-toggle svg {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
 }
