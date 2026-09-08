@@ -42,13 +42,4 @@ describe("ExpiryWindowMap 抑制窗口表", () => {
         expect(w.isActive("a", 1000)).toBe(false);
         expect(w.size).toBe(0);
     });
-
-    it("purgeExpired 应该 只清已到期条目", () => {
-        const w = new ExpiryWindowMap(TTL);
-        w.mark("old", 1000);
-        w.mark("new", 5000);
-        w.purgeExpired(4000);
-        expect(w.size).toBe(1);
-        expect(w.isActive("new", 4000)).toBe(true);
-    });
 });

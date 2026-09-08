@@ -53,9 +53,6 @@ export class MarkdownEditorProvider
     // 记录每个 document 对应的 webviewPanel（用于 revert 时推送新内容）
     private readonly _webviewPanels = new Map<string, vscode.WebviewPanel>();
 
-    // 已执行过 keepEditor（pin tab）的 uri，避免重复执行
-    private readonly _pinnedDocuments = new Set<string>();
-
     // 记录最近一次我们自己写盘的时间，用于避免自身保存触发文件监听 revert
     private readonly _lastSaveTimes = new Map<string, number>();
 
@@ -140,15 +137,6 @@ export class MarkdownEditorProvider
     public postToPanel(uri: vscode.Uri, msg: ToWebviewMessage): void {
         const panel = this._webviewPanels.get(uri.toString());
         if (panel) { panel.webview.postMessage(msg); }
-    }
-
-    /** 从 extension.ts（revealLine 命令）调用：直接向面板发送滚动消息 */
-    public scrollPanelToLine(uri: vscode.Uri, line: number): void {
-        const uriKey = uri.toString();
-        const panel = this._webviewPanels.get(uriKey);
-        if (panel) {
-            panel.webview.postMessage({ type: 'scrollToLine', line });
-        }
     }
 
     private _consumePendingNavigation(fsPath: string): number | undefined {
@@ -288,7 +276,6 @@ export class MarkdownEditorProvider
     ): void {
         webviewPanel.onDidDispose(() => {
             this._webviewPanels.delete(uriKey);
-            this._pinnedDocuments.delete(uriKey);
             this._imageUriMaps.delete(uriKey);
             this._initializedPanels.delete(uriKey);
             this._wordCounts.delete(uriKey);

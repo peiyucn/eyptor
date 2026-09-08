@@ -35,13 +35,6 @@ export class ExpiryWindowMap {
         this._until.delete(key);
     }
 
-    /** 清掉所有已到期条目（抑制表超过阈值时调用，保持有界） */
-    purgeExpired(now: number = Date.now()): void {
-        for (const [key, until] of this._until) {
-            if (now >= until) this._until.delete(key);
-        }
-    }
-
     /** 当前条目数（测试观测口） */
     get size(): number {
         return this._until.size;
