@@ -200,8 +200,9 @@ export function activate(context: vscode.ExtensionContext) {
                 if (!target) { return; }
 
                 const provider = MarkdownEditorProvider.current;
-                // 优先方案：向 WebView 请求当前滚动行号，WebView 会上报位置后自行触发切换
-                // 这样菜单按钮和 Cmd+Shift+M 快捷键行为一致（均携带行号，不主动关闭自定义编辑器 tab）
+                // 向 WebView 请求当前滚动行号：WebView 上报位置后回发 switchToTextEditor 消息，
+                // 由 Provider 落盘最新内容、关闭 WYSIWYG tab、再以文本编辑器打开并定位到该行
+                // （携带行号 + 拉取式架构下必须先落盘；与 Cmd+Shift+M 快捷键行为一致）
                 if (provider) {
                     provider.postToPanel(target, { type: "requestSwitchToTextEditor" });
                     return;
