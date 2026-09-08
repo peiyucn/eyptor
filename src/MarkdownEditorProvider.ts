@@ -142,14 +142,8 @@ export class MarkdownEditorProvider
                 supportsMultipleEditorsPerDocument: false,
             },
         );
-        // 表格换行档位变更：广播给所有打开的 WebView 即时更新 CSS 变量（无需重开文档）
-        context.subscriptions.push(
-            vscode.workspace.onDidChangeConfiguration((e) => {
-                if (!e.affectsConfiguration("epytor.tableWrapMode")) return;
-                const mode = vscode.workspace.getConfiguration("epytor").get<string>("tableWrapMode", "wrap");
-                provider.postToAll({ type: "tableWrapModeChanged", mode });
-            }),
-        );
+        // 配置广播统一在 extension.ts 的 CONFIG_BROADCASTS 表处理（回归 E10：
+        // 此前 tableWrapMode 在此另设一份同构监听）
         return disposable;
     }
 

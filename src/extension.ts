@@ -1,11 +1,35 @@
 import * as vscode from "vscode";
 import { MarkdownEditorProvider } from "./MarkdownEditorProvider";
+import { sanitizeSerializationMode } from "./utils/webviewConfigSanitize";
+import type { ToWebviewMessage } from "../shared/messages";
 
 function debugLog(...args: unknown[]): void {
     if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) {
         console.log(...args);
     }
 }
+
+/**
+ * 配置变更 → WebView 广播表（表驱动，新增配置项只加一行）：
+ * 每项 = 配置全限定键 + 把配置值映射为消息的函数。
+ */
+const CONFIG_BROADCASTS: ReadonlyArray<{
+    section: string;
+    message: (value: unknown) => ToWebviewMessage;
+}> = [
+    {
+        section: "epytor.debugMode",
+        message: (value) => ({ type: "setDebugMode", enabled: value === true }),
+    },
+    {
+        section: "epytor.markdown.serializationMode",
+        message: (value) => ({ type: "setSerializationMode", mode: sanitizeSerializationMode(value) }),
+    },
+    {
+        section: "epytor.tableWrapMode",
+        message: (value) => ({ type: "tableWrapModeChanged", mode: typeof value === "string" ? value : "wrap" }),
+    },
+];
 
 /** 记录「workbench.editorAssociations 的 md 条目由本扩展注入」的标记（globalState） */
 const INJECTED_ASSOC_KEY = "epytor.injectedEditorAssociations";
@@ -128,6 +152,8 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // 监听设置手动变更（从 VSCode 设置 UI 修改时同步）
+    // 简单广播项用表驱动（回归 E10：此前每项一段同构分支，新增配置要复制第四份；
+    // tableWrapMode 原在 Provider.register 内另设一份监听，现统一到此处）
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration("epytor.defaultMode")) {
@@ -136,23 +162,10 @@ export function activate(context: vscode.ExtensionContext) {
                     .get<string>("defaultMode", "wysiwyg");
                 syncEditorAssociation(mode, context);
             }
-            if (e.affectsConfiguration("epytor.debugMode")) {
-                const v = vscode.workspace
-                    .getConfiguration("epytor")
-                    .get<boolean>("debugMode", false);
-                MarkdownEditorProvider.current?.postToAll({
-                    type: "setDebugMode",
-                    enabled: v,
-                });
-            }
-            if (e.affectsConfiguration("epytor.markdown.serializationMode")) {
-                const mode = vscode.workspace
-                    .getConfiguration("epytor")
-                    .get<"clean" | "compatible">("markdown.serializationMode", "clean");
-                MarkdownEditorProvider.current?.postToAll({
-                    type: "setSerializationMode",
-                    mode,
-                });
+            for (const item of CONFIG_BROADCASTS) {
+                if (!e.affectsConfiguration(item.section)) { continue; }
+                const value = vscode.workspace.getConfiguration().get(item.section);
+                MarkdownEditorProvider.current?.postToAll(item.message(value));
             }
         }),
     );
