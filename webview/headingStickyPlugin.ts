@@ -34,15 +34,13 @@ function getHeadingText(heading: HTMLElement): string {
 }
 
 function findHeadingPos(view: EditorView, heading: HTMLElement): number | null {
-    let result: number | null = null;
-    view.state.doc.descendants((node, pos) => {
-        if (node.type.name === "heading" && view.nodeDOM(pos) === heading) {
-            result = pos;
-            return false;
-        }
-        return true;
-    });
-    return result;
+    // DOM 反查（O(depth)）：回归——此前用 doc.descendants 全树遍历且命中后无提前退出，
+    // 缓存失效后每个标题一次全文档扫描（含文本节点），滚动路径退化 O(H×N)
+    try {
+        return view.posAtDOM(heading, 0);
+    } catch {
+        return null;
+    }
 }
 
 export const headingStickyPlugin = $prose(() =>
@@ -290,7 +288,18 @@ export const headingStickyPlugin = $prose(() =>
             scheduleUpdate();
 
             return {
-                update: markCacheDirty,
+                update(view, prevState) {
+                    // 回归：任何事务（含纯光标移动/选区变化）都触发 markCacheDirty，
+                    // 每次停顿 300ms 后全量 getBoundingClientRect 重建；仅文档内容或
+                    // 折叠状态变化时才需要重建（折叠切换是 meta-only 事务，Set 引用变化）
+                    const docChanged = !view.state.doc.eq(prevState.doc);
+                    const foldChanged =
+                        headingFoldPluginKey.getState(view.state) !==
+                        headingFoldPluginKey.getState(prevState);
+                    if (docChanged || foldChanged) {
+                        markCacheDirty();
+                    }
+                },
                 destroy() {
                     if (rafId !== null) cancelAnimationFrame(rafId);
                     if (rebuildTimer !== null) clearTimeout(rebuildTimer);
