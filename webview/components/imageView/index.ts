@@ -54,6 +54,8 @@ type ViewMutationRecord = MutationRecord | { type: "selection"; target: Node };
 
 // ─── Lightbox ──────────────────────────────────────────────
 let activeLightbox: HTMLElement | null = null;
+/** 当前 lightbox 的完整清理函数（NodeView.destroy 需要一并释放 document keydown 监听） */
+let activeLightboxCleanup: (() => void) | null = null;
 
 export function showGlobalLightbox(src: string, alt: string): void {
     if (activeLightbox) {
@@ -83,6 +85,7 @@ export function showGlobalLightbox(src: string, alt: string): void {
             document.body.removeChild(activeLightbox);
         }
         activeLightbox = null;
+        activeLightboxCleanup = null;
         document.removeEventListener("keydown", onKeyDown);
     }
 
@@ -104,6 +107,7 @@ export function showGlobalLightbox(src: string, alt: string): void {
         close();
     });
     document.addEventListener("keydown", onKeyDown);
+    activeLightboxCleanup = close;
 }
 
 // ─── 阻止输入框事件冒泡到 ProseMirror ────────────────────
@@ -294,11 +298,13 @@ export function createImageView(
     errorPlaceholder.style.display = "none";
 
     let retryCount = 0;
+    /** 加载失败重试 timer 句柄（destroy 时清理，防节点销毁后仍改写已脱离 DOM 的 img.src） */
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     img.addEventListener("error", () => {
         if (retryCount < MAX_IMAGE_LOAD_RETRIES) {
             retryCount++;
             const delay = Math.min(IMAGE_RETRY_BASE_DELAY_MS * retryCount, IMAGE_RETRY_MAX_DELAY_MS);
-            setTimeout(() => {
+            retryTimer = setTimeout(() => {
                 const src = img.src;
                 img.src = "";
                 img.src = src.replace(/([?&])_r=\d+/, "") + (src.includes("?") ? "&" : "?") + "_r=" + Date.now();
@@ -662,14 +668,25 @@ export function createImageView(
         },
 
         destroy(): void {
-            // 清理 lightbox（若此图片触发的 lightbox 仍在显示）
+            // 清理 lightbox（若此图片触发的 lightbox 仍在显示）——经完整 cleanup 一并
+            // 移除 document keydown 监听（回归：此前只 removeChild，onKeyDown 悬空到
+            // 用户下次按 Escape 才自愈）
             if (activeLightbox && document.body.contains(activeLightbox)) {
                 const lbImg = activeLightbox.querySelector("img");
                 if (lbImg && lbImg.src === img.src) {
-                    document.body.removeChild(activeLightbox);
-                    activeLightbox = null;
+                    activeLightboxCleanup?.();
                 }
             }
+            // 加载重试 timer（回归：节点销毁后仍改写已脱离 DOM 的 img.src）
+            if (retryTimer !== null) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
+            }
+            // 拖拽 resize 的 window 监听（回归：拖拽中途删除节点，监听滞留到下次 pointerup，
+            // onResizeMove 持续操作已销毁的 img）
+            window.removeEventListener("pointermove", onResizeMove);
+            window.removeEventListener("pointerup", onResizeUp);
+            document.body.style.cursor = "";
         },
     };
 }
