@@ -932,5 +932,8 @@ export async function createEditor(
 
     _editor = await crepe.create();
     isSettled = true;
+    // 首帧基准：settle 后用户首个交互事务（点击定位光标等纯选区 dispatch）与基准
+    // doc 相同即不通知（回归：prevDoc=null 使首事务无条件误发脏标记，未编辑就出 ● 圆点）
+    prevDoc = _editor.action((ctx) => ctx.get(editorViewCtx)).state.doc;
     return _editor;
 }
