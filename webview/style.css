@@ -275,10 +275,12 @@ body {
     text-align: center;
 }
 
-/* 段落 */
+/* 段落：段间距 = 一个行距（1em 底部留白 + 行高上下各半的留白 = line-height × 1em）。
+   回归：此前 0.4em，回车后的间距明显小于行距（用户反馈「行距与回车间距不一致」）；
+   列表项内容同样是 <p>，因此列表与段落节奏自动一致。 */
 .milkdown .ProseMirror p {
     margin: 0;
-    padding-bottom: 0.4em;
+    padding-bottom: 1em;
 }
 
 /* 表格单元格内段落不留底部间距 */
@@ -971,11 +973,19 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     white-space: var(--epytor-table-white-space, normal);
     overflow-wrap: break-word;
 }
-/* 单元格内边距：官方为 4px 16px（上下与左右差 4 倍，用户反馈「四边内边距不同」），
-   改为四周一致的 8px（上下 8 / 左右 8 略窄于官方的 16px，长表格更紧凑） */
+/* 单元格内边距：官方为 4px 16px（上下与左右差 4 倍，用户反馈「四边内边距不同」）。
+   官方样式是运行时注入的 <style>，同特异性下后注入者胜 → 用 !important 确保生效 */
 .milkdown .milkdown-table-block th,
 .milkdown .milkdown-table-block td {
-    padding: 8px;
+    padding: 8px !important;
+}
+
+/* 列表项里的任务标记（复选框）高度对齐行高：官方 .label 固定 32px，删除任务标记后
+   行高塌陷 → 光标轻微上移（用户反馈的质感问题） */
+.milkdown .milkdown-list-item-block .label-wrapper,
+.milkdown .milkdown-list-item-block .label-wrapper .label {
+    height: 1.6em !important;
+    padding: 0 !important;
 }
 
 /* 行列手柄与整行/整列选中工具栏：对齐编辑器浮层风格。

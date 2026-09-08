@@ -39,6 +39,15 @@ export function setImageUriMap(map: Record<string, string>): void {
     }
 }
 
+/**
+ * 图片重命名后同步展示映射（回归：此前 map 只在 init/revert 刷新，重命名后的
+ * 新 webviewUri 查不到 → 编辑路径时输入框里显示的是编码过的 URI 尾巴）。
+ */
+export function remapImageUri(oldWebviewUri: string, newWebviewUri: string, newRelPath: string): void {
+    _uriToRel.delete(oldWebviewUri);
+    _uriToRel.set(newWebviewUri, newRelPath);
+}
+
 /** 将 webviewUri 转为可显示的 relPath（找不到时原样返回） */
 function toDisplayPath(src: string): string {
     return _uriToRel.get(src) ?? src;

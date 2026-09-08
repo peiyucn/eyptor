@@ -55,7 +55,7 @@ export type ToWebviewMessage =
     | { type: "imageUploaded"; id: string; url: string }
     | { type: "imageUploadError"; id: string; error: string }
     | { type: "projectImagesList"; id: string; images: ProjectImage[] }
-    | { type: "imageRenamed"; id: string; oldWebviewUri: string; newWebviewUri: string }
+    | { type: "imageRenamed"; id: string; oldWebviewUri: string; newWebviewUri: string; newRelPath: string }
     | { type: "imageRenameError"; id: string; error: string }
     | { type: "requestSwitchToTextEditor" }
     | { type: "pathSuggestions"; id: string; items: PathSuggestionItem[] }

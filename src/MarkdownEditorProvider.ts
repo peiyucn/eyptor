@@ -1041,7 +1041,7 @@ export class MarkdownEditorProvider
             uriMap.delete(webviewUri);
             this._registerImageMapping(uriKey, newWebviewUri, newRelPath);
 
-            panel.webview.postMessage({ type: 'imageRenamed', id, oldWebviewUri: webviewUri, newWebviewUri });
+            panel.webview.postMessage({ type: 'imageRenamed', id, oldWebviewUri: webviewUri, newWebviewUri, newRelPath });
         } catch (e) {
             const errMsg = e instanceof Error ? e.message : String(e);
             panel.webview.postMessage({ type: 'imageRenameError', id, error: errMsg });

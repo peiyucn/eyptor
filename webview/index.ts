@@ -50,7 +50,7 @@ import { setupPathLink } from "./components/pathLink";
 import { initPathComplete } from "./components/pathLink/pathComplete";
 import { dispatchImagePathResolved } from "./components/imageView/imgPathComplete";
 import { resolvePathSuggestionRequest } from "./utils/pathSuggestionRequests";
-import { setImageUriMap, showGlobalLightbox } from "./components/imageView";
+import { setImageUriMap, remapImageUri, showGlobalLightbox } from "./components/imageView";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
 import { initFindBar } from "./components/findBar";
 import { initToc } from "./components/toc";
@@ -615,9 +615,15 @@ const restoreEditorFocus = () => {
             // 导致切回后页面跳到标题行/mermaid 处（回归：frontmatter 编辑行点击后页面跳）
             const scrollBefore = window.scrollY;
             view.focus();
-            if (window.scrollY !== scrollBefore) {
-                window.scrollTo({ top: scrollBefore });
-            }
+            // 浏览器对 focus 的「滚动到选区」可能晚于 focus() 返回（下一帧才发生），
+            // 同步比对会漏掉 → 下一帧再校正一次（回归：切 tab 回 md 页面时页面跳动）
+            const restoreScroll = () => {
+                if (window.scrollY !== scrollBefore) {
+                    window.scrollTo({ top: scrollBefore });
+                }
+            };
+            restoreScroll();
+            requestAnimationFrame(restoreScroll);
         }
     });
 };
@@ -792,6 +798,9 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         _getImagesRequests.resolve(msg.id, msg.images);
     } else if (msg.type === "imageRenamed") {
         _renameRequests.resolve(msg.id);
+        // 同步展示映射：重命名后的新 URI 要能反查回可读相对路径
+        // （回归：此前 map 只在 init/revert 刷新，编辑路径时输入框显示编码后的 URI 尾巴）
+        remapImageUri(msg.oldWebviewUri, msg.newWebviewUri, msg.newRelPath);
         // 更新 ProseMirror 文档中对应图片节点的 src
         const editor = currentEditor;
         if (editor) {

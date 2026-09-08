@@ -12,6 +12,19 @@ import { t } from "./i18n";
 import { headingFoldPluginKey, type HeadingFoldMeta } from "./headingFoldPlugin";
 import { buildHeadingIndex, type HeadingIndexEntry } from "./utils/headingFold";
 import { computeStickyActiveIndex } from "./utils/headingSticky";
+import { getUserInteractionEpoch } from "./utils/userInteraction";
+
+/** 隐藏吸顶条直到用户下一次交互（TOC 跳转用；插件实例挂载时赋值） */
+let _hideStickyUntilNextInteraction: (() => void) | null = null;
+
+/**
+ * TOC 点击跳转后调用：隐藏吸顶条，直到用户下一次交互为止。
+ * 回归：用户反馈「点击 TOC 后上一个章节的吸顶条还在」——此前抑制只有 400ms 定时解除，
+ * 用户还没滚动就恢复了；改为按交互纪元判定，且跳转落点让目标标题完整可见。
+ */
+export function hideStickyUntilNextInteraction(): void {
+    _hideStickyUntilNextInteraction?.();
+}
 
 function getTopbarBottom(): number {
     const topBar = document.querySelector(".milkdown-top-bar");
@@ -45,18 +58,24 @@ export const headingStickyPlugin = $prose(() =>
             let rafId: number | null = null;
             let activeHeading: HTMLElement | null = null;
             let activeHeadingPos: number | null = null;
-            // 点击吸顶条跳转后抑制吸顶显示（跳转 scroll 事件会立即重新计算，
-            // 目标标题完整可见时仍会吸顶前一个标题并遮挡目标）；
-            // 用户主动滚动（wheel/touchmove/键盘）后恢复
+            // 跳转后抑制吸顶显示（跳转的 scroll 事件会立即重算，目标标题完整可见时
+            // 仍会吸顶前一个标题并遮挡目标）。解除条件 = 用户下一次交互（wheel /
+            // 键盘 / 滚动条拖拽的 mousedown）——统一用 userInteraction 的 epoch 判定，
+            // 不再用定时兜底（回归：定时器会在用户还没动时就把上一个章节的吸顶条放出来）
             let suppressSticky = false;
-            /** 跳转抑制的定时兜底解除（回归：滚动条拖拽/中键滚动只发 scroll 事件，
-             * 不触发 wheel/touchmove/keydown，此前抑制永不解除、吸顶条一直隐藏） */
-            let suppressTimer: ReturnType<typeof setTimeout> | null = null;
+            let suppressEpoch: number | null = null;
 
             const STICKY_SCROLL_OFFSET_PX = 8;
-            const SUPPRESS_AUTO_RELEASE_MS = 400;
             /** 缓存重建防抖时长（连续输入合并为一次全量布局测量） */
             const CACHE_REBUILD_DEBOUNCE_MS = 300;
+
+            /** 隐藏吸顶条，直到用户下一次交互（epoch 变化）为止 */
+            const suppressUntilNextInteraction = (): void => {
+                suppressSticky = true;
+                suppressEpoch = getUserInteractionEpoch();
+                hideSticky();
+            };
+            _hideStickyUntilNextInteraction = suppressUntilNextInteraction;
 
             const scrollHeadingIntoStickyPosition = (headingPos: number) => {
                 requestAnimationFrame(() => {
@@ -72,16 +91,7 @@ export const headingStickyPlugin = $prose(() =>
                 if ((event.target as HTMLElement).closest(".heading-sticky-toggle")) return;
                 const pos = Number(sticky.dataset["headingPos"]);
                 if (Number.isFinite(pos) && pos > 0) {
-                    // 跳转后抑制吸顶显示，避免前一个标题的吸顶条遮挡刚跳到的标题；
-                    // 用户主动滚动（wheel/touchmove/键盘）或定时兜底（滚动条交互只发
-                    // scroll 事件）解除
-                    hideSticky();
-                    suppressSticky = true;
-                    if (suppressTimer !== null) clearTimeout(suppressTimer);
-                    suppressTimer = setTimeout(() => {
-                        suppressTimer = null;
-                        suppressSticky = false;
-                    }, SUPPRESS_AUTO_RELEASE_MS);
+                    suppressUntilNextInteraction();
                     scrollHeadingIntoStickyPosition(pos);
                 }
             });
@@ -208,8 +218,14 @@ export const headingStickyPlugin = $prose(() =>
             const updateSticky = () => {
                 rafId = null;
                 if (suppressSticky) {
-                    hideSticky();
-                    return;
+                    // 用户下一次交互（wheel/键盘/滚动条 mousedown）后自动解除
+                    if (suppressEpoch !== null && getUserInteractionEpoch() !== suppressEpoch) {
+                        suppressSticky = false;
+                        suppressEpoch = null;
+                    } else {
+                        hideSticky();
+                        return;
+                    }
                 }
 
                 const top = getTopbarBottom();
@@ -272,16 +288,10 @@ export const headingStickyPlugin = $prose(() =>
                 rafId = requestAnimationFrame(updateSticky);
             };
 
-            // 用户主动滚动 → 解除跳转抑制并刷新（scrollTo 跳转不会触发 wheel/touchmove/keydown）
+            // 用户主动滚动 → 立即解除抑制并刷新（epoch 判定在 updateSticky 内兜底，
+            // 这里只负责触发一次重算）
             const clearSuppress = () => {
-                if (suppressTimer !== null) {
-                    clearTimeout(suppressTimer);
-                    suppressTimer = null;
-                }
-                if (suppressSticky) {
-                    suppressSticky = false;
-                    scheduleUpdate();
-                }
+                if (suppressSticky) { scheduleUpdate(); }
             };
 
             // 文档内容/布局变化（RO）→ 防抖重建缓存（而非每帧全量测量）；滚动时用缓存纯计算
@@ -312,7 +322,9 @@ export const headingStickyPlugin = $prose(() =>
                 destroy() {
                     if (rafId !== null) cancelAnimationFrame(rafId);
                     if (rebuildTimer !== null) clearTimeout(rebuildTimer);
-                    if (suppressTimer !== null) clearTimeout(suppressTimer);
+                    if (_hideStickyUntilNextInteraction === suppressUntilNextInteraction) {
+                        _hideStickyUntilNextInteraction = null;
+                    }
                     window.removeEventListener("scroll", scheduleUpdate);
                     window.removeEventListener("resize", scheduleUpdate);
                     window.removeEventListener("wheel", clearSuppress);

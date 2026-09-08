@@ -1,6 +1,7 @@
 import './toc.css';
 import type { EditorView } from "@milkdown/kit/prose/view";
-import { DEFAULT_TOPBAR_HEIGHT } from "../../../shared/constants";
+import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../../../shared/constants";
+import { hideStickyUntilNextInteraction } from "../../headingStickyPlugin";
 import { applyTooltip } from "@/ui/tooltip";
 import { t } from "@/i18n";
 import { IconPin, IconChevronRight, IconChevronDown, IconChevronsUp, IconChevronsDown } from "@/ui/icons";
@@ -274,12 +275,10 @@ export function initToc(getEditorView: () => EditorView | null): {
                     if (!el || !v.dom.contains(el)) return;
                     const topbar = document.querySelector(".milkdown-top-bar") as HTMLElement | null;
                     const topbarH = topbar?.getBoundingClientRect().height ?? DEFAULT_TOPBAR_HEIGHT;
-                    // 目标标题顶到顶栏下沿（标题底边落在顶栏底边上）：吸顶算法取「最后一个
-                    // 完全滚出顶栏的标题」，这样吸顶条显示的正是点击的章节——
-                    // 回归：此前额外让出吸顶条高度 + 边距，标题落在吸顶条下方，吸顶条
-                    // 仍显示上一个章节（用户反馈「点击的章节应该直接顶到头」）
-                    const rect = el.getBoundingClientRect();
-                    const top = rect.bottom + window.scrollY - topbarH;
+                    // 跳转后隐藏吸顶条直到用户下一次交互：目标章节正常显示在顶栏下方，
+                    // 不再残留上一个章节的吸顶条（用户反馈：应该正常显示到对应章节、没有吸顶标题）
+                    hideStickyUntilNextInteraction();
+                    const top = el.getBoundingClientRect().top + window.scrollY - topbarH - VIEWPORT_PADDING;
                     window.scrollTo({ top, behavior: "smooth" });
                 } catch { /* heading 元素已不在 DOM 中，忽略此次跳转 */ }
             });
