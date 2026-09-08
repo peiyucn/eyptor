@@ -49,9 +49,14 @@ function getHeadingText(heading: HTMLElement): string {
 
 function findHeadingPos(view: EditorView, heading: HTMLElement): number | null {
     // DOM 反查（O(depth)）：回归——此前用 doc.descendants 全树遍历且命中后无提前退出，
-    // 缓存失效后每个标题一次全文档扫描（含文本节点），滚动路径退化 O(H×N)
+    // 缓存失效后每个标题一次全文档扫描（含文本节点），滚动路径退化 O(H×N）。
+    // 返回节点起始位置（posAtDOM(元素, 0) 的语义是「元素起始 + 1」，直接使用会让
+    // nodeDOM(pos) 取不到标题元素、折叠状态键与折叠插件的 doc.forEach 口径差 1；
+    // 用 resolve + before(depth) 归一化为节点起始，两种语义下都正确）
     try {
-        return view.posAtDOM(heading, 0);
+        const pos = view.posAtDOM(heading, 0);
+        const $pos = view.state.doc.resolve(pos);
+        return $pos.depth > 0 ? $pos.before($pos.depth) : null;
     } catch {
         return null;
     }
