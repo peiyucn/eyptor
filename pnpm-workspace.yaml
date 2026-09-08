@@ -1,6 +1,7 @@
 packages:
   - .
 overrides:
+  katex: ^0.18.0
   prosemirror-changeset: ^2.3.1
   prosemirror-commands: ^1.7.1
   prosemirror-dropcursor: ^1.8.3
