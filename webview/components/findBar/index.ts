@@ -112,6 +112,7 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
 
     // ── 搜索 ──────────────────────────────────────────────
     function search(query: string) {
+        if (!visible) return; // 双保险：关闭后任何迟到调用都不执行（见 close 的 timer 清理）
         matchRanges = [];
         currentIdx = 0;
         truncated = false;
@@ -253,6 +254,10 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
 
     function close() {
         visible = false;
+        // 回归（P3）：此前不清防抖 timer——关闭后 150ms 内 pending 搜索照常执行，
+        // 高亮复活、计数写回隐藏栏、页面被 scrollToMatch 拽动
+        clearTimeout(debounceTimer);
+        debounceTimer = 0;
         bar.classList.remove("find-bar--visible");
         bar.classList.remove("find-bar--no-results");
         clearHighlights();
