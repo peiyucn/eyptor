@@ -7,6 +7,11 @@ function isDark(): boolean {
         || document.body.classList.contains("vscode-high-contrast");
 }
 
+/** 当前是否深色主题（供创建期取初值，避免与主题总线口径不一致） */
+export function isDarkTheme(): boolean {
+    return isDark();
+}
+
 /** 订阅主题切换。立即回调当前值，之后每次切换触发。返回取消函数。 */
 export function onThemeChange(fn: ThemeListener): () => void {
     fn(isDark());

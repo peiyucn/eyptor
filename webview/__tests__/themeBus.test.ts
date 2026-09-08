@@ -78,4 +78,16 @@ describe("themeBus", () => {
         });
         expect(listener).toHaveBeenCalledOnce();
     });
+
+    it("isDarkTheme 应该 与订阅回调的初值口径一致", async () => {
+        document.body.className = "vscode-high-contrast";
+        const { isDarkTheme, onThemeChange } = await loadThemeBus();
+        const listener = vi.fn();
+
+        const unsubscribe = onThemeChange(listener);
+
+        expect(isDarkTheme()).toBe(true);
+        expect(listener).toHaveBeenCalledWith(isDarkTheme());
+        unsubscribe();
+    });
 });

@@ -47,7 +47,8 @@ import { EditorView as CMEditorView } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { defaultHighlightStyle, syntaxHighlighting, LanguageDescription, type LanguageSupport } from "@codemirror/language";
 import { languages as allCodeLanguages } from "@codemirror/language-data";
-import { onThemeChange } from "./utils/themeBus";
+import { onThemeChange, isDarkTheme } from "./utils/themeBus";
+import { observeCmEditorCount } from "./utils/cmThemeObserver";
 import { t } from "./i18n";
 import { enhanceMermaidPreview } from "./components/mermaidZoom";
 import { headingFoldPlugin } from "./headingFoldPlugin";
@@ -312,8 +313,8 @@ import { createImageView } from "./components/imageView";
 
 let _editor: Editor | null = null;
 let _savedMarkdown = '';
-/** CodeMirror 主题补配 MutationObserver（编辑器重建时先断开旧的） */
-let _cmObserver: MutationObserver | null = null;
+/** CodeMirror 主题补配观察器断开函数（编辑器重建时先断开旧的） */
+let _disconnectCmObserver: (() => void) | null = null;
 /** 主题订阅退订句柄（createEditor 订阅、destroyEditor 退订）——
  * 回归：退订函数曾被丢弃，init/revert 每次重建向 themeBus 泄漏一个监听器，
  * 闭包持有整篇旧文档的 mermaidCodeMap 且主题切换时重放全部旧回调 */
@@ -386,8 +387,8 @@ export function getEditorView(): EditorView | null {
 export function destroyEditor(): void {
     _unsubscribeTheme?.();
     _unsubscribeTheme = null;
-    _cmObserver?.disconnect();
-    _cmObserver = null;
+    _disconnectCmObserver?.();
+    _disconnectCmObserver = null;
     _editor?.destroy();
     _editor = null;
 }
@@ -452,8 +453,14 @@ export async function createEditor(
 
     // Phase 3: 启用 Crepe 原生功能（替换自定义实现 + 新增能力）
     // ── 主题切换总线 ────────────────────────────────────────
+    // 初始主题取主题总线当前值（回归：此前硬编码 isDark=true 但传给 CodeMirror 的
+    // 初始 extension 是亮色，靠下方的观察器兜底修正）
+    let isDark = isDarkTheme();
     const cmTheme = new Compartment();
-    const getCMTheme = (dark: boolean) => dark ? oneDark : syntaxHighlighting(defaultHighlightStyle);
+    // 主题 extension 缓存：每次调用新建对象会让 Compartment.reconfigure 全量重算
+    // 并触发 CM 重渲染（放大下方观察器的回环）
+    const CM_THEME_EXT = { dark: oneDark, light: syntaxHighlighting(defaultHighlightStyle) };
+    const getCMTheme = (dark: boolean) => (dark ? CM_THEME_EXT.dark : CM_THEME_EXT.light);
 
     const reconfigureAllCM = () => {
         document.querySelectorAll(".cm-editor").forEach((el) => {
@@ -462,17 +469,13 @@ export async function createEditor(
         });
     };
 
-    // 监听新 CodeMirror 编辑器创建（补配主题）
-    // 模块级引用：编辑器重建时先断开旧的，避免 MutationObserver 累积泄漏
-    _cmObserver?.disconnect();
-    const cmObserver = new MutationObserver(() => {
-        if (document.querySelector(".cm-editor")) setTimeout(reconfigureAllCM, 10);
-    });
-    _cmObserver = cmObserver;
-    cmObserver.observe(container, { childList: true, subtree: true });
+    // 新 CodeMirror 编辑器补配主题：只在 .cm-editor 数量变化时触发（回环防护见
+    // utils/cmThemeObserver.ts 注释——此前任何 DOM 变更都排一次重配，重配自身又
+    // 产生 DOM 变更，形成 10ms 一次的无限回环）
+    _disconnectCmObserver?.();
+    _disconnectCmObserver = observeCmEditorCount(container, reconfigureAllCM);
 
     // 主题切换：CodeMirror + Mermaid 全部统一处理
-    let isDark = true;
     const mermaidCodeMap = new Map<string, string>();
     let mermaidSeq = 0;
 
@@ -551,7 +554,7 @@ export async function createEditor(
     crepe
         .addFeature(codeMirror, {
             languages: codeLanguages,
-            theme: cmTheme.of(getCMTheme(false)),
+            theme: cmTheme.of(getCMTheme(isDark)),
             renderPreview,
             searchPlaceholder: t('Search language...'),
         })
