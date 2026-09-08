@@ -20,7 +20,6 @@ import {
     destroyEditor,
     getEditorView,
     getMarkdownForSave,
-    registerSelectionChangeHandler,
     setLogTableSel,
     setSerializationMode,
     setSerializationDebug,
@@ -751,10 +750,6 @@ function setupTopBarBrand(container: HTMLElement): void {
     new MutationObserver(() => requestAnimationFrame(inject))
         .observe(container, { childList: true, subtree: true });
 }
-
-registerSelectionChangeHandler((_view) => {
-    // 选区变更回调保留，供后续扩展使用
-});
 
 // Cmd/Ctrl+F：打开查找栏（预填当前选区文字）
 window.addEventListener("keydown", (e) => {

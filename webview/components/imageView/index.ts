@@ -643,7 +643,6 @@ export function createImageView(
             wrapper.classList.add("image-wrapper--selected");
             toolbar.style.display = "flex";
             resizeHandle.classList.add("img-resize-handle--visible");
-            toolbar.classList.add("image-toolbar--below");
         },
 
         deselectNode(): void {

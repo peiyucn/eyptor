@@ -194,7 +194,6 @@ __mocks__/vscode.ts      — vscode API 统一 mock
 | `src/MarkdownDocument.ts` | ≥ 80% |
 | `src/utils/contentTransform.ts` | ≥ 90% |
 | `src/utils/lineMap.ts` | ≥ 90% |
-| `webview/utils/slug.ts` | ≥ 90% |
 | **整体** | ≥ 70% |
 
 #### 强制流程

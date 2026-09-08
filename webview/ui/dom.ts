@@ -67,31 +67,3 @@ export function setupInputKeyboard(
         }
     });
 }
-
-/**
- * 监听外部 mousedown 事件以关闭浮层。
- * 返回移除监听的函数，用于手动清理。
- * @param targets 点击这些元素内部时不触发关闭
- * @param onClose 关闭回调
- * @param delayMs 延迟注册（默认 0），避免当前事件立即触发
- */
-export function onOutsideMousedown(
-    targets: HTMLElement[],
-    onClose: () => void,
-    delayMs = 0,
-): () => void {
-    function handler(e: MouseEvent) {
-        const target = e.target as Node;
-        if (targets.some((el) => el.contains(target))) return;
-        onClose();
-        document.removeEventListener('mousedown', handler);
-    }
-
-    if (delayMs > 0) {
-        setTimeout(() => document.addEventListener('mousedown', handler), delayMs);
-    } else {
-        document.addEventListener('mousedown', handler);
-    }
-
-    return () => document.removeEventListener('mousedown', handler);
-}

@@ -3,11 +3,9 @@
  */
 
 export interface TopBarMeasuredItem {
-    /** 与 DOM 顺序一致的元素 key（heading 下拉为 "heading-selector"） */
+    /** 与 DOM 顺序一致的元素 key（heading 下拉为 "heading-selector"，分隔线为 "__divider__"） */
     key: string;
     width: number;
-    /** 分隔线也算一项，key 为 "__divider__" */
-    isDivider?: boolean;
 }
 
 export interface OverflowBudgetInput {

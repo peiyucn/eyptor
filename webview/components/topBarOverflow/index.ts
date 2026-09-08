@@ -196,7 +196,7 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
         let metaIdx = 0;
         for (const child of Array.from(inner.children) as HTMLElement[]) {
             if (child.classList.contains("top-bar-divider")) {
-                items.push({ key: `__divider__${items.length}`, width: child.getBoundingClientRect().width, isDivider: true });
+                items.push({ key: `__divider__${items.length}`, width: child.getBoundingClientRect().width });
             } else if (
                 child.classList.contains("top-bar-item") ||
                 child.classList.contains("top-bar-heading-selector")

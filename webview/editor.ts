@@ -23,7 +23,7 @@ import { keymap } from "@milkdown/kit/prose/keymap";
 import { Plugin, NodeSelection, TextSelection, type EditorState } from "@milkdown/kit/prose/state";
 import { liftListItem } from "@milkdown/kit/prose/schema-list";
 import { lift, wrapIn } from "prosemirror-commands";
-import { CellSelection, TableMap } from "@milkdown/kit/prose/tables";
+import { CellSelection } from "@milkdown/kit/prose/tables";
 import { $prose, getMarkdown } from "@milkdown/kit/utils";
 import { CrepeBuilder } from "@milkdown/crepe";
 import { linkTooltip } from "@milkdown/crepe/feature/link-tooltip";
@@ -102,7 +102,6 @@ codeLanguages.push(LanguageDescription.of({
 // ─── 保留的自定义插件 ────────────────────────────────────────────────────────
 // 以下插件 Crepe 不提供对应功能，永久保留：
 //   listSpreadNormalizePlugin → 列表 spread 规范化
-//   selectionPlugin          → 选区变更回调（驱动外部 UI）
 //   formatKeymapPlugin       → 自定义格式化快捷键
 // 说明：列表 Backspace 不再自定义拦截（原 listLiftPlugin 已移除）——
 // 官方 commonmark 默认行为：行首 Backspace = joinBackward（合并/删除行，编号自动重排），
@@ -140,29 +139,6 @@ const formatKeymapPlugin = $prose((ctx) =>
             return true;
         },
     }),
-);
-
-// 选区变更回调（由 index.ts 注入，用于驱动工具栏等外部 UI）
-let _onSelectionChange: ((view: EditorView) => void) | null = null;
-export function registerSelectionChangeHandler(cb: (view: EditorView) => void): void {
-    _onSelectionChange = cb;
-}
-
-const selectionPlugin = $prose(
-    () =>
-        new Plugin({
-            view: () => ({
-                update(view, prevState) {
-                    if (
-                        _onSelectionChange &&
-                        (!view.state.selection.eq(prevState.selection) ||
-                         !view.state.doc.eq(prevState.doc))
-                    ) {
-                        _onSelectionChange(view);
-                    }
-                },
-            }),
-        }),
 );
 
 // 列表 spread 规范化：编辑后若列表项只含单个块级子节点，自动将 spread 重置为 false
@@ -210,28 +186,6 @@ const listSpreadNormalizePlugin = $prose((ctx) => {
 });
 
 // ─── 表格单元格点击修正 ──────────────────────────────────────────────────────
-
-function getCellCoords(doc: any, pos: number): { row: number; col: number } | null {
-    try {
-        const $pos = doc.resolve(pos);
-        for (let d = $pos.depth; d >= 0; d--) {
-            const typeName = $pos.node(d).type.name;
-            if (typeName === "table_cell" || typeName === "table_header") {
-                for (let td = d - 1; td >= 0; td--) {
-                    if ($pos.node(td).type.name === "table") {
-                        const tableNode = $pos.node(td);
-                        const tableStart = $pos.start(td);
-                        const cellRelPos = $pos.before(d) - tableStart;
-                        const map = TableMap.get(tableNode);
-                        const rect = map.findCell(cellRelPos);
-                        return { row: rect.top + 1, col: rect.left + 1 };
-                    }
-                }
-            }
-        }
-    } catch { /* 非表格节点或文档结构异常，返回 null */ }
-    return null;
-}
 
 const cellClickFixPlugin = $prose(() => {
     let pendingClickPos: number | null = null;
@@ -939,7 +893,6 @@ export async function createEditor(
 
         })
         .use(updateNotifyPlugin)    // 文档变更轻量通知（保存时拉取序列化，输入期间零序列化）
-        .use(selectionPlugin)       // 保留：选区变更回调
         .use(formatKeymapPlugin)    // 保留：自定义格式化快捷键
         .use(headingFoldPlugin)     // 标题折叠（Decoration，不修改文档）
         .use(headingStickyPlugin)   // 标题吸顶条（滚动跟随 + 推挤过渡）

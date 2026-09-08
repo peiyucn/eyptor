@@ -24,7 +24,6 @@ export type PathSuggestionItem = {
  */
 export type ToExtensionMessage =
     | { type: "ready" }
-    | { type: "update"; content: string }
     | { type: "markDirty" }
     | { type: "contentResponse"; content: string }
     | { type: "frontmatterUpdate"; frontmatter: string }

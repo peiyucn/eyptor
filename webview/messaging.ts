@@ -18,10 +18,6 @@ export function notifyReady(): void {
     vscode.postMessage({ type: "ready" });
 }
 
-export function notifyUpdate(markdown: string): void {
-    vscode.postMessage({ type: "update", content: markdown });
-}
-
 export function notifyMarkDirty(): void {
     vscode.postMessage({ type: "markDirty" });
 }

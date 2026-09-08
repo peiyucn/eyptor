@@ -9,8 +9,6 @@ import { IconResetZoom } from "@/ui/icons";
 
 const DEFAULT_ZOOM = 0.8;
 
-let _seq = 0;
-
 /**
  * SVG 原始渲染宽度（px）。
  * 回归：此前 zoom 直接写容器百分比（如 80%），与 SVG 原始尺寸无关——
@@ -27,7 +25,8 @@ function measureSvgBaseWidth(svg: SVGElement): number {
 
 /** 为已渲染的 mermaid 预览容器注入控制条与缩放交互；倍率存于容器 dataset，主题重绘后保持 */
 export function enhanceMermaidPreview(container: HTMLElement, svg: SVGElement): void {
-    const key = `mz-${++_seq}`;
+    // 防重复挂载（主题重绘重入时旧条未清理则直接跳过）
+    if (container.querySelector(".epytor-mermaid-zoom-bar")) return;
     const savedZoom = Number(container.dataset["epytorMermaidZoom"]);
     // 默认 0.8×（mermaid 原始尺寸偏大）；未保存过倍率时用默认值
     let zoom = Number.isFinite(savedZoom) && savedZoom > 0 ? savedZoom : DEFAULT_ZOOM;
@@ -73,7 +72,6 @@ export function enhanceMermaidPreview(container: HTMLElement, svg: SVGElement): 
 
     bar.append(zoomIn, zoomOut, zoomReset);
     container.classList.add("epytor-mermaid-zoom-container");
-    container.dataset.mermaidZoomKey = key;
     container.appendChild(bar);
     apply();
 }

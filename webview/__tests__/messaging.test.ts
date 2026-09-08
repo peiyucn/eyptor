@@ -8,7 +8,6 @@ import { mockVscodeApi } from "./setup";
 // 延迟导入，确保 acquireVsCodeApi 在 setup.ts 中已完成注入
 const {
     notifyReady,
-    notifyUpdate,
     notifyMarkDirty,
     notifyContentResponse,
     notifyOpenUrl,
@@ -30,14 +29,6 @@ describe("messaging — postMessage 格式验证", () => {
     it("notifyReady 发送 { type: 'ready' }", () => {
         notifyReady();
         expect(mockVscodeApi.postMessage).toHaveBeenCalledWith({ type: "ready" });
-    });
-
-    it("notifyUpdate 携带 content 字段", () => {
-        notifyUpdate("# Hello");
-        expect(mockVscodeApi.postMessage).toHaveBeenCalledWith({
-            type: "update",
-            content: "# Hello",
-        });
     });
 
     it("notifyMarkDirty 发送 { type: 'markDirty' }（拉取式保存的轻量脏标记）", () => {

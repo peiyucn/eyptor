@@ -515,19 +515,6 @@ export class MarkdownEditorProvider
                 });
                 break;
             }
-            case "update":
-                // 兼容旧路径：webview 已改为轻量 markDirty 通知，此 case 不再有常规调用方
-                if (message.content !== undefined) {
-                    const newContent = this._prepareContentForSave(message.content, uriKey);
-                    if (newContent === document.getText()) { break; }
-                    document.update(newContent);
-                    if (!this._pinnedDocuments.has(uriKey)) {
-                        this._pinnedDocuments.add(uriKey);
-                        vscode.commands.executeCommand('workbench.action.keepEditor');
-                    }
-                    this._markDirty(document);
-                }
-                break;
             case "markDirty": {
                 // 轻量脏标记：内容已变（序列化改为保存时拉取）。保存入口统一为
                 // saveCustomDocument（Cmd+S / VS Code 原生 files.autoSave / 关窗）
