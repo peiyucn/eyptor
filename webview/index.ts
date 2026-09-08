@@ -59,6 +59,17 @@ import { t } from "./i18n";
 import { createFrontmatterPanel, type FrontmatterPanelHandle } from "./components/frontmatterPanel";
 import { initTopBarOverflow } from "./components/topBarOverflow";
 
+// ─── 语义常量（*_MS 命名；回归：超时/防抖裸数字散落各处理函数） ─────────────
+const RENAME_IMAGE_TIMEOUT_MS = 15000;
+const UPLOAD_IMAGE_TIMEOUT_MS = 30000;
+const GET_PROJECT_IMAGES_TIMEOUT_MS = 10000;
+const MARK_DIRTY_DEBOUNCE_MS = 300;
+const TOC_REFRESH_DEBOUNCE_MS = 800;
+const SCROLL_SAVE_DEBOUNCE_MS = 200;
+const COPY_FEEDBACK_RESET_MS = 1500;
+/** 延迟定位/恢复滚动的重试计划（Milkdown 渲染 + 浏览器布局需要时间） */
+const SCROLL_RETRY_DELAYS_MS = [300, 600, 1100, 2000];
+
 let _topBarOverflowCtl: { dispose(): void } | null = null;
 
 let currentEditor: Editor | null = null;
@@ -150,7 +161,7 @@ async function handleRenameImage(
     newBasename: string,
 ): Promise<void> {
     const { id, promise } = _renameRequests.begin({
-        timeoutMs: 15000,
+        timeoutMs: RENAME_IMAGE_TIMEOUT_MS,
         timeout: { kind: "reject", error: "Rename timed out" },
     });
     notifyRenameImage(id, webviewUri, newBasename);
@@ -159,7 +170,7 @@ async function handleRenameImage(
 
 async function handleImageFile(file: File, altText: string): Promise<string> {
     const { id, promise, cancel } = _uploadRequests.begin({
-        timeoutMs: 30000,
+        timeoutMs: UPLOAD_IMAGE_TIMEOUT_MS,
         timeout: { kind: "reject", error: "Upload timed out" },
     });
     // 读取文件为 Uint8Array 后发送给 Extension
@@ -300,7 +311,7 @@ async function initEditor(
             if (_docChangedTimer) clearTimeout(_docChangedTimer);
             _docChangedTimer = setTimeout(() => {
                 notifyMarkDirty(); // 通知 Extension 内容已变（自动保存防抖到点后拉取）
-            }, 300);
+            }, MARK_DIRTY_DEBOUNCE_MS);
             // TOC/字数：标题签名不变则跳过 TOC 重建（根源级优化：输入正文零重建，
             // 替代纯防抖延时——停顿后仍会重建的开销被真正消除）；字数统计轻量照常
             if (_tocRefreshTimer) clearTimeout(_tocRefreshTimer);
@@ -315,7 +326,7 @@ async function initEditor(
                     toc.refresh(); // 内容变化时刷新目录（面板关闭时是 no-op）
                     updateWordCount(); // 更新字数统计
                 });
-            }, 800);
+            }, TOC_REFRESH_DEBOUNCE_MS);
         },
         handleRenameImage,
         () => toc.toggle(),
@@ -406,7 +417,7 @@ if (editorContainer) {
                 // 统一注册表：含 10s 超时兜底 resolve(null)（回归：内联版无超时，
                 // Extension 不响应时选择器永久停在 Loading）
                 const { id, promise } = _getImagesRequests.begin({
-                    timeoutMs: 10000,
+                    timeoutMs: GET_PROJECT_IMAGES_TIMEOUT_MS,
                     timeout: { kind: "resolve", value: null },
                 });
                 notifyGetProjectImages(id);
@@ -531,7 +542,7 @@ function enhanceCodeBlocks(container: HTMLElement): void {
         setTimeout(() => {
             const tip = applyTooltip(btn, '✔ ' + t('Copied!'));
             tip.show();
-            setTimeout(() => tip.setText(t('Copy Code')), 1500);
+            setTimeout(() => tip.setText(t('Copy Code')), COPY_FEEDBACK_RESET_MS);
         }, 100);
     });
 
@@ -741,7 +752,7 @@ window.addEventListener('scroll', () => {
     _scrollSaveTimer = setTimeout(() => {
         const cur = getWebviewState() ?? {};
         setWebviewState({ ...cur, scrollY: window.scrollY });
-    }, 200);
+    }, SCROLL_SAVE_DEBOUNCE_MS);
 }, { passive: true });
 
 // 切回 webview 时恢复编辑器焦点（不滚动）。
@@ -823,7 +834,7 @@ onMessage((msg) => {
  */
 function scheduleDelayedScroll(
     action: (view: EditorView) => void,
-    delays: number[] = [300, 600, 1100, 2000],
+    delays: number[] = SCROLL_RETRY_DELAYS_MS,
 ): void {
     _userInteracted = false; // 本次定位请求起算
     let done = false;
