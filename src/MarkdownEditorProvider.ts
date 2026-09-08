@@ -521,25 +521,8 @@ export class MarkdownEditorProvider
                     flushCts.dispose();
                 }
                 const textDoc = await vscode.workspace.openTextDocument(document.uri);
-                const viewCol = webviewPanel.viewColumn;
-
-                // 读取当前 WYSIWYG tab 的 preview 状态（斜体 = isPreview: true）
-                let isPreview = false;
-                for (const group of vscode.window.tabGroups.all) {
-                    for (const tab of group.tabs) {
-                        if (
-                            tab.input instanceof vscode.TabInputCustom &&
-                            (tab.input as vscode.TabInputCustom).uri.toString() === document.uri.toString()
-                        ) {
-                            isPreview = tab.isPreview;
-                            break;
-                        }
-                    }
-                }
-
                 const opts: vscode.TextDocumentShowOptions = {
-                    viewColumn: viewCol,
-                    preview: isPreview,   // 保持原 tab 的斜体/正体状态
+                    viewColumn: webviewPanel.viewColumn,
                     preserveFocus: false,
                 };
                 if (message.line && message.line > 0) {
@@ -547,12 +530,26 @@ export class MarkdownEditorProvider
                     opts.selection = new vscode.Range(pos, pos);
                 }
 
-                // 不销毁 WYSIWYG 面板，只把焦点交给文本编辑器（面板随标签隐藏但保持存活，
-                // retainContextWhenHidden）。回归（用户实测：切回预览会闪、还会闪出同名
-                // 标签再消失）：此前 dispose + 重新 openWith = 销毁并重建整个 webview，
-                // 冷启动必然闪一下，新建标签还会排到末尾。保留两侧标签后，来回切换只是
-                // 激活已有标签——与 VS Code 自带 Markdown 预览的模型一致，零闪动。
-                await vscode.window.showTextDocument(textDoc, opts);
+                // 原地替换编辑器类型（与 VS Code 内置 markdown.togglePreview 同一机制：
+                // `reopenActiveEditorWith`）——标签不重建、不新增，切换零闪动。
+                // 回归：此前 dispose 面板再 showTextDocument = 销毁整个 webview 再重建
+                // 文本标签，用户实测「切回预览会闪、还会闪出同名标签再消失、标签跳到末尾」。
+                try {
+                    await vscode.commands.executeCommand('reopenActiveEditorWith', 'default');
+                    // 内置命令不接受定位参数：替换完成后把光标放到视口顶部行
+                    if (message.line && message.line > 0) {
+                        const active = vscode.window.activeTextEditor;
+                        if (active && active.document.uri.toString() === document.uri.toString()) {
+                            const pos = new vscode.Position(message.line - 1, 0);
+                            active.selection = new vscode.Selection(pos, pos);
+                            active.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.AtTop);
+                        }
+                    }
+                } catch {
+                    // 兜底（旧版 VS Code 无该命令）：关面板 + 打开文本编辑器
+                    webviewPanel.dispose();
+                    await vscode.window.showTextDocument(textDoc, opts);
+                }
                 break;
             }
             case "openSettings":

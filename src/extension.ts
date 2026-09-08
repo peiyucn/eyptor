@@ -221,9 +221,10 @@ export function activate(context: vscode.ExtensionContext) {
                 if (currentLine >= 0) {
                     MarkdownEditorProvider.current?.setPendingNavigation(target.fsPath, currentLine + 1);
                 }
-                // 读取文本编辑器 tab 的 preview 状态和所在列（用于激活同列预览）
+                // 读取文本编辑器 tab 的 preview 状态和所在列（兜底路径用）
                 let isPreview = false;
                 let viewCol: vscode.ViewColumn = vscode.ViewColumn.Active;
+                let textTab: vscode.Tab | undefined;
                 for (const group of vscode.window.tabGroups.all) {
                     for (const tab of group.tabs) {
                         if (
@@ -232,21 +233,32 @@ export function activate(context: vscode.ExtensionContext) {
                         ) {
                             isPreview = tab.isPreview;
                             viewCol = group.viewColumn;
+                            textTab = tab;
                             break;
                         }
                     }
                 }
-                // 不关闭文本 tab，只打开/激活预览（预览面板已存在时 openWith 复用该标签）：
-                // 回归（用户实测：切回预览会闪、还闪出同名标签再消失）——关掉再开 =
-                // 重建整个 webview，冷启动必闪、新标签排到末尾；保留两侧标签后来回切换
-                // 只是激活已有标签，与 VS Code 自带 Markdown 预览模型一致（零闪动、
-                // 无重复标签、标签顺序不变）。
-                await vscode.commands.executeCommand(
-                    "vscode.openWith",
-                    target,
-                    MarkdownEditorProvider.viewType,
-                    { viewColumn: viewCol, preview: isPreview },
-                );
+                // 原地替换编辑器类型（与 VS Code 内置 markdown.togglePreview 同一机制：
+                // `reopenActiveEditorWith`）——标签不重建、不新增，切换零闪动。
+                // 回归（用户实测：切回预览会闪、还闪出同名标签再消失、标签跳到末尾）：
+                // 此前「关文本 tab 再 openWith」= 重建整个 webview，冷启动必闪。
+                try {
+                    await vscode.commands.executeCommand(
+                        "reopenActiveEditorWith",
+                        MarkdownEditorProvider.viewType,
+                    );
+                } catch {
+                    // 兜底（旧版 VS Code 无该命令）：关文本 tab 再打开预览
+                    if (textTab) {
+                        await vscode.window.tabGroups.close(textTab);
+                    }
+                    await vscode.commands.executeCommand(
+                        "vscode.openWith",
+                        target,
+                        MarkdownEditorProvider.viewType,
+                        { viewColumn: viewCol, preview: isPreview },
+                    );
+                }
             },
         ),
     );
