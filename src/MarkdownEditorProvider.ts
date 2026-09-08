@@ -27,7 +27,6 @@ import { resolveTableWrapVars } from "../shared/tableWrap";
 // ─── 常量 ────────────────────────────────────────────────────
 const GLOBAL_REVEAL_LINE_TTL_MS = 10_000;
 const PENDING_NAVIGATION_TTL_MS = 5000;
-const REVEAL_LINE_DELAYED_CHECK_MS = 1000;
 const SAVE_COOLDOWN_MS = 1500;
 const FS_WATCH_DEBOUNCE_MS = 200;
 /** 保存时拉取内容（requestContent → contentResponse）的超时兜底：超时用内存内容 */
@@ -87,24 +86,23 @@ export class MarkdownEditorProvider
 
     /**
      * 从 extension.ts 调用：暂存待跳转行号；如果面板可见且已就绪则直接发送。
-     * @param opts.directOnly 只做「已可见面板」的直接投递、不暂存（用于「目标就是当前
-     *   激活面板」的场景：投递错了也只是即将被替换的旧文档，且不留 5s 陈旧条目）
+     * @param opts.directOnly 「目标就是当前激活面板」场景：即时投递成功则不暂存
+     *   （避免 5s 陈旧条目污染后续激活）；未即时投递（面板尚未可见/未就绪）时仍
+     *   暂存，由后续 ready / viewState 消费——不丢导航。
      */
     public setPendingNavigation(fsPath: string, line: number, opts?: { directOnly?: boolean }): void {
-        if (!opts?.directOnly) {
-            this._pendingNavigations.set(fsPath, { line, ts: Date.now() });
-        }
-        // 面板已存在且已初始化 → 直接发送，无需等待 onDidChangeViewState
         const uriKey = vscode.Uri.file(fsPath).toString();
         const initialized = this._initializedPanels.has(uriKey);
-        if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[setPendingNav] file:', path.basename(fsPath), 'line:', line, '| initialized:', initialized);
-        if (initialized) {
-            const panel = this._webviewPanels.get(uriKey);
-            // 只在面板当前可见时立即发送（面板已隐藏说明用户刚切换走，不应回传行号）
-            if (panel && panel.visible) {
-                panel.webview.postMessage({ type: 'scrollToLine', line });
-                // 不删除 _pendingNavigations，作为面板重建时 ready 的备用（TTL 5s 内有效）
-            }
+        const panel = this._webviewPanels.get(uriKey);
+        const delivered = initialized && panel !== undefined && panel.visible;
+        if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[setPendingNav] file:', path.basename(fsPath), 'line:', line, '| initialized:', initialized, 'delivered:', delivered);
+        if (delivered) {
+            panel.webview.postMessage({ type: 'scrollToLine', line });
+        }
+        // 常规调用始终暂存（面板重建时 ready 可复用，TTL 5s）；directOnly 仅在
+        // 未即时投递时暂存（保证不丢，同时不留陈旧条目）
+        if (!opts?.directOnly || !delivered) {
+            this._pendingNavigations.set(fsPath, { line, ts: Date.now() });
         }
     }
 
@@ -306,23 +304,11 @@ export class MarkdownEditorProvider
             if (line !== undefined) {
                 if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[viewState] immediate scrollToLine:', line);
                 p.webview.postMessage({ type: "scrollToLine", line });
-                return;
             }
-            // revealLine 可能在 viewState 变化之后才触发（全局搜索时序不确定）
-            // 延迟 1000ms 再检查一次全局兜底行号或 pending navigation
-            setTimeout(() => {
-                try {
-                    if (!p.active) { return; }
-                } catch {
-                    return; // 面板已销毁（如 preview tab 被替换），忽略
-                }
-                const delayedLine = this._consumePendingNavigation(document.uri.fsPath)
-                    ?? this._consumeGlobalRevealLine();
-                if (delayedLine !== undefined) {
-                    if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[viewState] delayed scrollToLine:', delayedLine);
-                    p.webview.postMessage({ type: "scrollToLine", line: delayedLine });
-                }
-            }, REVEAL_LINE_DELAYED_CHECK_MS);
+            // 回归（E5）：此处原有 1s 延迟复查定时器（「revealLine 可能在 viewState
+            // 之后才触发」）——E1 之后该场景由 revealLine 对「当前激活 md 面板」的
+            // 即时投递覆盖（未即时投递时 setPendingNavigation 仍暂存，由 ready 消费），
+            // 复查定时器已冗余，删除。
         });
     }
 
