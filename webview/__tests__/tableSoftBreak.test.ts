@@ -1,14 +1,17 @@
 /**
  * 表格软换行回归测试：单元格内 Shift+Enter 应插入 hardbreak（序列化为 <br>）。
- * 修复前官方 tableKeymap 将 Shift+Enter 绑定 goToNextCell（跳转单元格、无换行）。
+ * 实现路径（P2 简化后）：上游 hardbreakKeymap（Shift-Enter）本就在，单元格内被拦
+ * 只因 hardbreakFilterNodes ctx 默认含 "table"——editor.ts 把该 ctx 改为
+ * ["code_block"]（放行 table）。本测试用同样配置复现该行为。
+ * 历史：更早版本官方 tableKeymap 曾把 Shift+Enter 绑定 goToNextCell（7.22.1 已移除）。
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { CrepeBuilder } from "@milkdown/crepe";
 import { editorViewCtx, remarkStringifyOptionsCtx } from "@milkdown/kit/core";
+import { hardbreakFilterNodes } from "@milkdown/kit/preset/commonmark";
 import { getMarkdown } from "@milkdown/kit/utils";
 import { TextSelection } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
-import { tableSoftBreakPlugin } from "../tableSoftBreakPlugin";
 import { withTableBreakHandler } from "../utils/markdownSerializer";
 
 if (typeof (window as unknown as Record<string, unknown>).ResizeObserver === "undefined") {
@@ -33,8 +36,9 @@ async function makeEditor(md: string) {
     const crepe = new CrepeBuilder({ root, defaultValue: md });
     crepe.editor.config((ctx) => {
         ctx.update(remarkStringifyOptionsCtx, (options) => withTableBreakHandler(options));
+        // 与 editor.ts 的配置一致：放行 table 内的 hardbreak（保留 code_block 拦截）
+        ctx.set(hardbreakFilterNodes.key, ["code_block"]);
     });
-    crepe.editor.use(tableSoftBreakPlugin);
     const editor = await crepe.create();
     return editor;
 }
@@ -66,7 +70,7 @@ afterEach(() => {
     document.body.innerHTML = "";
 });
 
-describe("tableSoftBreakPlugin", () => {
+describe("表格软换行（上游 hardbreakFilterNodes 配置）", () => {
     it("单元格内 Shift+Enter 应该 插入换行并序列化为 <br>", async () => {
         const editor = await makeEditor("| A | B |\n| --- | --- |\n| x | y |\n");
         const view = getView(editor);
