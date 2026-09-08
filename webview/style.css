@@ -347,6 +347,13 @@ body {
 /* 代码块 */
 /* ─── 代码块（基于 Crepe CodeMirror）─── */
 
+/* 代码块编辑器最大高度（epytor.codeBlockMaxHeight 注入的 CSS 变量消费方；
+   回归：变量被注入但无任何规则消费，该配置项实际无效） */
+.milkdown .milkdown-code-block .cm-editor {
+    max-height: var(--code-block-max-height);
+    overflow: auto;
+}
+
 /* 字体与 VSCode 编辑器一致 */
 .milkdown .milkdown-code-block .cm-editor .cm-content {
     font-family: var(--vscode-editor-font-family, monospace) !important;

@@ -95,4 +95,8 @@ describe("WebView 样式", () => {
         expect(styleCss).toContain(".milkdown .ProseMirror table td a");
         expect(styleCss).toContain("overflow-wrap: anywhere");
     });
+
+    it("codeBlockMaxHeight 注入的 CSS 变量 应该 有消费规则（回归：零消费方=死配置）", () => {
+        expect(styleCss).toContain("var(--code-block-max-height)");
+    });
 });
