@@ -327,6 +327,11 @@ export function setSerializationMode(mode: SerializationMode): void {
     _serializationMode = mode;
 }
 
+/** 当前序列化模式（回归测试观测口：init/revert 重建不得重置运行期配置） */
+export function getSerializationMode(): SerializationMode {
+    return _serializationMode;
+}
+
 export function setSerializationDebug(enabled: boolean): void {
     _serializationDebug = enabled;
 }
@@ -406,10 +411,10 @@ export async function createEditor(
     onDocumentChanged: () => void,
     onRenameImage?: (webviewUri: string, newBasename: string) => Promise<void>,
     onTocToggle?: () => void,
-    initialSerializationMode: SerializationMode = "clean",
 ): Promise<Editor> {
-    _serializationMode = initialSerializationMode;
-    _serializationDebug = window.__i18n?.debugMode ?? false;
+    // 回归（F1）：不再在此重置序列化模式/调试开关——init 与 revert 都走 createEditor，
+    // 用启动快照重置会把用户中途改的配置静默回滚（外部写盘触发 revert 即复现）。
+    // 运行期配置统一由 init 消息载荷与 setSerializationMode/setSerializationDebug 消息维护。
     _hasUserInteracted = false;
     setupInteractionTracking();
 

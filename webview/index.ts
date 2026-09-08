@@ -74,7 +74,9 @@ let _topBarOverflowCtl: { dispose(): void } | null = null;
 
 let currentEditor: Editor | null = null;
 let currentLineMap: number[] = [];
-let _debugLog = false;
+// 启动值取自 HTML 注入的配置快照（回归：此前只由 setDebugMode 消息置位，
+// debugMode=true 启动时滚动调试日志直到发生一次配置变更才生效）
+let _debugLog = window.__i18n?.debugMode ?? false;
 
 // 修饰键监听：按住 Ctrl/Meta 时给 body 加 class，链接 hover 显示小手
 document.addEventListener('keydown', (e) => {
@@ -324,7 +326,6 @@ async function initEditor(
         },
         handleRenameImage,
         () => toc.toggle(),
-        window.__i18n?.serializationMode ?? "clean",
     );
     toc.show();    // toolbar 就绪，显示 TOC 面板
     // TOC 全量重建 + 字数统计：双 rAF 延迟到首帧绘制后（首帧性能：万行文档 TOC
@@ -699,6 +700,13 @@ async function handleEditorLifecycleMessage(
         if (msg.imageUriMap) { setImageUriMap(msg.imageUriMap); }
         if (msg.type === "init") {
             _isActivePanel = msg.active ?? true;
+            // 运行期配置以 init 载荷为准（回归 F1：此前由 createEditor 用启动快照重置，
+            // revert 会把用户中途改的 serializationMode/debugMode 静默回滚）
+            if (msg.serializationMode) { setSerializationMode(msg.serializationMode); }
+            if (msg.debugMode !== undefined) {
+                _debugLog = msg.debugMode;
+                setSerializationDebug(msg.debugMode);
+            }
         }
         await initEditor(container, msg.content);
         // 新 WebView 打开时主动获取 DOM 焦点。

@@ -494,12 +494,17 @@ export class MarkdownEditorProvider
                     ?? this._consumeGlobalRevealLine();
                 if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[ready] scrollToLine:', scrollToLine);
                 // 重置稳定化基准（新的 init 意味着内容将重新从磁盘加载）
+                const cfg = vscode.workspace.getConfiguration("epytor");
                 webviewPanel.webview.postMessage({
                     type: "init",
                     content: displayContent,
                     // 发送时的面板激活态（webview 侧焦点守卫用；后续变化由
                     // panelActiveState 消息实时同步）
                     active: webviewPanel.active,
+                    // 运行期配置随 init 下发（回归 F1：webview 不再用启动快照重置，
+                    // revert 不会把用户中途改的配置静默回滚）
+                    serializationMode: sanitizeSerializationMode(cfg.get("markdown.serializationMode", "clean")),
+                    debugMode: cfg.get<boolean>("debugMode", false) === true,
                     lineMap: computeLineMap(initContent),
                     frontmatter: this._frontmatterMap.get(uriKey) || undefined,
                     imageUriMap: Object.fromEntries(this._imageUriMaps.get(uriKey) ?? []),
