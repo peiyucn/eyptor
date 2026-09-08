@@ -9,6 +9,15 @@ import { computeLineMap } from "./utils/lineMap";
 import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
+import {
+    DEFAULT_CODE_BLOCK_MAX_HEIGHT,
+    DEFAULT_EDITOR_MAX_WIDTH,
+    DEFAULT_IMAGE_SELECTION_COLOR,
+    sanitizeCssColor,
+    sanitizeCssNumber,
+    sanitizeFontFamily,
+    sanitizeSerializationMode,
+} from "./utils/webviewConfigSanitize";
 import type { ToExtensionMessage, ToWebviewMessage } from "../shared/messages";
 import { resolveTableWrapVars } from "../shared/tableWrap";
 
@@ -785,10 +794,11 @@ export class MarkdownEditorProvider
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
         const cfg = vscode.workspace.getConfiguration("epytor");
-        const maxHeight = cfg.get<number>("codeBlockMaxHeight", 500);
-        const editorMaxWidth = cfg.get<number>("editorMaxWidth", 900);
-        const fontFamily = cfg.get<string>("fontFamily", "");
-        const imageSelectionColor = cfg.get<string>("imageSelectionColor", "rgba(52, 211, 153, 0.6)");
+        // 配置值注入 HTML 前一律净化（恶意 workspace 设置不得逃逸 <style>/<script>，见 webviewConfigSanitize）
+        const maxHeight = sanitizeCssNumber(cfg.get("codeBlockMaxHeight", DEFAULT_CODE_BLOCK_MAX_HEIGHT), DEFAULT_CODE_BLOCK_MAX_HEIGHT);
+        const editorMaxWidth = sanitizeCssNumber(cfg.get("editorMaxWidth", DEFAULT_EDITOR_MAX_WIDTH), DEFAULT_EDITOR_MAX_WIDTH);
+        const fontFamily = sanitizeFontFamily(cfg.get("fontFamily", ""));
+        const imageSelectionColor = sanitizeCssColor(cfg.get("imageSelectionColor", DEFAULT_IMAGE_SELECTION_COLOR), DEFAULT_IMAGE_SELECTION_COLOR);
         const tableWrapMode = cfg.get<string>("tableWrapMode", "wrap");
         const tableWrapVars = resolveTableWrapVars(tableWrapMode);
         const tableWordBreak = tableWrapVars.wordBreak;
@@ -814,8 +824,8 @@ export class MarkdownEditorProvider
         const lang = vscode.env.language.toLowerCase();
         const isMac = process.platform === 'darwin';
         const translations = lang.startsWith('zh') ? ZH_CN_WEBVIEW : {};
-        const debugMode = cfg.get<boolean>("debugMode", false);
-        const serializationMode = cfg.get<"clean" | "compatible">("markdown.serializationMode", "clean");
+        const debugMode = cfg.get<boolean>("debugMode", false) === true;
+        const serializationMode = sanitizeSerializationMode(cfg.get("markdown.serializationMode", "clean"));
         const i18nScript = `window.__i18n=${JSON.stringify({ translations, isMac, debugMode, serializationMode })};`;
 
         return `<!DOCTYPE html>
