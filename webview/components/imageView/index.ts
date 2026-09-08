@@ -15,6 +15,7 @@ import {
 } from "@/ui/icons";
 import { t } from "@/i18n";
 import { createButton, createSeparator, setupInputKeyboard } from "@/ui/dom";
+import { showTooltipAt } from "@/ui/tooltip";
 import { attachImgPathComplete, resolveToWebviewUri } from './imgPathComplete';
 import './imageView.css';
 
@@ -462,7 +463,17 @@ export function createImageView(
             const newBasename = infoInput.value.trim();
             const orig = basenameNoExt(rawSrc);
             if (newBasename && newBasename !== orig && onRenameImage) {
-                onRenameImage(rawSrc, newBasename).catch(() => {});
+                onRenameImage(rawSrc, newBasename).catch((error) => {
+                    // 回归：失败被空 catch 吞掉，输入框静默复位、用户以为重命名成功
+                    // （文件名非法/被占用/超时均无任何提示）
+                    infoInput.value = orig;
+                    showTooltipAt(
+                        infoInput,
+                        // 错误消息来自宿主（Extension 侧已本地化）；极端无 message 时用英文兜底
+                        error instanceof Error && error.message ? error.message : "Rename failed",
+                        "above",
+                    );
+                });
             } else {
                 infoInput.value = orig;
             }
