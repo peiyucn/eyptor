@@ -866,7 +866,7 @@ export class MarkdownEditorProvider
         const i18nScript = `window.__i18n=${JSON.stringify({ translations, isMac, debugMode, serializationMode })};`;
 
         return `<!DOCTYPE html>
-<html lang="${vscode.env.language}">
+<html lang="${vscode.env.language}" style="background-color: var(--vscode-editor-background);">
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy"
@@ -879,7 +879,7 @@ export class MarkdownEditorProvider
   <link rel="stylesheet" href="${styleUri}">
   <style>:root { --code-block-max-height: ${maxHeight}px; --editor-max-width: ${editorMaxWidth}px;${fontFamily ? ` --custom-font-family: ${fontFamily};` : ''} --image-selection-color: ${imageSelectionColor}; --epytor-table-word-break: ${tableWordBreak}; --epytor-table-white-space: ${tableWhiteSpace}; --epytor-table-overflow-x: ${tableOverflowX}; --epytor-table-width: ${tableWidth}; }</style>
 </head>
-<body>
+<body style="margin: 0; background-color: var(--vscode-editor-background);">
   <div class="editor-topbar"></div>
   <div id="editor"></div>
   <script nonce="${nonce}">${i18nScript}</script>
