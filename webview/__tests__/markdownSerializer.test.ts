@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-    cleanTableBreaks,
     cleanTextHandler,
     preserveTableBreakStyle,
     serializeCleanMarkdown,
+    withTableBreakHandler,
 } from "../utils/markdownSerializer";
 
 const unsafePatterns = [
@@ -80,37 +80,40 @@ describe("Clean Markdown serializer", () => {
         });
     });
 
-    describe("cleanTableBreaks", () => {
-        it("空 cell 中的占位 break 应该被移除", () => {
-            expect(cleanTableBreaks("| A | B |\n|---|---|\n| foo | <br /> |")).toBe(
-                "| A | B |\n|---|---|\n| foo | |",
-            );
+    describe("withTableBreakHandler（表格换行 handler 化，回归 P5）", () => {
+        const handlersOf = (options: { handlers?: unknown } = { handlers: {} }) =>
+            (withTableBreakHandler(options) as { handlers: Record<string, (...args: never[]) => string> }).handlers;
+        const inCell = { stack: ["root", "table", "tableRow", "tableCell"] };
+
+        it("表格单元格内的 break 应该 输出 <br>", () => {
+            expect(handlersOf().break({} as never, { children: [{}, {}] } as never, inCell as never, {} as never))
+                .toBe("<br>");
         });
 
-        it("cell 尾部无意义 break 应该被移除", () => {
-            expect(cleanTableBreaks("| Field | Value |\n|---|---|\n| ok | true<br /> |")).toBe(
-                "| Field | Value |\n|---|---|\n| ok | true |",
-            );
+        it("单元格内段落末尾的 break 应该 输出空（重载时 remark 会裁掉尾部换行）", () => {
+            const node = {};
+            expect(handlersOf().break(node as never, { children: [node] } as never, inCell as never, {} as never))
+                .toBe("");
         });
 
-        it("cell 中间的真实 break 应该保留", () => {
-            const input = "| Status |\n|---|\n| 1.新增<br>2.修改 |";
-
-            expect(cleanTableBreaks(input)).toBe(input);
+        it("表格外的 break 应该 走上游默认（无默认 handler 时为空串）", () => {
+            expect(handlersOf().break({} as never, {} as never, { stack: ["root"] } as never, {} as never))
+                .toBe("");
         });
 
-        it("转义竖线不应该被当作 cell 分隔符", () => {
-            const input = "| Field | Description |\n|---|---|\n| foo\\|bar | value<br /> |";
-
-            expect(cleanTableBreaks(input)).toBe(
-                "| Field | Description |\n|---|---|\n| foo\\|bar | value |",
-            );
+        it("单元格内含换行的 text 应该 换成 <br>", () => {
+            expect(handlersOf().text({ value: "x\nz" } as never, {} as never, inCell as never, {} as never))
+                .toBe("x<br>z");
         });
 
-        it("围栏代码块和普通竖线文本应该保持不变", () => {
-            const input = "```text\n| value<br /> |\n```\n\nA | B";
+        it("空单元格的空段落占位 <br /> 应该 被去掉（回归：Milkdown 空段落 runner 追加的展示性 html）", () => {
+            expect(handlersOf().html({ value: "<br />" } as never, {} as never, inCell as never))
+                .toBe("");
+        });
 
-            expect(cleanTableBreaks(input)).toBe(input);
+        it("表格外的原始 HTML 应该 原样输出", () => {
+            expect(handlersOf().html({ value: "<div>hi</div>" } as never, {} as never, { stack: ["root"] } as never))
+                .toBe("<div>hi</div>");
         });
     });
 
@@ -126,11 +129,11 @@ describe("Clean Markdown serializer", () => {
             expect(preserveTableBreakStyle("| a |", serialized)).toBe(serialized);
         });
 
-        it("Clean 处理应该先继承风格再清理尾部 break", () => {
+        it("Clean 处理应该继承源文件 br 风格", () => {
             expect(serializeCleanMarkdown(
                 "| A |\n|---|\n| a<br> |",
                 "| A |\n|---|\n| a<br /> |",
-            )).toBe("| A |\n|---|\n| a |");
+            )).toBe("| A |\n|---|\n| a<br> |");
         });
     });
 });

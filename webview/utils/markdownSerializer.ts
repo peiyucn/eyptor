@@ -116,83 +116,6 @@ export const cleanTextHandler: CleanTextHandler = (node, parent, state, info) =>
 };
 
 /**
- * Clean the presentation-only breaks emitted for empty paragraphs inside a
- * GFM table. Escaped pipes are respected so cell contents are not split.
- */
-export function cleanTableBreaks(markdown: string): string {
-    const lines = markdown.split("\n");
-    let inFence = false;
-    let inTable = false;
-
-    return lines.map((line, index) => {
-        if (/^\s*(`{3,}|~{3,})/.test(line)) {
-            inFence = !inFence;
-            inTable = false;
-            return line;
-        }
-        if (inFence) return line;
-
-        const isRow = /^\s*\|.*\|\s*$/.test(line);
-        const isSeparator = /^\s*\|[\s\-:|]+\|\s*$/.test(line);
-        const adjacentToSeparator =
-            isRow &&
-            (isSeparator ||
-                /^\s*\|[\s\-:|]+\|\s*$/.test(lines[index - 1] ?? "") ||
-                /^\s*\|[\s\-:|]+\|\s*$/.test(lines[index + 1] ?? ""));
-
-        if (isSeparator) {
-            inTable = true;
-            return line;
-        }
-        if (!isRow) {
-            inTable = false;
-            return line;
-        }
-        if (!inTable && !adjacentToSeparator) return line;
-
-        const cells = splitTableCells(line);
-        if (cells.length < 2) return line;
-
-        return cells
-            .map(cleanTableCellBreak)
-            .join("|");
-    }).join("\n");
-}
-
-function cleanTableCellBreak(cell: string): string {
-    const match = cell.match(/<br\s*\/?>\s*$/i);
-    if (!match || match.index === undefined) return cell;
-
-    const contentBeforeBreak = cell.slice(0, match.index);
-    const trailingPadding = match[0].replace(/<br\s*\/?>/i, "");
-    return contentBeforeBreak.trim() ? contentBeforeBreak + trailingPadding : " ";
-}
-
-function splitTableCells(line: string): string[] {
-    const cells: string[] = [];
-    let start = 0;
-    let escaped = false;
-
-    for (let index = 0; index < line.length; index++) {
-        const character = line[index];
-        if (escaped) {
-            escaped = false;
-            continue;
-        }
-        if (character === "\\") {
-            escaped = true;
-            continue;
-        }
-        if (character === "|") {
-            cells.push(line.slice(start, index));
-            start = index + 1;
-        }
-    }
-    cells.push(line.slice(start));
-    return cells;
-}
-
-/**
  * Keep a file's existing table break spelling when Clean output introduces a
  * real break in a changed table row.
  */
@@ -203,11 +126,11 @@ export function preserveTableBreakStyle(source: string, serialized: string): str
 }
 
 export function serializeCleanMarkdown(source: string, serialized: string): string {
-    return cleanTableBreaks(preserveTableBreakStyle(source, serialized));
+    return preserveTableBreakStyle(source, serialized);
 }
 
 /**
- * 表格单元格内换行的序列化补丁（闭环方案，源码形态 <br>）。
+ * 表格换行的序列化补丁（闭环方案，源码形态 <br>）。
  *
  * mdast 默认 break handler 在表格上下文（unsafe `\n`）退化为空格；GFM 表格
  * 换行的标准表达是 `<br>`，但 remark-gfm 解析层会丢弃表格内 `<br>`（上游
@@ -215,6 +138,13 @@ export function serializeCleanMarkdown(source: string, serialized: string): stri
  * （convertTableBrForDisplay：源码 `<br>` → `&#10;` 再进解析器），形成闭环：
  * 源码 `<br>` → 加载转换 → 渲染换行 → 序列化 `<br>` → 源码往返一致，
  * GitHub 渲染同为换行。
+ *
+ * 回归 P5：表格里的展示性占位此前靠序列化完成后的 cleanTableBreaks 全文件扫描
+ * （含手写 GFM 单元格切分）擦除；现在两个来源都在本 handler 里就地处理——
+ * ① 空单元格：Milkdown 的 paragraph toMarkdown runner 对空段落追加 html 节点
+ *    `<br />`（preset-commonmark lib/index.js:490），在单元格里是纯展示占位；
+ * ② 段落末尾的换行：重载时 remark 会裁掉单元格尾部换行，写出去只会造成
+ *    「文件里有、重开就没」的不一致。
  */
 export function withTableBreakHandler<T extends { handlers?: unknown }>(options: T): T {
     const handlers = (options.handlers ?? {}) as Record<string, unknown>;
@@ -231,6 +161,10 @@ export function withTableBreakHandler<T extends { handlers?: unknown }>(options:
                 info: unknown,
             ) => {
                 if (state.stack.includes("tableCell")) {
+                    const siblings = (parent as { children?: unknown[] } | undefined)?.children;
+                    if (Array.isArray(siblings) && siblings[siblings.length - 1] === node) {
+                        return ""; // 段落末尾换行不写源码（重载会被裁掉）
+                    }
                     return "<br>";
                 }
                 const fallback = defaultBreak as
@@ -253,6 +187,18 @@ export function withTableBreakHandler<T extends { handlers?: unknown }>(options:
                     | ((n: unknown, p: unknown, s: unknown, i: unknown) => unknown)
                     | undefined;
                 return fallback ? fallback(node, parent, state, info) : String(node.value ?? "");
+            },
+            html: (
+                node: { value?: string },
+                _parent: unknown,
+                state: { stack: string[] },
+            ) => {
+                const value = String(node.value ?? "");
+                // 空单元格的展示性占位（见函数头注释①）：单元格里直接输出空
+                if (state.stack.includes("tableCell") && /^<br\s*\/?>$/i.test(value.trim())) {
+                    return "";
+                }
+                return value;
             },
         } as T["handlers"],
     };

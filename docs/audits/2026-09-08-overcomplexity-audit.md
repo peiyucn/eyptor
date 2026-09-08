@@ -243,18 +243,17 @@ serializeCleanMarkdown 全是 split/map/replace 纯字符串操作，无 throw �
 
 **风险**：低-中。纯重构、行为零变化；全量跑 imgPathComplete.test.ts + 补全手测。
 
-### 🟠 P5 · 表格换行一个关注点在加载/序列化/后处理三层共 4 个全文件遍历（含手写 GFM 行解析器 splitTableCells）
+### 🟠 P5 · 表格换行一个关注点跨三层 4 个全文件遍历 ✅ 2026-09-08 已修（③ handler 化）
 
-**位置**：`src/utils/contentTransform.ts:43-61`；`webview/utils/markdownSerializer.ts:122-207,219-258`；`webview/editor.ts:340-355`
+**位置**：`src/utils/contentTransform.ts`（convertTableBrForDisplay，①保留）；`webview/utils/markdownSerializer.ts`（withTableBreakHandler ②③、preserveTableBreakStyle ④）
 
-**当前机制**：① 加载 convertTableBrForDisplay 全文件替换 →
-；② 序列化 withTableBreakHandler 覆盖 break+text handler；③ 保存后处理 cleanTableBreaks 用**自带 splitTableCells（手写 GFM 单元格切分，含转义追踪）**扫掉「展示性尾部 」；④ preserveTableBreakStyle 再全文件正则统一  拼写。clean 保存链 = 序列化 → ④ → ③ → applyMinimalChanges。
+**原机制**：① 加载时 `<br>` → `&#10;`（保留）；② 序列化 break/text handler 输出 `<br>`（保留）；③ 保存后 `cleanTableBreaks` 自带 `splitTableCells`（手写 GFM 单元格切分，含转义追踪）全文件扫描擦除「展示性尾部 `<br>`」；④ `preserveTableBreakStyle` 再全文件正则统一 `<br>` 拼写（保留）。
 
-**为何过度**（⑤往返放大 + ③对抗平台）：①与②是上游 #2463 的真实边界，应保留；但③④是「空单元格被序列化成尾部 」的事后擦除——mdast-util-to-markdown 的 handler 机制本可在 tableCell 层一次性输出正确形态，却选择序列化完成后再用自造解析器反向清洗；④还会把源文件任意一处的  拼写风格套到全部新 break 上。
+**根因实证**：展示性 `<br />` 的来源不是 mdast handler，而是 **Milkdown 的 paragraph `toMarkdown` runner**——空段落被追加 `html` 节点 `<br />`（`@milkdown/preset-commonmark/lib/index.js:490`，`remarkPreserveEmptyLinePlugin` 在场时）。所以「移进 tableCell handler」不可行（该 handler 由 `handleTable` 走 matrix 路径，根本不被调用）；可行的官方接缝是 mdast 的 **html handler**（上游默认实现只有 `return node.value || ''`）。
 
-**简化方案**：保留①②；将③移入 tableCell/empty-cell handler（删 splitTableCells 与 cleanTableBreaks 全文件扫描）；评估删除④（统一输出规范  并写入 README）。先写复现用例锁定现有往返行为（tableBrRoundtrip.test.ts 已在）。
+**实际修复**：`withTableBreakHandler` 新增两个就地规则——`html` handler 在 tableCell 内把裸 `<br />` 输出为空（③ 的等价物，不再需要事后扫描）；`break` handler 在 tableCell 内对「段落最后一个子节点」输出空（覆盖「尾部换行写出去、重载又被 remark 裁掉」的不一致）。`cleanTableBreaks` / `cleanTableCellBreak` / `splitTableCells` 整体删除（约 50 行），`serializeCleanMarkdown` 只剩 `preserveTableBreakStyle`。
 
-**风险**：中。表格序列化是历史 bug 高发区，必须逐项过 tableBrRoundtrip/tableSoftBreak 测试并手测空表/转义管道/多行单元格；分两步：先 handler 化③，观察稳定后再议④。
+**顺带改善**：空单元格不再泄漏占位串，列宽不再被 ` <br /> ` 的长度撑开（旧管线 `| A      | B      |` → 新管线 `| A | B |`）。真实管线（加载转换 → 编辑 → 序列化 → Clean）逐例两趟往返稳定：空单元格 / 多个空单元格 / 中间换行（`<br>` 与 `<br/>` 拼写）/ 转义竖线 + 空单元格 / 全空行。
 
 ### ⚪ P6 · TOC 折叠键 level:text 让同一文档同名同级标题共享折叠态 ✅ 2026-09-08 已修
 
@@ -388,7 +387,7 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 **第三批（结构性收敛）部分完成 2026-09-08**：E3/C2（双生机制整套删除，净删 ~110 行）、E5 部分（1s 复查定时器 + directOnly 语义）、F2（重试计划统一）、C3（生命周期 payload 工厂）、C6/F5（visibilitychange 删除）、E9（状态栏统一刷新）、E10（配置广播表驱动）、P7（聚焦层数）、P9（TOC 改存 DOM 引用）、B4（.markdown 对齐）、B6（CI Job Summary + 文档修正）、B3（debugMode 单命令）、B5（onStartupFinished）、P11（tech-debt 登记）
 
-**剩余（下轮继续）**：P4/C4 补全生命周期与注册表统一、P5 表格换行 handler 化、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
+**剩余（下轮继续）**：P4/C4 补全生命周期与注册表统一、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
 
 **第四批（用户实测反馈的两项严重问题 + 复核中新发现）**：
 
@@ -399,6 +398,7 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 * ✅ **E4** 保存链路统一为唯一原语 `_saveNow`（2026-09-08）。
 * ✅ **E6** switchToTextEditor 兜底改真实面板检查 + switchToPreview 改先开后关（2026-09-08）；**C5** 复核后判定为必要复杂度。
 * ✅ **F4** 用户交互跟踪统一为 `utils/userInteraction.ts` 的 epoch（2026-09-08）。
+* ✅ **P5** 表格换行后处理 handler 化，删除 cleanTableBreaks/splitTableCells（2026-09-08）。
 
 ***
 
