@@ -1,4 +1,5 @@
 {
+  "customEditor.displayName": "所见即所得 Markdown 编辑器",
   "command.switchToTextEditor.title": "EPYTOR OFF",
   "command.switchToPreview.title": "EPYTOR ON",
   "config.codeBlockMaxHeight.description": "代码块最大显示高度（像素），超出后出现滚动条。",
