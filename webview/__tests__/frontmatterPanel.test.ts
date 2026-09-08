@@ -113,4 +113,27 @@ describe("frontmatterPanel 组件", () => {
 
         expect(onChange).toHaveBeenCalledWith("---\ntitle: A\ndate: 2026-09-07\n---\n");
     });
+
+    it("嵌套列表行 应该 不渲染为编辑行且随编辑/删除其他字段原样保留（回归：面板编辑曾静默删除非 key:value 行）", () => {
+        const onChange = vi.fn();
+        const src = "---\ntitle: X\ntags:\n  - a\n  - b\n---\n";
+        const handle = createFrontmatterPanel(src, onChange)!;
+        document.body.appendChild(handle.panel);
+
+        // 只有顶层 kv 行渲染为可编辑行（title + tags），列表行不渲染
+        expect(handle.panel.querySelectorAll("tr.fm-row")).toHaveLength(2);
+
+        // 编辑 title：raw 行必须原位保留
+        const titleVal = handle.panel.querySelector<HTMLInputElement>(".fm-val-input")!;
+        titleVal.value = "Y";
+        titleVal.dispatchEvent(new Event("input"));
+        vi.advanceTimersByTime(300);
+        expect(onChange).toHaveBeenLastCalledWith("---\ntitle: Y\ntags:\n  - a\n  - b\n---\n");
+
+        // 删除 title 行：tags 行与列表行必须保留
+        const delBtn = handle.panel.querySelector<HTMLButtonElement>(".fm-del-btn")!;
+        delBtn.click();
+        vi.advanceTimersByTime(300);
+        expect(onChange).toHaveBeenLastCalledWith("---\ntags:\n  - a\n  - b\n---\n");
+    });
 });

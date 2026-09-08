@@ -3,7 +3,7 @@
  * 职责：渲染 key/value 输入行 + 增删行，编辑防抖后回调 onChange(序列化 YAML 头)。
  * 面板重建（revert/init）时宿主应先 dispose 旧实例，避免旧防抖 timer 竞态写回旧值。
  */
-import { parseFrontmatter, serializeFrontmatter, type FrontmatterRow } from "@/utils/frontmatter";
+import { parseFrontmatter, serializeFrontmatter, type FrontmatterEntry, type FrontmatterRow } from "@/utils/frontmatter";
 import { t } from "@/i18n";
 
 export interface FrontmatterPanelHandle {
@@ -18,8 +18,15 @@ export function createFrontmatterPanel(
     frontmatter: string,
     onChange: (serialized: string) => void,
 ): FrontmatterPanelHandle | null {
-    const entries = parseFrontmatter(frontmatter);
-    if (entries.length === 0) return null;
+    const parsed = parseFrontmatter(frontmatter);
+    if (!parsed.some((entry) => entry.type === "kv")) return null;
+
+    /**
+     * 条目数组（源真相）：kv 行对应一个可编辑 DOM 行；raw 行不渲染、只随序列化
+     * 原位放回。删除 kv 行时置 null 保序（DOM 行以 dataset.fmIndex 关联条目下标，
+     * splice 会错位后续行）。
+     */
+    const entries: (FrontmatterEntry | null)[] = [...parsed];
 
     const panel = document.createElement("div");
     panel.id = "frontmatter-panel";
@@ -40,14 +47,26 @@ export function createFrontmatterPanel(
         }
     };
 
+    /** 按 DOM 顺序收集 kv 行并回写源条目（raw 行不在 DOM 中，位置天然保留） */
     const collectRows = (): FrontmatterRow[] => {
         const rows: FrontmatterRow[] = [];
         tbody.querySelectorAll<HTMLTableRowElement>("tr.fm-row").forEach((tr) => {
             const keyInput = tr.querySelector<HTMLInputElement>(".fm-key-input");
             const valueInput = tr.querySelector<HTMLInputElement>(".fm-val-input");
-            rows.push({ key: keyInput?.value ?? "", value: valueInput?.value ?? "" });
+            const key = keyInput?.value ?? "";
+            const value = valueInput?.value ?? "";
+            rows.push({ key, value });
+            const index = Number(tr.dataset.fmIndex ?? -1);
+            if (index >= 0) {
+                entries[index] = { type: "kv", key, value };
+            }
         });
         return rows;
+    };
+
+    const serializeEntries = (): string => {
+        const valid = entries.filter((entry): entry is FrontmatterEntry => entry !== null);
+        return serializeFrontmatter(valid);
     };
 
     /**
@@ -79,7 +98,7 @@ export function createFrontmatterPanel(
             if (disposed) return;
             const rows = collectRows();
             if (!validateRows(rows)) return;
-            onChange(serializeFrontmatter(rows));
+            onChange(serializeEntries());
         }, SAVE_DEBOUNCE_MS);
     };
 
@@ -89,12 +108,13 @@ export function createFrontmatterPanel(
         clearTimer();
         const rows = collectRows();
         if (!validateRows(rows)) return;
-        onChange(serializeFrontmatter(rows));
+        onChange(serializeEntries());
     };
 
-    const addRow = (key = "", value = ""): void => {
+    const addRow = (key = "", value = "", entryIndex = -1): void => {
         const tr = document.createElement("tr");
         tr.className = "fm-row";
+        tr.dataset.fmIndex = String(entryIndex);
         const keyTd = document.createElement("td");
         keyTd.className = "fm-key";
         const keyInput = document.createElement("input");
@@ -117,6 +137,8 @@ export function createFrontmatterPanel(
         delBtn.textContent = "✕";
         delBtn.setAttribute("aria-label", t("Delete"));
         delBtn.addEventListener("click", () => {
+            const index = Number(tr.dataset.fmIndex ?? -1);
+            if (index >= 0) entries[index] = null; // 置空保序，raw 行位置不受影响
             tr.remove();
             flushSave();
         });
@@ -135,14 +157,20 @@ export function createFrontmatterPanel(
         valueInput.addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
                 e.preventDefault();
-                addRow();
+                appendRow();
                 tbody.querySelector<HTMLInputElement>("tr:last-child .fm-key-input")?.focus();
             }
         });
     };
 
-    for (const { key, value } of entries) {
-        addRow(key, value);
+    /** 追加一行新的可编辑 kv 条目（用户主动新增，接在 raw 行之后） */
+    const appendRow = (): void => {
+        entries.push({ type: "kv", key: "", value: "" });
+        addRow("", "", entries.length - 1);
+    };
+
+    for (const [index, entry] of entries.entries()) {
+        if (entry?.type === "kv") addRow(entry.key, entry.value, index);
     }
 
     const addBtn = document.createElement("button");
@@ -157,7 +185,7 @@ export function createFrontmatterPanel(
         event.stopPropagation();
     });
     addBtn.addEventListener("click", () => {
-        addRow();
+        appendRow();
         const keyInput = tbody.querySelector<HTMLInputElement>("tr:last-child .fm-key-input");
         // 三重聚焦保险：click 同步 + 下一宏任务 + 下一帧；任一环节焦点被夺回都能补回
         keyInput?.focus();
