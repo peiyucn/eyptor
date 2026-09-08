@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mockVscodeApi } from "./setup";
-import { attachImgPathComplete, dispatchImgPathSuggestions } from "../components/imageView/imgPathComplete";
+import { attachImgPathComplete, dispatchImgPathSuggestions, dispatchImagePathResolved, resolveToWebviewUri } from "../components/imageView/imgPathComplete";
 import type { PathSuggestionItem } from "../../shared/messages";
 
 const item = (path: string, isDir = false, webviewUri?: string): PathSuggestionItem => ({ path, isDir, webviewUri });
@@ -84,5 +84,36 @@ describe("imgPathComplete 补全竞态防护", () => {
         input.remove(); // 未 detach（模拟宿主异常路径）但输入框已脱离文档
         dispatchImgPathSuggestions(id, [item("a.md"), item("a-dir", true)]);
         expect(document.querySelector(".img-path-complete-list")).toBeNull();
+    });
+});
+
+describe("resolveToWebviewUri（图片路径确认的唯一翻译路径，回归 P8）", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("Extension 回包时 应该 解析为 webviewUri", async () => {
+        const promise = resolveToWebviewUri("./images/a.png");
+        const sent = mockVscodeApi.postMessage.mock.calls.find(
+            (call) => (call[0] as { type: string }).type === "resolveImagePath",
+        )?.[0] as { id: string; relPath: string };
+        expect(sent.relPath).toBe("./images/a.png");
+
+        dispatchImagePathResolved(sent.id, "https://file+.vscode-resource/a.png");
+
+        await expect(promise).resolves.toBe("https://file+.vscode-resource/a.png");
+    });
+
+    it("超时未回包时 应该 回退为原路径（不挂起）", async () => {
+        const promise = resolveToWebviewUri("./images/missing.png");
+
+        vi.advanceTimersByTime(3000);
+
+        await expect(promise).resolves.toBe("./images/missing.png");
     });
 });

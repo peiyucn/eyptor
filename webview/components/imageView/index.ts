@@ -26,28 +26,22 @@ const IMAGE_RETRY_MAX_DELAY_MS = 2000;
 const MIN_IMAGE_RESIZE_HEIGHT = 40;
 const MAX_IMAGE_RESIZE_RATIO = 0.8;
 
-// ─── webviewUri ↔ relPath 双向映射（由 index.ts 在收到 init/revert 消息时写入）─────
+// ─── webviewUri → relPath 映射（由 index.ts 在收到 init/revert 消息时写入，展示用）──
+// 回归 P8：此前另存一份 relPath → webviewUri 反向镜像，重命名后不同步（陈旧映射靠
+// 异步解析兜底）——反向翻译统一走 Extension 的 resolveImagePath（已有 3s 超时回退）
 const _uriToRel = new Map<string, string>(); // webviewUri → relPath
-const _relToUri = new Map<string, string>(); // relPath    → webviewUri
 
 /** 由外部（index.ts）在 init/revert 收到 imageUriMap 后调用 */
 export function setImageUriMap(map: Record<string, string>): void {
     _uriToRel.clear();
-    _relToUri.clear();
     for (const [uri, rel] of Object.entries(map)) {
         _uriToRel.set(uri, rel);
-        _relToUri.set(rel, uri);
     }
 }
 
 /** 将 webviewUri 转为可显示的 relPath（找不到时原样返回） */
 function toDisplayPath(src: string): string {
     return _uriToRel.get(src) ?? src;
-}
-
-/** 将 relPath 转为可在 NodeView 中直接渲染的 webviewUri（找不到时原样返回） */
-function toWebviewUri(src: string): string {
-    return _relToUri.get(src) ?? src;
 }
 
 type ViewMutationRecord = MutationRecord | { type: "selection"; target: Node };
@@ -573,8 +567,6 @@ export function createImageView(
                 isEditingSrc = false;
                 // ① 补全时 dataset 存的 webviewUri 最可靠
                 const datasetUri = (input.dataset.imgWebviewUri ?? "").trim();
-                // ② 已有映射（init/revert 建立）
-                const mappedUri = displayVal ? toWebviewUri(displayVal) : "";
 
                 const applyUri = (newSrc: string) => {
                     if (!newSrc || newSrc === rawSrc) { view.focus(); return; }
@@ -592,10 +584,9 @@ export function createImageView(
 
                 if (datasetUri) {
                     applyUri(datasetUri);
-                } else if (mappedUri !== displayVal) {
-                    applyUri(mappedUri);
                 } else if (displayVal) {
-                    // 绝对 URL 直接使用，不经过 Extension 解析
+                    // 绝对 URL 直接使用，不经过 Extension 解析；其余一律交给
+                    // Extension 解析（回归 P8：不再用陈旧的反向镜像短路）
                     if (/^https?:\/\//i.test(displayVal)) {
                         applyUri(displayVal);
                     } else {
