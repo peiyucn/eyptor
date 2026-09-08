@@ -7,7 +7,7 @@ import {
     normalizeImageDestination,
     rewriteImageSources,
 } from "../../src/utils/contentTransform";
-import { computeLineMap } from "../../src/utils/lineMap";
+import { computeLineMap, computeDisplayLineMap } from "../../src/utils/lineMap";
 
 // ─────────────────────────────────────────────────────────────
 // extractFrontmatter
@@ -144,6 +144,29 @@ describe("restoreContentForSave", () => {
         const uriMap = new Map([["vscode-resource://host/my file.png", "my file.png"]]);
         const serialized = "![alt](<vscode-resource://host/my file.png>)";
         expect(restoreContentForSave(serialized, "", uriMap)).toBe("![alt](my file.png)");
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// computeDisplayLineMap（回归：源码/预览切换光标总回 1 行 1 列）
+// ─────────────────────────────────────────────────────────────
+describe("computeDisplayLineMap", () => {
+    it("无 frontmatter 时 应该 与 computeLineMap 一致", () => {
+        const content = "# 标题\n\n段落一\n\n段落二\n";
+        expect(computeDisplayLineMap(content)).toEqual(computeLineMap(content));
+    });
+
+    it("有 frontmatter 时 应该 跳过 frontmatter 块、行号仍指向完整源码", () => {
+        const content = "---\ntitle: A\ndate: 2026-01-01\n---\n# 标题\n\n段落一\n\n段落二\n";
+        // 正文块：H1（源码第 5 行）、段落一（7）、段落二（9）
+        expect(computeDisplayLineMap(content)).toEqual([5, 7, 9]);
+        // 对照：旧口径把 frontmatter（与紧随的标题同块）算成第 0 块，正文块索引整体错位
+        expect(computeLineMap(content)).toEqual([1, 7, 9]);
+    });
+
+    it("CRLF frontmatter 应该 同样按行数偏移", () => {
+        const content = "---\r\ntitle: A\r\n---\r\n# 标题\r\n";
+        expect(computeDisplayLineMap(content)).toEqual([4]);
     });
 });
 

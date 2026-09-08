@@ -5,7 +5,7 @@ import { MarkdownDocument } from "./MarkdownDocument";
 import { getNonce } from "./utils/getNonce";
 import { ZH_CN_WEBVIEW } from "./i18n/webviewTranslations";
 import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
-import { computeLineMap } from "./utils/lineMap";
+import { computeDisplayLineMap } from "./utils/lineMap";
 import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter, normalizeImageDestination, rewriteImageSources } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
@@ -410,7 +410,7 @@ export class MarkdownEditorProvider
                             const displayContent = this._prepareContentForDisplay(revertContent, document, panel, uriKey);
                             panel.webview.postMessage({
                                 type: "revert",
-                                ...this._lifecyclePayload(uriKey, displayContent, computeLineMap(revertContent)),
+                                ...this._lifecyclePayload(uriKey, displayContent, computeDisplayLineMap(revertContent)),
                             });
                         }
                     } finally {
@@ -445,7 +445,7 @@ export class MarkdownEditorProvider
                 const cfg = vscode.workspace.getConfiguration("epytor");
                 webviewPanel.webview.postMessage({
                     type: "init",
-                    ...this._lifecyclePayload(uriKey, displayContent, computeLineMap(initContent)),
+                    ...this._lifecyclePayload(uriKey, displayContent, computeDisplayLineMap(initContent)),
                     // 发送时的面板激活态（webview 侧焦点守卫用；后续变化由
                     // panelActiveState 消息实时同步）
                     active: webviewPanel.active,
@@ -676,7 +676,7 @@ export class MarkdownEditorProvider
         this._lastDiskContents.set(uriKey, document.getText());
         const panel = this._webviewPanels.get(uriKey);
         if (panel) {
-            panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeLineMap(document.getText()) });
+            panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeDisplayLineMap(document.getText()) });
         }
         return true;
     }
@@ -733,7 +733,7 @@ export class MarkdownEditorProvider
             const displayContent = this._prepareContentForDisplay(revertContent, document, panel, uriKey);
             panel.webview.postMessage({
                 type: "revert",
-                ...this._lifecyclePayload(uriKey, displayContent, computeLineMap(revertContent)),
+                ...this._lifecyclePayload(uriKey, displayContent, computeDisplayLineMap(revertContent)),
             });
         }
     }
