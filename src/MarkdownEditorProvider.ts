@@ -547,8 +547,11 @@ export class MarkdownEditorProvider
                     opts.selection = new vscode.Range(pos, pos);
                 }
 
-                // 先关 WYSIWYG tab，再开文本编辑器，避免两个 tab 并存的闪烁
-                webviewPanel.dispose();
+                // 不销毁 WYSIWYG 面板，只把焦点交给文本编辑器（面板随标签隐藏但保持存活，
+                // retainContextWhenHidden）。回归（用户实测：切回预览会闪、还会闪出同名
+                // 标签再消失）：此前 dispose + 重新 openWith = 销毁并重建整个 webview，
+                // 冷启动必然闪一下，新建标签还会排到末尾。保留两侧标签后，来回切换只是
+                // 激活已有标签——与 VS Code 自带 Markdown 预览的模型一致，零闪动。
                 await vscode.window.showTextDocument(textDoc, opts);
                 break;
             }

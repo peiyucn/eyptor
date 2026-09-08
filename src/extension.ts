@@ -221,10 +221,9 @@ export function activate(context: vscode.ExtensionContext) {
                 if (currentLine >= 0) {
                     MarkdownEditorProvider.current?.setPendingNavigation(target.fsPath, currentLine + 1);
                 }
-                // 读取文本编辑器 tab 的 preview 状态和所在列，关闭前保存
+                // 读取文本编辑器 tab 的 preview 状态和所在列（用于激活同列预览）
                 let isPreview = false;
                 let viewCol: vscode.ViewColumn = vscode.ViewColumn.Active;
-                let textTab: vscode.Tab | undefined;
                 for (const group of vscode.window.tabGroups.all) {
                     for (const tab of group.tabs) {
                         if (
@@ -233,18 +232,15 @@ export function activate(context: vscode.ExtensionContext) {
                         ) {
                             isPreview = tab.isPreview;
                             viewCol = group.viewColumn;
-                            textTab = tab;
                             break;
                         }
                     }
                 }
-                // 先关文本 tab 再开 WYSIWYG（用户实测：先开后关会在当前 tab 右侧闪出一个
-                // 同名 tab 再消失）。ec5a887 的「先开后关」教训针对的是资源管理器点开
-                // 文本 tab 的自动转换路径（那里先关会让 VS Code 先激活上一个文档）；
-                // 本命令是用户显式切换当前文档，先关不会引起跨文档激活转移。
-                if (textTab) {
-                    await vscode.window.tabGroups.close(textTab);
-                }
+                // 不关闭文本 tab，只打开/激活预览（预览面板已存在时 openWith 复用该标签）：
+                // 回归（用户实测：切回预览会闪、还闪出同名标签再消失）——关掉再开 =
+                // 重建整个 webview，冷启动必闪、新标签排到末尾；保留两侧标签后来回切换
+                // 只是激活已有标签，与 VS Code 自带 Markdown 预览模型一致（零闪动、
+                // 无重复标签、标签顺序不变）。
                 await vscode.commands.executeCommand(
                     "vscode.openWith",
                     target,
