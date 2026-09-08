@@ -231,5 +231,9 @@
 | F5 l10n bundle 漂移 | ✅ 补 3 删 1，双份对齐源码 8 键 | `a814377` |
 | F11/F12/F14 CHANGELOG 口径 | ✅ 补列表行为条目、实现细节改行为级、日期改 Unreleased、删死代码条目 | `d5499e3` |
 | F13 README 开发史段 | ✅ 删除（保留上游致谢 + CHANGELOG 链接） | `d5499e3` |
-| 其余（C8 补全核心合并、index.ts 八职责拆分、D7/D8 需实测项、F10 DOM 前提探针） | ⬜ 待续 | — |
+| C8 补全下拉双份镜像 | ✅ ui/pathCompleteCore 核心合一（渲染+导航参数化） | `9421ac8` |
+| B5 index.ts 职责过载 | ✅ codeBlockEnhance/topBarDecorations 三块提取，入口净减 180 行 | `844bc2e` |
+| F10 表格工具栏 DOM 前提 | ✅ 探针注释阐明 cell-handle 条件挂载（基础渲染无包装层与选中时 overlay 不矛盾；overlay 路径手测已验证） | `844bc2e` |
+| D7 折叠/吸顶标题口径不一致 | ✅ 实测 schema 允许嵌套标题，吸顶条对齐顶层口径 + 诊断测试 | `89a3584` |
+| D8 折叠光标进出防护 | ⬜ 需真实环境手测确认后决定（jsdom 无法验证原生光标行为） | — |
 
