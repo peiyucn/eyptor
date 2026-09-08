@@ -216,5 +216,13 @@
 | A6 图片路径正则不支持空格/括号 | ✅ extractImageSyntaxes（空格 + 一层括号）+ 逐图完整替换 | `9e53ddd` |
 | E7 openFile 路径越界 | ✅ isPathWithinBase 工作区边界（独立文件保持现状） | `8e81309` |
 | E6 imageLocalPath 越界 | ✅ 工作区级配置越界降级默认目录（用户级信任放行） | `c067365` |
-| 其余（波次③分层拆分、B9-B15 小项、D6-D8、F5/F7-F15 收尾） | ⬜ 待续 | — |
+| B10 onMessage 无运行时校验 | ✅ 来源/形状/type 守卫 + 未知类型 debug 可见 | `e5f82d4` |
+| C9 NodeView.destroy 清理不完整 | ✅ 重试 timer/拖拽监听/lightbox keydown 全释放 | `d225305` |
+| D6 折叠隐藏 O(N×F) | ✅ 区间排序合并 + 双指针单遍 | `a09f182` |
+| B14 滚动热路径无节流 | ✅ rAF 节流 + 无浮层零工作 | `9f801f1` |
+| F7 覆盖率底线未编码 | ✅ vitest.config per-file thresholds（CI 强制） | `9f801f1` |
+| F8 tech-debt 100% 声明 | ✅ 实测复核：imageService 行覆盖确为 100%，原存疑不成立 | `9f801f1` |
+| F9 测试名不副实 | ✅ 唯一性测试改真断言（部分） | `9f801f1` |
+| F15 flushPromises 死助手 | ✅ 删除 + 补 clearAllMocks | `9f801f1` |
+| 其余（波次③分层拆分、B9/B11/B15、D7/D8/D13、F5/F10-F14 收尾） | ⬜ 待续 | — |
 
