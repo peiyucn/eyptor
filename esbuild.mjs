@@ -1,8 +1,31 @@
 import * as esbuild from 'esbuild';
 import path from 'path';
+import { rmSync } from 'fs';
 
 const isProduction = process.argv.includes('--production');
 const isWatch = process.argv.includes('--watch');
+
+/**
+ * KaTeX 惰性化（配合 webview/vendor/latexFeature.ts）：把「katex 代码路径在 epytor
+ * 永不执行」的模块的 `import katex from 'katex'` 重定向到显式抛错 stub。
+ *   - @milkdown/crepe：index 内联的 latex feature 从不执行（epytor 用 vendor 的惰性
+ *     实现，已逐行核实 crepe 模块作用域零 katex 调用）。
+ *   - micromark-extension-math（remark-math 的依赖）：其 html.js 的 katex.renderToString
+ *     只在「输出 HTML」路径执行；epytor 只用 remark-math 解析 mdast，从不出 HTML。
+ * 重定向后 480KB×2 的 katex 移出入口、随首个数学内容渲染按需加载。pnpm 下 importer
+ * 是符号链接解析后的真实路径（.pnpm/@milkdown+crepe@...），两种形态都要匹配。
+ */
+const katexStubForCrepe = {
+    name: 'katex-stub-for-crepe',
+    setup(build) {
+        build.onResolve({ filter: /^katex$/ }, (args) => {
+            if (/@milkdown\+crepe@|@milkdown[\\/]crepe[\\/]|micromark-extension-math/.test(args.importer)) {
+                return { path: path.resolve('./webview/vendor/katexLazyStub.ts') };
+            }
+            return null;
+        });
+    },
+};
 
 const commonOptions = {
     bundle: true,
@@ -25,7 +48,14 @@ const extensionBuild = {
 // WebView 前端（Browser）
 const webviewBuild = {
     ...commonOptions,
-    entryPoints: { webview: 'webview/index.ts' },
+    entryPoints: {
+        webview: 'webview/index.ts',
+        // KaTeX 样式独立入口：字体 base64 内联进独立 CSS 文件，webview 运行时在
+        // 首个数学内容渲染时才注入 <link>（vendor/latexFeature.ts）。不放进 JS
+        // import 图的原因：esbuild 会把动态 import 的 CSS 同时复制进入口 CSS
+        // 与惰性 chunk（实测），1.4MB 字体照样进首屏 webview.css。
+        'katex-styles': 'katex/dist/katex.min.css',
+    },
     outdir: 'dist',
     platform: 'browser',
     target: 'es2020',
@@ -42,12 +72,17 @@ const webviewBuild = {
     alias: {
         '@': path.resolve('./webview'),
     },
+    plugins: [katexStubForCrepe],
     define: {
         __VUE_OPTIONS_API__: 'true',
         __VUE_PROD_DEVTOOLS__: 'false',
         __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false',
     },
 };
+
+// 清理旧产物：esbuild 不清空 outdir，代码分割后 chunk 文件名随内容哈希变化，
+// 旧 chunk 会残留在 dist 并被打进 VSIX（回归：开启 splitting 后 dist 混入陈旧 chunk）
+rmSync('dist', { recursive: true, force: true });
 
 if (isWatch) {
     const [ctx1, ctx2] = await Promise.all([

@@ -3,12 +3,14 @@ import "@milkdown/crepe/theme/common/prosemirror.css";
 import "@milkdown/crepe/theme/common/reset.css";
 import "@milkdown/crepe/theme/common/code-mirror.css";
 import "@milkdown/crepe/theme/common/cursor.css";
-import "@milkdown/crepe/theme/common/latex.css";
 import "@milkdown/crepe/theme/common/list-item.css";
 import "@milkdown/crepe/theme/common/table.css";
 import "@milkdown/crepe/theme/common/top-bar.css";
 import "@milkdown/crepe/theme/common/toolbar.css";
 import "@milkdown/crepe/theme/common/link-tooltip.css";
+// LaTeX 样式改为本地摘录版（不含 katex.min.css —— 三格式字体 base64 内联 ~1.4MB，
+// 是 webview.css 膨胀主因；KaTeX 样式随首个数学渲染按需加载，见 vendor/latexFeature.ts）
+import "./latex.css";
 import "./style.css"; // 必须在 Crepe CSS 之后加载，用 VSCode 变量覆盖 Crepe 主题
 import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING, OPEN_URL_SCHEMES, extractUrlScheme } from "../shared/constants";
 import { resolveTableWrapVars } from "../shared/tableWrap";

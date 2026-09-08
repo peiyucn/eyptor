@@ -44,12 +44,24 @@ importers:
       '@milkdown/kit':
         specifier: 7.22.1
         version: 7.22.1(@codemirror/language@6.12.3)(@codemirror/state@6.6.0)(@codemirror/view@6.43.1)(typescript@5.9.3)
+      katex:
+        specifier: ^0.18.0
+        version: 0.18.1
       mermaid:
         specifier: ^11.16.1
         version: 11.16.1
       prosemirror-commands:
         specifier: ^1.7.1
         version: 1.7.1
+      remark-math:
+        specifier: ^6.0.0
+        version: 6.0.0
+      unist-util-visit:
+        specifier: ^5.0.0
+        version: 5.1.0
+      vue:
+        specifier: ^3.5.20
+        version: 3.5.41(typescript@5.9.3)
     devDependencies:
       '@types/jsdom':
         specifier: ^28.0.3

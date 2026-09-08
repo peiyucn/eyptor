@@ -40,7 +40,9 @@ export function setLogTableSel(enabled: boolean): void {
 import { codeMirror } from "@milkdown/crepe/feature/code-mirror";
 import { cursor } from "@milkdown/kit/plugin/cursor";
 import { createVirtualCursor } from "./vendor/prosemirrorVirtualCursor";
-import { latex } from "@milkdown/crepe/feature/latex";
+// LaTeX feature 用本地惰性 KaTeX 实现（上游静态 import katex 会压入口 480KB，
+// 见 vendor/latexFeature.ts 头部注释与 esbuild.mjs katex-stub-for-crepe）
+import { latexFeature, createMathInlineView, renderLatexPreview } from "./vendor/latexFeature";
 import { listItem } from "@milkdown/crepe/feature/list-item";
 import { table } from "@milkdown/crepe/feature/table";
 import { topBar } from "@milkdown/crepe/feature/top-bar";
@@ -521,7 +523,14 @@ export async function createEditor(
     });
 
     // Mermaid 预览渲染
-    const renderPreview = (lang: string, code: string, apply: (v: string | null) => void) => {
+    const renderPreview = (lang: string, code: string, apply: (v: null | string | HTMLElement) => void) => {
+        // LaTeX 代码块预览：vendor/latexFeature 的惰性 KaTeX 异步渲染
+        // （vendor 不 import codeBlockConfig——pnpm peer 变体下其 SliceType 符号分裂，
+        // 跨上下文 update 会 contextNotFound；统一走本文件的 renderPreview）
+        if (lang.toLowerCase() === "latex" && code.length > 0) {
+            renderLatexPreview(code, apply);
+            return null;
+        }
         if (lang.toLowerCase() !== "mermaid") return null;
         const key = `m-${++mermaidSeq}`;
         mermaidCodeMap.set(key, code);
@@ -562,7 +571,7 @@ export async function createEditor(
         })
         .addFeature(toolbar)
         .addFeature(table)
-        .addFeature(latex)       // 全新：KaTeX 数学公式
+        .addFeature(latexFeature)   // 本地惰性 KaTeX 实现（替代上游 latex）
         .addFeature(linkTooltip)
     // 已启用：feature/toolbar → 选中文字浮动工具栏
 
@@ -606,12 +615,17 @@ export async function createEditor(
                 });
             });
 
-            // 注册自定义 image NodeView
+            // 注册自定义 image / 行内公式 NodeView（行内公式为惰性 KaTeX：
+            // 占位展示源码，katex 就绪后异步渲染，见 vendor/latexFeature.ts）
             ctx.set(nodeViewCtx, [
                 [
                     "image",
                     (node, view, getPos) =>
                         createImageView(node, view, getPos, undefined, undefined, onRenameImage),
+                ],
+                [
+                    "math_inline",
+                    (node) => createMathInlineView(node),
                 ],
             ]);
 
