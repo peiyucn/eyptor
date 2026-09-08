@@ -59,8 +59,12 @@ export const headingStickyPlugin = $prose(() =>
             // 目标标题完整可见时仍会吸顶前一个标题并遮挡目标）；
             // 用户主动滚动（wheel/touchmove/键盘）后恢复
             let suppressSticky = false;
+            /** 跳转抑制的定时兜底解除（回归：滚动条拖拽/中键滚动只发 scroll 事件，
+             * 不触发 wheel/touchmove/keydown，此前抑制永不解除、吸顶条一直隐藏） */
+            let suppressTimer: ReturnType<typeof setTimeout> | null = null;
 
             const STICKY_SCROLL_OFFSET_PX = 8;
+            const SUPPRESS_AUTO_RELEASE_MS = 400;
 
             const scrollHeadingIntoStickyPosition = (headingPos: number) => {
                 requestAnimationFrame(() => {
@@ -77,9 +81,15 @@ export const headingStickyPlugin = $prose(() =>
                 const pos = Number(sticky.dataset["headingPos"]);
                 if (Number.isFinite(pos) && pos > 0) {
                     // 跳转后抑制吸顶显示，避免前一个标题的吸顶条遮挡刚跳到的标题；
-                    // 用户主动滚动（wheel/touchmove/键盘）时恢复
+                    // 用户主动滚动（wheel/touchmove/键盘）或定时兜底（滚动条交互只发
+                    // scroll 事件）解除
                     hideSticky();
                     suppressSticky = true;
+                    if (suppressTimer !== null) clearTimeout(suppressTimer);
+                    suppressTimer = setTimeout(() => {
+                        suppressTimer = null;
+                        suppressSticky = false;
+                    }, SUPPRESS_AUTO_RELEASE_MS);
                     scrollHeadingIntoStickyPosition(pos);
                 }
             });
@@ -269,6 +279,10 @@ export const headingStickyPlugin = $prose(() =>
 
             // 用户主动滚动 → 解除跳转抑制并刷新（scrollTo 跳转不会触发 wheel/touchmove/keydown）
             const clearSuppress = () => {
+                if (suppressTimer !== null) {
+                    clearTimeout(suppressTimer);
+                    suppressTimer = null;
+                }
                 if (suppressSticky) {
                     suppressSticky = false;
                     scheduleUpdate();
@@ -303,6 +317,7 @@ export const headingStickyPlugin = $prose(() =>
                 destroy() {
                     if (rafId !== null) cancelAnimationFrame(rafId);
                     if (rebuildTimer !== null) clearTimeout(rebuildTimer);
+                    if (suppressTimer !== null) clearTimeout(suppressTimer);
                     window.removeEventListener("scroll", scheduleUpdate);
                     window.removeEventListener("resize", scheduleUpdate);
                     window.removeEventListener("wheel", clearSuppress);
