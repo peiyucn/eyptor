@@ -90,22 +90,6 @@ export class MarkdownEditorProvider
         return p.line;
     }
 
-    /** 返回当前所有已注册（open）的 .md 面板的 fsPath 列表 */
-    public getAllMdFsPaths(): string[] {
-        const paths: string[] = [];
-        for (const uriKey of this._webviewPanels.keys()) {
-            try {
-                const uri = vscode.Uri.parse(uriKey);
-                if (uri.fsPath.endsWith('.md') || uri.fsPath.endsWith('.markdown')) {
-                    paths.push(uri.fsPath);
-                }
-            } catch {
-                // 忽略无效 URI
-            }
-        }
-        return paths;
-    }
-
     /** 切换到文本编辑器时调用：按文档屏蔽来自文本编辑器的行号回传（NAV_SUPPRESS_DURATION_MS 内） */
     public suppressNavFromTextEditor(uriKey: string): void {
         this._navSuppressionWindow.mark(uriKey);

@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import * as path from "path";
 import { MarkdownEditorProvider } from "./MarkdownEditorProvider";
 
 function debugLog(...args: unknown[]): void {
@@ -62,40 +61,21 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // 拦截 revealLine 命令：全局搜索点击结果时 VS Code 会调此命令导航到指定行。
-    // 若当前有 .md 自定义编辑器 tab（遍历所有 group），则转发给 WebView；否则回退到文本编辑器行为。
+    // 归属由「谁持有 activeTextEditor」自然区分：
+    //   - md 自定义编辑器结果 → activeTextEditor 为 undefined → 行号经全局兜底槽由
+    //     面板 ready / viewState 激活时消费（下方 revealRange 分支天然 no-op）
+    //   - 文本编辑器结果（含 source 模式 md、.ts/.js 等）→ revealRange 直接定位
+    // 回归（E1）：此前只要存在任一 md 面板就把行号广播给全部面板并提前 return，
+    // 导致非 md 搜索跳转被吞（落到文件头）且其它 md 文档被错误滚动到该行号。
     context.subscriptions.push(
         vscode.commands.registerCommand(
             'revealLine',
             (args: { lineNumber: number; at?: string }) => {
                 debugLog('[revealLine] 触发，lineNumber:', args.lineNumber, 'at:', args.at);
                 const targetLine = args.lineNumber + 1; // 转为 1-indexed
-                // 始终写入全局兜底：确保 onDidChangeViewState（含延迟检查）能消费到
+                // 全局兜底槽：md 面板 ready / viewState 激活时消费（10s TTL）
                 MarkdownEditorProvider.current?.setGlobalRevealLine(targetLine);
-                // 对所有已注册的 .md 面板设置 pending navigation
-                // 避免仅靠 tab.isActive 判断（tab 切换和 revealLine 触发顺序不确定）
-                const mdPaths = MarkdownEditorProvider.current?.getAllMdFsPaths() ?? [];
-                if (mdPaths.length > 0) {
-                    debugLog('[revealLine] 已注册 .md 面板数:', mdPaths.length, '行号:', targetLine);
-                    for (const fsPath of mdPaths) {
-                        MarkdownEditorProvider.current?.setPendingNavigation(fsPath, targetLine);
-                    }
-                    return;
-                }
-                // 兜底：遍历 tab groups 查找 active .md 自定义 tab
-                for (const group of vscode.window.tabGroups.all) {
-                    for (const tab of group.tabs) {
-                        if (tab.input instanceof vscode.TabInputCustom) {
-                            const uri = (tab.input as vscode.TabInputCustom).uri;
-                            if (uri.fsPath.endsWith('.md') && tab.isActive) {
-                                debugLog('[revealLine] 找到 active .md 自定义 tab，file:', path.basename(uri.fsPath));
-                                MarkdownEditorProvider.current?.setPendingNavigation(uri.fsPath, targetLine);
-                                return;
-                            }
-                        }
-                    }
-                }
-                debugLog('[revealLine] 未找到 .md 面板，等待 viewState 延迟消费');
-                // 回退：文本编辑器使用 revealRange
+                // 文本编辑器兜底：无条件执行（custom md tab 激活时 activeTextEditor 为 undefined，天然 no-op）
                 const editor = vscode.window.activeTextEditor;
                 if (editor) {
                     const pos = new vscode.Position(args.lineNumber, 0);
