@@ -380,6 +380,13 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 ## 执行顺序建议（四批，每步独立提交 + verify + 手测）
 
+> **总状态（2026-09-08 收尾）**：四批全部执行完毕，无遗留条目。逐条状态见下方各批清单与各条目小标题。
+> 三处**有意未按原方案执行**，均已在上文对应条目内写明理由：
+> 1. **C5**（Cmd+Shift+M 双入口）复核后判定为必要复杂度，不简化；
+> 2. **P1** 的「TOC 只收顶层标题」未采纳——TOC 保持列出全部深度（导航用途），折叠/吸顶只处理顶层；
+> 3. **P4** 的「防抖/过期守卫/关闭时机」未合并（触发源与语义不同），只合并了真正重复的请求生命周期。
+> 另有 3 处**顺带修掉的真 bug**（不在原清单内）：E7 括号/空格路径的 webviewUri 泄漏进磁盘、P1 状态栏字数不更新、P1 嵌套标题改动不刷新 TOC。
+
 **第一批（零风险清场）✅ 2026-09-08 完成**：
 
 * ✅ **B2** `.vscodeignore` 补排除 `.github/**`、`test*.md`、`releases/**`、`*.vsix`（VSIX 256→250 文件；test-5000.md 349KB 与 5 个工作流/模板文件不再进包）
@@ -404,7 +411,7 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 * ✅ **P5** 表格换行后处理 handler 化，删除 cleanTableBreaks/splitTableCells（2026-09-08）。
 * ✅ **P4/C4** 补全请求生命周期统一到单一注册表 + 单派发（2026-09-08）。
 * ✅ **P1** 标题子系统共享索引 + 修出两个真 bug（2026-09-08）。
-* ✅ **B1** katex 收敛为单一版本（2026-09-08）——`pnpm-workspace.yaml` overrides 把 mermaid 的 katex@0.16.47 收敛到根依赖 0.18.1：产物里两个 261KB 的 katex chunk 变一个（VSIX -261KB），且 mermaid 数学标签不再用 0.16 的 class 名配 0.18 的样式表。新增 `webview/__tests__/katexCompat.test.ts` 锁住 mermaid 用到的 `renderToString({ output })` API。**待手测**：mermaid 图内 `$$...$$` 数学标签渲染。
+* ✅ **B1** katex 收敛为单一版本（2026-09-08）——`pnpm-workspace.yaml` overrides 把 mermaid 的 katex@0.16.47 收敛到根依赖 0.18.1：产物内 katex chunk 由两个变一个（未压缩 -261KB；VSIX 实测 2.91MB → 2.84MB，两个 chunk 内容高度重复、压缩后节省有限），且 mermaid 数学标签不再用 0.16 的 class 名配 0.18 的样式表。新增 `webview/__tests__/katexCompat.test.ts` 锁住 mermaid 用到的 `renderToString({ output })` API。**待手测**：mermaid 图内 `$$...$$` 数学标签渲染。
 
 ***
 
