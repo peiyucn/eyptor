@@ -11,6 +11,7 @@ import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
 import { ExpiryWindowMap } from "./utils/expiryWindowMap";
 import { sanitizeBasename } from "./utils/safeBasename";
+import { isPathWithinBase } from "./utils/pathGuard";
 import { OPEN_URL_SCHEMES, extractUrlScheme } from "../shared/constants";
 import {
     DEFAULT_CODE_BLOCK_MAX_HEIGHT,
@@ -385,14 +386,16 @@ export class MarkdownEditorProvider
         const lineMatch = fragment?.match(/^(\d+)(-\d+)?$/);
         const lineNumber = lineMatch ? parseInt(lineMatch[1], 10) : undefined;
 
+        // 工作区边界：文档属于某 workspace 时，路径链接不得越出 workspace 根
+        // （回归：绝对路径与 ../ 逃逸可打开任意本地文件，恶意仓库的 .md 是钓鱼/隐私边界）
+        const docFsPath = document.uri.fsPath;
+        const containingFolder = vscode.workspace.workspaceFolders?.find(
+            f => docFsPath.startsWith(f.uri.fsPath + path.sep),
+        );
+
         let absPath: string;
         if (filePath.startsWith("@/")) {
             // @/ 表示 workspace 根目录：找包含当前文档的 workspace folder
-            const docFsPath = document.uri.fsPath;
-            const sep = path.sep;
-            const containingFolder = vscode.workspace.workspaceFolders?.find(
-                f => docFsPath.startsWith(f.uri.fsPath + sep),
-            );
             const workspaceRoot =
                 containingFolder?.uri.fsPath ??
                 vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -400,8 +403,13 @@ export class MarkdownEditorProvider
                 ? path.join(workspaceRoot, filePath.slice(2))
                 : path.resolve(path.dirname(docFsPath), "..", filePath.slice(2));
         } else {
-            const docDir = path.dirname(document.uri.fsPath);
+            const docDir = path.dirname(docFsPath);
             absPath = path.resolve(docDir, filePath);
+        }
+
+        // 归一化后再校验（path.join/.. 段在此处收敛）；独立文件（无工作区）保持现状
+        if (containingFolder && !isPathWithinBase(absPath, containingFolder.uri.fsPath)) {
+            return;
         }
 
         const targetUri = vscode.Uri.file(absPath);
