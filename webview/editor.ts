@@ -49,6 +49,7 @@ import { defaultHighlightStyle, syntaxHighlighting, LanguageDescription, type La
 import { languages as allCodeLanguages } from "@codemirror/language-data";
 import { onThemeChange, isDarkTheme } from "./utils/themeBus";
 import { observeCmEditorCount } from "./utils/cmThemeObserver";
+import { getUserInteractionEpoch } from "./utils/userInteraction";
 import { t } from "./i18n";
 import { enhanceMermaidPreview } from "./components/mermaidZoom";
 import { headingFoldPlugin } from "./headingFoldPlugin";
@@ -319,8 +320,6 @@ let _disconnectCmObserver: (() => void) | null = null;
  * 回归：退订函数曾被丢弃，init/revert 每次重建向 themeBus 泄漏一个监听器，
  * 闭包持有整篇旧文档的 mermaidCodeMap 且主题切换时重放全部旧回调 */
 let _unsubscribeTheme: (() => void) | null = null;
-let _hasUserInteracted = false;
-let _interactionListenerAdded = false;
 let _serializationMode: SerializationMode = "clean";
 let _serializationDebug = false;
 
@@ -364,17 +363,6 @@ function prepareMarkdownForSave(source: string, serialized: string): string {
     }
 }
 
-function setupInteractionTracking(): void {
-    if (_interactionListenerAdded) return;
-    _interactionListenerAdded = true;
-    const mark = () => { _hasUserInteracted = true; };
-    document.addEventListener('keydown',   mark, { capture: true });
-    document.addEventListener('mousedown', mark, { capture: true });
-    document.addEventListener('paste',     mark, { capture: true });
-    document.addEventListener('drop',      mark, { capture: true });
-    document.addEventListener('cut',       mark, { capture: true });
-}
-
 export function getEditorView(): EditorView | null {
     if (!_editor) return null;
     return _editor.action((ctx) => ctx.get(editorViewCtx));
@@ -416,8 +404,8 @@ export async function createEditor(
     // 回归（F1）：不再在此重置序列化模式/调试开关——init 与 revert 都走 createEditor，
     // 用启动快照重置会把用户中途改的配置静默回滚（外部写盘触发 revert 即复现）。
     // 运行期配置统一由 init 消息载荷与 setSerializationMode/setSerializationDebug 消息维护。
-    _hasUserInteracted = false;
-    setupInteractionTracking();
+    // 用户交互纪元快照（回归 F4：与 index.ts 的延迟滚动共用同一跟踪器）
+    const interactionEpochAtCreate = getUserInteractionEpoch();
 
     let isSettled = false;
 
@@ -434,7 +422,7 @@ export async function createEditor(
                 return {
                     update(view) {
                         if (!isSettled) return;
-                        if (!_hasUserInteracted) return;
+                        if (getUserInteractionEpoch() === interactionEpochAtCreate) return;
                         const doc = view.state.doc;
                         if (prevDoc !== null && doc.eq(prevDoc)) return;
                         prevDoc = doc;

@@ -50,6 +50,7 @@ import { setupPathLink } from "./components/pathLink";
 import { initPathComplete, dispatchPathSuggestions } from "./components/pathLink/pathComplete";
 import { dispatchImgPathSuggestions, dispatchImagePathResolved } from "./components/imageView/imgPathComplete";
 import { setImageUriMap, showGlobalLightbox } from "./components/imageView";
+import { getUserInteractionEpoch } from "./utils/userInteraction";
 import { initFindBar } from "./components/findBar";
 import { initToc } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
@@ -622,16 +623,7 @@ window.addEventListener("focus", restoreEditorFocus);
 // ── 用户交互保护：延迟定位滚动不得覆盖用户已开始的交互 ──────
 // 回归：1 万行文档渲染慢，切回预览的「定位到文本编辑器光标行」在 300-2000ms
 // 重试期间才执行，用户已开始编辑/点击时页面突然跳到标题行/mermaid 处
-let _userInteracted = false;
-for (const evt of ["wheel", "mousedown", "keydown", "touchstart"] as const) {
-    window.addEventListener(
-        evt,
-        () => {
-            _userInteracted = true;
-        },
-        { passive: true },
-    );
-}
+// 跟踪器统一在 utils/userInteraction.ts（回归 F4：此前此处与 editor.ts 各注册一套监听）
 
 // 监听来自 Extension 侧的消息
 // init/revert（编辑器生命周期）串行链：并发到达时按序重建——
@@ -660,17 +652,17 @@ onMessage((msg) => {
 /**
  * 延迟执行滚动类动作的统一状态机（三处调用合一：搜索定位 / 恢复滚动位置 / 打开面板时的行定位）：
  * 按 delays 计划重试；DOM 未就绪（view 缺失或首块高度为 0）时等待下一次；用户一旦开始交互
- * 即放弃，避免渲染慢时延迟定位突然跳动页面。调用时重置 _userInteracted 起算。
+ * 即放弃，避免渲染慢时延迟定位突然跳动页面。调用时取交互纪元快照起算。
  */
 function scheduleDelayedScroll(
     action: (view: EditorView) => void,
     delays: number[] = SCROLL_RETRY_DELAYS_MS,
 ): void {
-    _userInteracted = false; // 本次定位请求起算
+    const epochAtStart = getUserInteractionEpoch();
     let done = false;
     const tryOnce = () => {
         if (done) return;
-        if (_userInteracted) { done = true; return; }
+        if (getUserInteractionEpoch() !== epochAtStart) { done = true; return; }
         const view = getEditorView();
         if (!view) return;
         // 检查第一个块的 DOM 高度：若为 0 说明布局尚未完成

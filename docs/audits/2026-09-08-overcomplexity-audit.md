@@ -157,11 +157,13 @@ scrollPanelToLine 零调用（被 setPendingNavigation 直接发送分支取代�
 
 **风险**：中。需确认 Crepe codeMirror 内部创建 CM EditorView 的钩子位置。
 
-### 🟠 F4 · 两套独立「用户交互」跟踪器（editor.ts 粘滞标志 vs index.ts 按请求重置标志）
+### 🟠 F4 · 两套独立「用户交互」跟踪器 ✅ 2026-09-08 已修
 
-**位置**：`webview/editor.ts:327-328,367-376,419,437`；`webview/index.ts:636-645,680-684`
+**位置**：`webview/utils/userInteraction.ts`（新）；`webview/editor.ts`；`webview/index.ts`
 
-**简化方案**：提取单一 `webview/utils/userInteraction.ts`（模块级 epoch 计数器 + 一次性注册 5 事件监听，保留 capture 语义）；scheduleDelayedScroll 快照 epoch 比较；updateNotifyPlugin 比较 epoch 与建实例快照。删两处注册与两个标志。**风险**：低（注意保留 capture——ProseMirror 可能 stopPropagation；updateNotifyDirtyProbe.test.ts 需通过）。
+**原机制**：editor.ts 用 document capture 的 keydown/mousedown/paste/drop/cut + 粘滞标志（createEditor 时重置）；index.ts 用 window 的 wheel/mousedown/keydown/touchstart + 按请求重置标志。事件集不一致（滚轮在两处口径相反），语义靠各自注释口头约定。
+
+**实际修复**：提取 `utils/userInteraction.ts`——模块级单调递增 epoch + 一次性注册 7 类事件（capture 阶段，保留原语义）；调用方取快照比较即可判断「期间是否交互过」，不再有「何时重置」的约定。editor.ts 的 `_hasUserInteracted`/`_interactionListenerAdded`/`setupInteractionTracking` 与 index.ts 的 `_userInteracted` 及监听循环全部删除。测试 `webview/__tests__/userInteraction.test.ts`（9 例）+ `updateNotifyDirtyProbe.test.ts` 保持通过。
 
 ### ⚪ F5 · visibilitychange 处理器与 window focus 监听器职责重叠，滚动恢复存在第三条无守卫路径
 
@@ -386,7 +388,7 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 **第三批（结构性收敛）部分完成 2026-09-08**：E3/C2（双生机制整套删除，净删 ~110 行）、E5 部分（1s 复查定时器 + directOnly 语义）、F2（重试计划统一）、C3（生命周期 payload 工厂）、C6/F5（visibilitychange 删除）、E9（状态栏统一刷新）、E10（配置广播表驱动）、P7（聚焦层数）、P9（TOC 改存 DOM 引用）、B4（.markdown 对齐）、B6（CI Job Summary + 文档修正）、B3（debugMode 单命令）、B5（onStartupFinished）、P11（tech-debt 登记）
 
-**剩余（下轮继续）**：F4 交互跟踪合一、P4/C4 补全生命周期与注册表统一、P5 表格换行 handler 化、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
+**剩余（下轮继续）**：P4/C4 补全生命周期与注册表统一、P5 表格换行 handler 化、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
 
 **第四批（用户实测反馈的两项严重问题 + 复核中新发现）**：
 
@@ -396,6 +398,7 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 * ✅ **E7** 图片往返替换域统一（2026-09-08）——并修掉「括号/空格路径的 webviewUri 泄漏进磁盘」真 bug。
 * ✅ **E4** 保存链路统一为唯一原语 `_saveNow`（2026-09-08）。
 * ✅ **E6** switchToTextEditor 兜底改真实面板检查 + switchToPreview 改先开后关（2026-09-08）；**C5** 复核后判定为必要复杂度。
+* ✅ **F4** 用户交互跟踪统一为 `utils/userInteraction.ts` 的 epoch（2026-09-08）。
 
 ***
 
