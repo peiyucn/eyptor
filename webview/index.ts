@@ -334,9 +334,15 @@ async function initEditor(
         window.__i18n?.serializationMode ?? "clean",
     );
     toc.updatePosition(); // 工具栏已就绪，更新 TOC 吸顶位置
-    toc.refresh(); // 编辑器初始化完成后刷新一次
     toc.show();    // toolbar 就绪，显示 TOC 面板
-    updateWordCount(); // 编辑器初始化完成后统计一次
+    // TOC 全量重建 + 字数统计：双 rAF 延迟到首帧绘制后（首帧性能：万行文档 TOC
+    // 重建与全文遍历在 create() 后同步执行会阻塞首帧；首帧先出正文，收尾工作下一帧补齐）
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            toc.refresh(); // 编辑器初始化完成后刷新一次（面板关闭时是 no-op）
+            updateWordCount(); // 编辑器初始化完成后统计一次
+        });
+    });
 
     // 顶栏溢出菜单（topBar 已渲染后初始化）
     _topBarOverflowCtl = initTopBarOverflow({
