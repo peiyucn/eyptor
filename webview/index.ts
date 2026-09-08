@@ -13,6 +13,7 @@ import "./style.css"; // 必须在 Crepe CSS 之后加载，用 VSCode 变量覆
 import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../shared/constants";
 import { resolveTableWrapVars } from "../shared/tableWrap";
 import type { ToWebviewMessage } from "../shared/messages";
+import { PendingRequestRegistry } from "./utils/pendingRequest";
 import { applyTableWrapVars } from "./utils/tableWrap";
 import { computeHeadingSignature } from "./utils/headingFold";
 import {
@@ -131,123 +132,45 @@ function getFirstVisibleSourceLine(view: EditorView, lineMap: number[]): number 
 }
 
 // ── 图片上传：pending promise map ────────────────────
-type UploadCallbacks = {
-    resolve: (url: string) => void;
-    reject: (e: Error) => void;
-};
-const _pendingUploads = new Map<string, UploadCallbacks>();
+// 请求-响应注册表（settled 双保险 + 超时，统一三种宿主请求样板，见 utils/pendingRequest）
+const _uploadRequests = new PendingRequestRegistry<string>("img");
 
 // ── 获取项目图片列表：pending promise map ────────────
-type GetImagesCallbacks = {
-    resolve: (
-        images: Array<{
-            relPath: string;
-            webviewUri: string;
-            name: string;
-        }> | null,
-    ) => void;
-    reject: (e: Error) => void;
-};
-const _pendingGetImages = new Map<string, GetImagesCallbacks>();
+const _getImagesRequests = new PendingRequestRegistry<Array<{
+    relPath: string;
+    webviewUri: string;
+    name: string;
+}> | null>("gimgs");
 
 // ── 图片重命名：pending promise map ──────────────────
-type RenameCallbacks = { resolve: () => void; reject: (e: Error) => void };
-const _pendingRenames = new Map<string, RenameCallbacks>();
+const _renameRequests = new PendingRequestRegistry<void>("rename");
 
 async function handleRenameImage(
     webviewUri: string,
     newBasename: string,
 ): Promise<void> {
-    const id = `rename_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const timeoutId = setTimeout(() => {
-            if (!settled) {
-                settled = true;
-                _pendingRenames.delete(id);
-                reject(new Error("Rename timed out"));
-            }
-        }, 15000);
-        _pendingRenames.set(id, {
-            resolve: () => {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timeoutId);
-                    resolve();
-                }
-            },
-            reject: (e) => {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timeoutId);
-                    reject(e);
-                }
-            },
-        });
-        notifyRenameImage(id, webviewUri, newBasename);
+    const { id, promise } = _renameRequests.begin({
+        timeoutMs: 15000,
+        timeout: { kind: "reject", error: "Rename timed out" },
     });
-}
-
-async function handleGetProjectImages(
-    _unusedId: string,
-): Promise<Array<{
-    relPath: string;
-    webviewUri: string;
-    name: string;
-}> | null> {
-    const id = `gimgs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-    return new Promise((resolve, reject) => {
-        let settled = false;
-        const timeoutId = setTimeout(() => {
-            if (!settled) {
-                settled = true;
-                _pendingGetImages.delete(id);
-                resolve(null);
-            }
-        }, 10000);
-        _pendingGetImages.set(id, {
-            resolve: (r) => {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timeoutId);
-                    resolve(r);
-                }
-            },
-            reject: (e) => {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timeoutId);
-                    reject(e);
-                }
-            },
-        });
-        notifyGetProjectImages(id);
-    });
+    notifyRenameImage(id, webviewUri, newBasename);
+    return promise;
 }
 
 async function handleImageFile(file: File, altText: string): Promise<string> {
-    const id = `img_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-    return new Promise<string>((resolve, reject) => {
-        _pendingUploads.set(id, { resolve, reject });
-        const timeoutId = setTimeout(() => {
-            if (_pendingUploads.has(id)) {
-                _pendingUploads.delete(id);
-                reject(new Error("Upload timed out"));
-            }
-        }, 30000);
-        // 读取文件为 Uint8Array 后发送给 Extension
-        const reader = new FileReader();
-        reader.onload = () => {
-            const data = new Uint8Array(reader.result as ArrayBuffer);
-            notifyUploadImage(id, data, file.type, altText);
-        };
-        reader.onerror = () => {
-            clearTimeout(timeoutId);
-            _pendingUploads.delete(id);
-            reject(new Error("Failed to read file"));
-        };
-        reader.readAsArrayBuffer(file);
+    const { id, promise, cancel } = _uploadRequests.begin({
+        timeoutMs: 30000,
+        timeout: { kind: "reject", error: "Upload timed out" },
     });
+    // 读取文件为 Uint8Array 后发送给 Extension
+    const reader = new FileReader();
+    reader.onload = () => {
+        const data = new Uint8Array(reader.result as ArrayBuffer);
+        notifyUploadImage(id, data, file.type, altText);
+    };
+    reader.onerror = () => cancel("Failed to read file");
+    reader.readAsArrayBuffer(file);
+    return promise;
 }
 
 function insertImageNode(src: string, alt: string): void {
@@ -468,11 +391,14 @@ if (editorContainer) {
                 insertImageNode(url, '');
             },
             () => {
-                const id = `gimgs_${Date.now().toString(36)}`;
-                return new Promise<any>((resolve) => {
-                    _pendingGetImages.set(id, { resolve, reject: () => {} });
-                    notifyGetProjectImages(id);
+                // 统一注册表：含 10s 超时兜底 resolve(null)（回归：内联版无超时，
+                // Extension 不响应时选择器永久停在 Loading）
+                const { id, promise } = _getImagesRequests.begin({
+                    timeoutMs: 10000,
+                    timeout: { kind: "resolve", value: null },
                 });
+                notifyGetProjectImages(id);
+                return promise;
             },
         );
     });
@@ -964,29 +890,13 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         // 保存时拉取（拉取式架构）：Extension 在 Cmd+S / 原生 autoSave 时请求一次序列化
         notifyContentResponse(getMarkdownForSave());
     } else if (msg.type === "imageUploaded") {
-        const cb = _pendingUploads.get(msg.id);
-        if (cb) {
-            _pendingUploads.delete(msg.id);
-            cb.resolve(msg.url);
-        }
+        _uploadRequests.resolve(msg.id, msg.url);
     } else if (msg.type === "imageUploadError") {
-        const cb = _pendingUploads.get(msg.id);
-        if (cb) {
-            _pendingUploads.delete(msg.id);
-            cb.reject(new Error(msg.error));
-        }
+        _uploadRequests.reject(msg.id, msg.error);
     } else if (msg.type === "projectImagesList") {
-        const cb = _pendingGetImages.get(msg.id);
-        if (cb) {
-            _pendingGetImages.delete(msg.id);
-            cb.resolve(msg.images);
-        }
+        _getImagesRequests.resolve(msg.id, msg.images);
     } else if (msg.type === "imageRenamed") {
-        const cb = _pendingRenames.get(msg.id);
-        if (cb) {
-            _pendingRenames.delete(msg.id);
-            cb.resolve();
-        }
+        _renameRequests.resolve(msg.id);
         // 更新 ProseMirror 文档中对应图片节点的 src
         const editor = currentEditor;
         if (editor) {
@@ -1013,11 +923,7 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
             });
         }
     } else if (msg.type === "imageRenameError") {
-        const cb = _pendingRenames.get(msg.id);
-        if (cb) {
-            _pendingRenames.delete(msg.id);
-            cb.reject(new Error(msg.error));
-        }
+        _renameRequests.reject(msg.id, msg.error);
     } else if (msg.type === "pathSuggestions") {
         dispatchPathSuggestions(msg.id, msg.items);
         dispatchImgPathSuggestions(msg.id, msg.items);
