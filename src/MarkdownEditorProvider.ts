@@ -256,9 +256,8 @@ export class MarkdownEditorProvider
             this._fallbackWarnedUris.delete(uriKey);
             // 兜底结算未完成的拉取（面板已销毁，用内存内容）
             this._contentRequests.settleAll(uriKey);
-            // 面板关闭（含预览被替换、切文本编辑器）时隐藏状态栏
-            // 若有其他活跃 MD 面板，其 wordCount / onDidChangeViewState 会重新显示
-            this._statusBarItem.hide();
+            // 状态栏跟随剩余活跃面板（无则隐藏）
+            this._refreshStatusBar();
         });
     }
 
@@ -278,26 +277,13 @@ export class MarkdownEditorProvider
                 // panel 已销毁（切换/关闭竞态），忽略
             }
             if (!p.active) {
-                // 延迟检查：切换出 md 面板后若无活跃面板则隐藏状态栏
-                setTimeout(() => {
-                    const anyActive = Array.from(this._webviewPanels.values()).some(
-                        (panel) => {
-                            try { return panel.active; } catch { /* panel 可能已销毁，忽略 */ return false; }
-                        },
-                    );
-                    if (!anyActive) this._statusBarItem.hide();
-                }, 0);
+                // 状态栏跟随激活面板（回归 E9：此前用 setTimeout(0) 延迟判定，
+                // 现在统一由 _refreshStatusBar 按「任一 active 面板」取数，
+                // 同期另一面板的激活事件会随后再次刷新，事件循环内自洽）
+                this._refreshStatusBar();
                 return;
             }
-            // 恢复字数统计
-            const wc = this._wordCounts.get(uriKey);
-            if (wc) {
-                this._statusBarItem.text = vscode.l10n.t('Lines(src): {0}  Words: {1}  Chars: {2}', wc.lines, wc.words.toLocaleString(), wc.charsNoSpace.toLocaleString());
-                this._statusBarItem.tooltip = vscode.l10n.t('Chars (with spaces): {0}', wc.charsWithSpace.toLocaleString());
-                this._statusBarItem.show();
-            } else {
-                this._statusBarItem.hide();
-            }
+            this._refreshStatusBar();
             if (!this._initializedPanels.has(uriKey)) { return; }
             const line = this._consumePendingNavigation(document.uri.fsPath)
                 ?? this._consumeGlobalRevealLine();
@@ -631,13 +617,29 @@ export class MarkdownEditorProvider
                     charsNoSpace: message.charsNoSpace,
                     charsWithSpace: message.charsWithSpace,
                 });
-                if (panel.active) {
-                    this._statusBarItem.text = vscode.l10n.t('Lines(src): {0}  Words: {1}  Chars: {2}', message.lines, message.words.toLocaleString(), message.charsNoSpace.toLocaleString());
-                    this._statusBarItem.tooltip = vscode.l10n.t('Chars (with spaces): {0}', message.charsWithSpace.toLocaleString());
-                    this._statusBarItem.show();
-                }
+                this._refreshStatusBar();
                 break;
         }
+    }
+
+    /** 状态栏字数统一刷新出口（回归 E9：此前四处各自 show/hide 判据不一致） */
+    private _refreshStatusBar(): void {
+        let activeKey: string | undefined;
+        for (const [key, panel] of this._webviewPanels) {
+            try {
+                if (panel.active) { activeKey = key; break; }
+            } catch {
+                // panel 已销毁，跳过
+            }
+        }
+        const wc = activeKey ? this._wordCounts.get(activeKey) : undefined;
+        if (!wc) {
+            this._statusBarItem.hide();
+            return;
+        }
+        this._statusBarItem.text = vscode.l10n.t('Lines(src): {0}  Words: {1}  Chars: {2}', wc.lines, wc.words.toLocaleString(), wc.charsNoSpace.toLocaleString());
+        this._statusBarItem.tooltip = vscode.l10n.t('Chars (with spaces): {0}', wc.charsWithSpace.toLocaleString());
+        this._statusBarItem.show();
     }
 
     /** 标记 dirty（webview 轻量脏标记到达时调用）；保存由 Cmd+S / VS Code 原生 files.autoSave 触发 */
