@@ -80,6 +80,8 @@ let _topBarOverflowCtl: { dispose(): void } | null = null;
 
 let currentEditor: Editor | null = null;
 let currentLineMap: number[] = [];
+/** 与 currentLineMap 同序的块结束行（滚动同步锚点） */
+let currentLineEndMap: number[] = [];
 // 启动值取自 HTML 注入的配置快照（回归：此前只由 setDebugMode 消息置位，
 // debugMode=true 启动时滚动调试日志直到发生一次配置变更才生效）
 let _debugLog = window.__i18n?.debugMode ?? false;
@@ -94,41 +96,78 @@ document.addEventListener('keyup', (e) => {
 window.addEventListener('blur', () => document.body.classList.remove('epytor-modifier-active'));
 
 /**
- * 将 lineMap 中源码行号（1-indexed）对应的块滚动到视口顶部。
- * 元素级定位（不做段内比例插值）——与 VS Code 内置 Markdown 预览的滚动同步同口径
- * （markdown-it 的 data-line 只标到块级）：比例插值会在长段落/长代码块里滚过目标块，
- * 且来回切换不可逆（用户实测「文本→预览定位位置错误」）。
+ * 将 lineMap 中源码行号（1-indexed）对应的位置滚动到视口顶部。
+ *
+ * 锚点插值（对照 VS Code 内置 Markdown 预览的滚动同步实现）：它给每个渲染块标
+ * data-line/endLine，然后——
+ *   目标行落在块内：块顶 + 块高 × (line - start) / (end - start)
+ *   目标行落在块间空白：在「上一块底」与「下一块顶」之间按行数比例插值
+ *   没有下一块：块顶
+ * 这样长代码块/长段落也能精确落到行，而不是只能落到块首。
  */
-function scrollToSourceLine(view: EditorView, lineMap: number[], targetLine: number): void {
+function scrollToSourceLine(view: EditorView, lineMap: number[], lineEndMap: number[], targetLine: number): void {
     if (!lineMap.length) { return; }
-    let blockIdx = 0;
-    for (let i = 0; i < lineMap.length; i++) {
-        if (lineMap[i] <= targetLine) { blockIdx = i; }
-        else { break; }
-    }
     const children = view.dom.children;
-    if (blockIdx >= children.length) { return; }
-    const el = children[blockIdx] as HTMLElement;
-    if (!el) { return; }
-
     const topbarH = document.querySelector(".milkdown-top-bar")?.getBoundingClientRect().height ?? DEFAULT_TOPBAR_HEIGHT;
-    const scrollTarget = el.getBoundingClientRect().top + window.scrollY - topbarH - VIEWPORT_PADDING;
+    const docTop = (el: HTMLElement) => el.getBoundingClientRect().top + window.scrollY;
 
-    if (_debugLog) console.log('[scrollToLine] targetLine:', targetLine, 'blockIdx:', blockIdx, 'lineMap[blockIdx]:', lineMap[blockIdx]);
-    window.scrollTo({ top: scrollTarget });
+    // 找「起始行 ≤ 目标行」的最后一个块
+    let prevIdx = -1;
+    for (let i = 0; i < lineMap.length && i < children.length; i++) {
+        if (lineMap[i] <= targetLine) { prevIdx = i; } else { break; }
+    }
+    if (prevIdx < 0) { window.scrollTo({ top: 0 }); return; }
+    const prevEl = children[prevIdx] as HTMLElement | undefined;
+    if (!prevEl) { return; }
+    const prevTop = docTop(prevEl);
+    const prevEnd = lineEndMap[prevIdx] ?? lineMap[prevIdx];
+    const nextIdx = prevIdx + 1;
+
+    let target: number;
+    if (targetLine <= prevEnd) {
+        // 块内：按行占比插值
+        const span = Math.max(1, prevEnd - lineMap[prevIdx]);
+        const frac = Math.min(Math.max((targetLine - lineMap[prevIdx]) / span, 0), 1);
+        target = prevTop + prevEl.getBoundingClientRect().height * frac;
+    } else if (nextIdx < lineMap.length && nextIdx < children.length) {
+        // 块间空白：在上一块底与下一块顶之间插值
+        const nextEl = children[nextIdx] as HTMLElement;
+        const prevBottom = prevTop + prevEl.getBoundingClientRect().height;
+        const nextTop = docTop(nextEl);
+        const span = Math.max(1, lineMap[nextIdx] - prevEnd);
+        const frac = Math.min(Math.max((targetLine - prevEnd) / span, 0), 1);
+        target = prevBottom + (nextTop - prevBottom) * frac;
+    } else {
+        target = prevTop;
+    }
+
+    if (_debugLog) console.log('[scrollToLine] targetLine:', targetLine, 'blockIdx:', prevIdx, 'start:', lineMap[prevIdx], 'end:', prevEnd, 'target:', target.toFixed(0));
+    window.scrollTo({ top: target - topbarH - VIEWPORT_PADDING });
 }
 
-/** 检测视口顶部对应的源码行号（1-indexed），供切换到文本编辑器时定位用 */
-function getFirstVisibleSourceLine(view: EditorView, lineMap: number[]): number {
+/**
+ * 检测视口顶部对应的源码行号（1-indexed，可含小数部分四舍五入），供切换到文本编辑器时定位。
+ * 锚点插值（对照 VS Code 内置预览的同名反算）：视口顶部落在块内时，按块内高度占比反算行号。
+ */
+function getFirstVisibleSourceLine(view: EditorView, lineMap: number[], lineEndMap: number[]): number {
     if (!lineMap.length) { return 1; }
     const topbarH = document.querySelector(".milkdown-top-bar")?.getBoundingClientRect().height ?? DEFAULT_TOPBAR_HEIGHT;
     const children = view.dom.children;
+    const anchorY = topbarH + VIEWPORT_PADDING;
     for (let i = 0; i < children.length && i < lineMap.length; i++) {
         const rect = (children[i] as HTMLElement).getBoundingClientRect();
-        if (rect.bottom > topbarH + VIEWPORT_PADDING) {
-            const result = lineMap[i] ?? 1;
-            if (_debugLog) console.log('[getFirstVisible] result:', result, 'blockIdx:', i, 'rect.bottom:', rect.bottom.toFixed(0));
-            return result;
+        if (rect.bottom > anchorY) {
+            const start = lineMap[i] ?? 1;
+            const end = lineEndMap[i] ?? start;
+            // 顶部落在块内：按占比反算行号；顶部在块上方（还没滚到该块）：直接取块首
+            if (end > start && rect.top < anchorY) {
+                const frac = Math.min(Math.max((anchorY - rect.top) / Math.max(1, rect.height), 0), 1);
+                const line = Math.round(start + frac * (end - start));
+                if (_debugLog) console.log('[getFirstVisible] result:', line, 'blockIdx:', i, 'start:', start, 'end:', end, 'frac:', frac.toFixed(2));
+                return line;
+            }
+            if (_debugLog) console.log('[getFirstVisible] result:', start, 'blockIdx:', i, 'rect.bottom:', rect.bottom.toFixed(0));
+            return start;
         }
     }
     // 全部块都在视口上方（理论上不会发生）→ 返回最后一块
@@ -146,7 +185,7 @@ let _lastNavLine: number | null = null;
  * 回导航时的原始行而不是块首——否则长代码块/长段落来回切换会逐次漂到块首。
  */
 function getSwitchTargetLine(view: EditorView): number | undefined {
-    const visible = getFirstVisibleSourceLine(view, currentLineMap);
+    const visible = getFirstVisibleSourceLine(view, currentLineMap, currentLineEndMap);
     if (_lastNavLine === null) { return visible; }
     let blockStart = 0;
     for (const line of currentLineMap) {
@@ -710,6 +749,7 @@ async function handleEditorLifecycleMessage(
     // 类型已由签名收窄（回归 C3：此前在函数体内重查 msg.type === init || revert）
     const isInit = msg.type === "init";
     currentLineMap = msg.lineMap ?? [];
+    currentLineEndMap = msg.lineEndMap ?? [];
     renderFrontmatterPanel(msg.frontmatter);
     if (msg.imageUriMap) { setImageUriMap(msg.imageUriMap); }
     if (isInit) {
@@ -743,7 +783,7 @@ async function handleEditorLifecycleMessage(
         const targetLine = msg.scrollToLine;
         _lastNavLine = targetLine; // 供切回文本时保持精确行（见 getSwitchTargetLine）
         scheduleDelayedScroll((view) => {
-            scrollToSourceLine(view, currentLineMap, targetLine);
+            scrollToSourceLine(view, currentLineMap, currentLineEndMap, targetLine);
         });
     } else if (isInit) {
         // 新打开文档：确保视口在顶部（frontmatter 可见）。
@@ -786,11 +826,12 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         const scrollLine = msg.line;
         scheduleDelayedScroll(
             (view) => {
-                scrollToSourceLine(view, currentLineMap, scrollLine);
+                scrollToSourceLine(view, currentLineMap, currentLineEndMap, scrollLine);
             },
         );
     } else if (msg.type === "lineMapUpdate") {
         currentLineMap = msg.lineMap;
+        currentLineEndMap = msg.lineEndMap ?? [];
     } else if (msg.type === "setDebugMode") {
         _debugLog = msg.enabled;
         setSerializationDebug(msg.enabled);

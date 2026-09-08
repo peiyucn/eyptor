@@ -7,7 +7,7 @@ import {
     normalizeImageDestination,
     rewriteImageSources,
 } from "../../src/utils/contentTransform";
-import { computeLineMap, computeDisplayLineMap } from "../../src/utils/lineMap";
+import { computeLineRanges, computeDisplayLineRanges } from "../../src/utils/lineMap";
 
 // ─────────────────────────────────────────────────────────────
 // extractFrontmatter
@@ -148,83 +148,93 @@ describe("restoreContentForSave", () => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// computeDisplayLineMap（回归：源码/预览切换光标总回 1 行 1 列）
+// computeLineRanges（段落行区间：行号映射与滚动同步的共同底座）
 // ─────────────────────────────────────────────────────────────
-describe("computeDisplayLineMap", () => {
-    it("无 frontmatter 时 应该 与 computeLineMap 一致", () => {
+describe("computeLineRanges", () => {
+    it("空内容 应该 返回空数组", () => {
+        expect(computeLineRanges("")).toEqual([]);
+    });
+
+    it("只有空行 应该 返回空数组", () => {
+        expect(computeLineRanges("\n\n\n")).toEqual([]);
+    });
+
+    it("单行内容 应该 返回 [{1,1}]", () => {
+        expect(computeLineRanges("# Hello")).toEqual([{ start: 1, end: 1 }]);
+    });
+
+    it("两个段落（中间空行分隔） 应该 返回各段起止行", () => {
+        const content = "# Heading\n\nSome paragraph text.";
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 1 },
+            { start: 3, end: 3 },
+        ]);
+    });
+
+    it("代码块 应该 整体成段（end 为闭围栏行）", () => {
+        const content = "# H\n\n```ts\nconst x = 1;\nconst y = 2;\n```\n\n## H2";
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 1 },
+            { start: 3, end: 6 },
+            { start: 8, end: 8 },
+        ]);
+    });
+
+    it("波浪线代码块（~~~） 应该 同样整体成段", () => {
+        const content = "~~~python\nprint('hello')\n~~~\n\n# After";
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 3 },
+            { start: 5, end: 5 },
+        ]);
+    });
+
+    it("行号 应该 从 1 开始（1-indexed）", () => {
+        expect(computeLineRanges("paragraph1\n\nparagraph2")[0].start).toBe(1);
+    });
+
+    it("前导空行 应该 不计入行号", () => {
+        expect(computeLineRanges("\n\n# Heading")).toEqual([{ start: 3, end: 3 }]);
+    });
+
+    it("大文件（1000 行）计算耗时 应该 低于 100ms", () => {
+        const content = Array.from({ length: 200 }, (_, i) => `## Heading ${i}\n\nContent ${i}`).join("\n\n");
+        const start = performance.now();
+        computeLineRanges(content);
+        const elapsed = performance.now() - start;
+        expect(elapsed).toBeLessThan(100);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// computeDisplayLineRanges（回归：源码/预览切换光标总回 1 行 1 列）
+// ─────────────────────────────────────────────────────────────
+describe("computeDisplayLineRanges", () => {
+    it("无 frontmatter 时 应该 与 computeLineRanges 一致", () => {
         const content = "# 标题\n\n段落一\n\n段落二\n";
-        expect(computeDisplayLineMap(content)).toEqual(computeLineMap(content));
+        expect(computeDisplayLineRanges(content)).toEqual(computeLineRanges(content));
     });
 
     it("有 frontmatter 时 应该 跳过 frontmatter 块、行号仍指向完整源码", () => {
         const content = "---\ntitle: A\ndate: 2026-01-01\n---\n# 标题\n\n段落一\n\n段落二\n";
         // 正文块：H1（源码第 5 行）、段落一（7）、段落二（9）
-        expect(computeDisplayLineMap(content)).toEqual([5, 7, 9]);
-        // 对照：旧口径把 frontmatter（与紧随的标题同块）算成第 0 块，正文块索引整体错位
-        expect(computeLineMap(content)).toEqual([1, 7, 9]);
+        expect(computeDisplayLineRanges(content).map((r) => r.start)).toEqual([5, 7, 9]);
+        // 对照：正文口径把 frontmatter（与紧随的标题同块）算成第 0 块，正文块索引整体错位
+        expect(computeLineRanges(content)[0].start).toBe(1);
     });
 
     it("CRLF frontmatter 应该 同样按行数偏移", () => {
         const content = "---\r\ntitle: A\r\n---\r\n# 标题\r\n";
-        expect(computeDisplayLineMap(content)).toEqual([4]);
-    });
-});
-
-// ─────────────────────────────────────────────────────────────
-// computeLineMap
-// ─────────────────────────────────────────────────────────────
-describe("computeLineMap", () => {
-    it("空内容返回空数组", () => {
-        expect(computeLineMap("")).toEqual([]);
+        expect(computeDisplayLineRanges(content).map((r) => r.start)).toEqual([4]);
     });
 
-    it("只有空行返回空数组", () => {
-        expect(computeLineMap("\n\n\n")).toEqual([]);
-    });
-
-    it("单行内容返回 [1]", () => {
-        expect(computeLineMap("# Hello")).toEqual([1]);
-    });
-
-    it("两个段落（中间空行分隔）返回各段起始行号", () => {
-        const content = "# Heading\n\nSome paragraph text.";
-        const lineMap = computeLineMap(content);
-        expect(lineMap).toEqual([1, 3]);
-    });
-
-    it("代码块整体作为一个段落处理", () => {
-        const content = "# H\n\n```ts\nconst x = 1;\nconst y = 2;\n```\n\n## H2";
-        const lineMap = computeLineMap(content);
-        // 期望：行1（标题）、行3（代码块）、行8（H2）
-        expect(lineMap[0]).toBe(1);
-        expect(lineMap[1]).toBe(3);
-        expect(lineMap[2]).toBe(8);
-    });
-
-    it("波浪线代码块（~~~）同样正确处理", () => {
-        const content = "~~~python\nprint('hello')\n~~~\n\n# After";
-        const lineMap = computeLineMap(content);
-        expect(lineMap.length).toBe(2);
-    });
-
-    it("行号从 1 开始（1-indexed）", () => {
-        const content = "paragraph1\n\nparagraph2";
-        const lineMap = computeLineMap(content);
-        expect(lineMap[0]).toBe(1);
-    });
-
-    it("前导空行不计入行号", () => {
-        const content = "\n\n# Heading";
-        const lineMap = computeLineMap(content);
-        expect(lineMap).toEqual([3]);
-    });
-
-    it("大文件（1000 行）计算耗时低于 100ms", () => {
-        const content = Array.from({ length: 200 }, (_, i) => `## Heading ${i}\n\nContent ${i}`).join("\n\n");
-        const start = performance.now();
-        computeLineMap(content);
-        const elapsed = performance.now() - start;
-        expect(elapsed).toBeLessThan(100);
+    it("每块 应该 给出起始行与结束行（代码块按围栏整体成段）", () => {
+        const content = "---\ntitle: A\n---\n# 标题\n\n段落一\n\n```js\nconst a = 1;\nconst b = 2;\n```\n\n段落二\n";
+        expect(computeDisplayLineRanges(content)).toEqual([
+            { start: 4, end: 4 },
+            { start: 6, end: 6 },
+            { start: 8, end: 11 },
+            { start: 13, end: 13 },
+        ]);
     });
 });
 

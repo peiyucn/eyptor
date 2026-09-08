@@ -5,7 +5,7 @@ import { MarkdownDocument } from "./MarkdownDocument";
 import { getNonce } from "./utils/getNonce";
 import { ZH_CN_WEBVIEW } from "./i18n/webviewTranslations";
 import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
-import { computeDisplayLineMap } from "./utils/lineMap";
+import { computeDisplayLineRanges, type LineRange } from "./utils/lineMap";
 import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter, normalizeImageDestination, rewriteImageSources } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
@@ -410,7 +410,7 @@ export class MarkdownEditorProvider
                             const displayContent = this._prepareContentForDisplay(revertContent, document, panel, uriKey);
                             panel.webview.postMessage({
                                 type: "revert",
-                                ...this._lifecyclePayload(uriKey, displayContent, computeDisplayLineMap(revertContent)),
+                                ...this._lifecyclePayload(uriKey, displayContent, computeDisplayLineRanges(revertContent)),
                             });
                         }
                     } finally {
@@ -445,7 +445,7 @@ export class MarkdownEditorProvider
                 const cfg = vscode.workspace.getConfiguration("epytor");
                 webviewPanel.webview.postMessage({
                     type: "init",
-                    ...this._lifecyclePayload(uriKey, displayContent, computeDisplayLineMap(initContent)),
+                    ...this._lifecyclePayload(uriKey, displayContent, computeDisplayLineRanges(initContent)),
                     // 发送时的面板激活态（webview 侧焦点守卫用；后续变化由
                     // panelActiveState 消息实时同步）
                     active: webviewPanel.active,
@@ -674,11 +674,20 @@ export class MarkdownEditorProvider
         }
         this._lastSaveTimes.set(uriKey, Date.now());
         this._lastDiskContents.set(uriKey, document.getText());
-        const panel = this._webviewPanels.get(uriKey);
-        if (panel) {
-            panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeDisplayLineMap(document.getText()) });
-        }
+        this._postLineMapUpdate(document, uriKey);
         return true;
+    }
+
+    /** 行号映射更新广播（lineMap 起始行 / lineEndMap 结束行，同序同长） */
+    private _postLineMapUpdate(document: MarkdownDocument, uriKey: string): void {
+        const panel = this._webviewPanels.get(uriKey);
+        if (!panel) { return; }
+        const ranges = computeDisplayLineRanges(document.getText());
+        panel.webview.postMessage({
+            type: "lineMapUpdate",
+            lineMap: ranges.map((range) => range.start),
+            lineEndMap: ranges.map((range) => range.end),
+        });
     }
 
     /**
@@ -733,23 +742,26 @@ export class MarkdownEditorProvider
             const displayContent = this._prepareContentForDisplay(revertContent, document, panel, uriKey);
             panel.webview.postMessage({
                 type: "revert",
-                ...this._lifecyclePayload(uriKey, displayContent, computeDisplayLineMap(revertContent)),
+                ...this._lifecyclePayload(uriKey, displayContent, computeDisplayLineRanges(revertContent)),
             });
         }
     }
 
     /**
      * 生命周期消息（init/revert）共享载荷工厂（回归 C3：同构 payload 曾在三处
-     * 逐字重复——watcher revert / ready→init / revertCustomDocument）
+     * 逐字重复——watcher revert / ready→init / revertCustomDocument）。
+     * ranges 为正文块行区间表（显示口径）；lineMap/lineEndMap 同序，供滚动同步
+     * 按「块顶/块底 + 块内行占比」插值定位（对照 VS Code 内置预览的 data-line/endLine）。
      */
     private _lifecyclePayload(
         uriKey: string,
         content: string,
-        lineMap: number[],
-    ): { content: string; lineMap: number[]; frontmatter: string | undefined; imageUriMap: Record<string, string> } {
+        ranges: LineRange[],
+    ): { content: string; lineMap: number[]; lineEndMap: number[]; frontmatter: string | undefined; imageUriMap: Record<string, string> } {
         return {
             content,
-            lineMap,
+            lineMap: ranges.map((range) => range.start),
+            lineEndMap: ranges.map((range) => range.end),
             frontmatter: this._frontmatterMap.get(uriKey) || undefined,
             imageUriMap: Object.fromEntries(this._imageUriMaps.get(uriKey) ?? []),
         };
