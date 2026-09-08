@@ -31,6 +31,9 @@ body {
     margin: 0 auto;
     /* 顶部 36px 让位 fixed 顶栏（否则面板首行被顶栏遮挡） */
     padding: 44px 48px 0;
+    /* 关闭浏览器滚动锚定：面板内容/高度变化时锚定会把视口推向下方内容
+       （回归：打开文档后视口停在第一个标题、frontmatter 被跳过） */
+    overflow-anchor: none;
 }
 
 .frontmatter-table {
@@ -967,6 +970,12 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     word-break: var(--epytor-table-word-break, keep-all);
     white-space: var(--epytor-table-white-space, normal);
     overflow-wrap: break-word;
+}
+/* 单元格内边距：官方为 4px 16px（上下与左右差 4 倍，用户反馈「四边内边距不同」），
+   改为四周一致的 8px（上下 8 / 左右 8 略窄于官方的 16px，长表格更紧凑） */
+.milkdown .milkdown-table-block th,
+.milkdown .milkdown-table-block td {
+    padding: 8px;
 }
 
 /* 行列手柄与整行/整列选中工具栏：对齐编辑器浮层风格。

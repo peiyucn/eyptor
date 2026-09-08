@@ -72,6 +72,9 @@ const SCROLL_SAVE_DEBOUNCE_MS = 200;
 /** 延迟定位/恢复滚动的重试计划（Milkdown 渲染 + 浏览器布局需要时间）；
  *  init 定位与运行期 scrollToLine 共用同一计划（回归 F2：曾两套数组口径不一） */
 const SCROLL_RETRY_DELAYS_MS = [0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000];
+/** 打开文档时的「视口复位到顶部」计划：焦点获取/布局稳定/滚动锚定都会在首帧后
+ *  把视口推向第一个标题，需在前几帧内多次复位（用户交互后立即停止） */
+const INITIAL_SCROLL_TOP_DELAYS_MS = [0, 50, 150, 400];
 
 let _topBarOverflowCtl: { dispose(): void } | null = null;
 
@@ -310,25 +313,25 @@ async function initEditor(
             if (_docChangedTimer) clearTimeout(_docChangedTimer);
             _docChangedTimer = setTimeout(() => {
                 notifyMarkDirty(); // 通知 Extension 内容已变（自动保存防抖到点后拉取）
+                // 字数统计与输入同步（轻量：一次文本遍历 + 一条消息）。
+                // 回归 P1：此前它与 TOC 共用一个 800ms 定时器且被标题签名早退跳过，
+                // 输入正文时状态栏字数长期不更新（用户反馈「保存后才变」）
+                updateWordCount();
             }, MARK_DIRTY_DEBOUNCE_MS);
             // TOC/字数：标题签名不变则跳过 TOC 重建（根源级优化：输入正文零重建，
-            // 替代纯防抖延时——停顿后仍会重建的开销被真正消除）；字数统计轻量照常
+            // 替代纯防抖延时——停顿后仍会重建的开销被真正消除）
             if (_tocRefreshTimer) clearTimeout(_tocRefreshTimer);
             _tocRefreshTimer = setTimeout(() => {
                 requestAnimationFrame(() => {
                     const view = getEditorView();
-                    if (view) {
-                        // 全部标题（含嵌套）签名：只改嵌套标题时也要刷新
-                        // （回归 P1：此前复用只覆盖顶层标题的签名，TOC 静默不刷新）
-                        const sig = computeAllHeadingSignature(view.state.doc);
-                        if (sig !== _lastTocSignature) {
-                            _lastTocSignature = sig;
-                            toc.refresh(); // 标题结构变化才重建目录（面板关闭时是 no-op）
-                        }
+                    if (!view) return;
+                    // 全部标题（含嵌套）签名：只改嵌套标题时也要刷新
+                    // （回归 P1：此前复用只覆盖顶层标题的签名，TOC 静默不刷新）
+                    const sig = computeAllHeadingSignature(view.state.doc);
+                    if (sig !== _lastTocSignature) {
+                        _lastTocSignature = sig;
+                        toc.refresh(); // 标题结构变化才重建目录（面板关闭时是 no-op）
                     }
-                    // 字数统计与标题结构无关，必须在签名早退之外
-                    // （回归：此前与 toc.refresh 一起被早退跳过，输入正文时状态栏字数不更新）
-                    updateWordCount();
                 });
             }, TOC_REFRESH_DEBOUNCE_MS);
         },
@@ -726,21 +729,17 @@ async function handleEditorLifecycleMessage(
             scrollToSourceLine(view, currentLineMap, targetLine);
         });
     } else if (isInit) {
-        // WebView 重建场景（VSCode 重启恢复标签页等）：从持久状态恢复滚动位置
-        const saved = getWebviewState();
-        if (saved?.scrollY) {
-            const targetY = saved.scrollY as number;
-            scheduleDelayedScroll(() => {
-                window.scrollTo({ top: targetY });
-            });
-        } else {
-            // 新打开文档：无定位请求时确保从顶部开始（回归：首次渲染后页面被滚动到
-            // 第一个标题，frontmatter 面板被顶出视口，需上滑才能看到）
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    window.scrollTo({ top: 0 });
-                });
-            });
+        // 新打开文档：确保视口在顶部（frontmatter 可见）。
+        // 回归：焦点获取（window.focus → ProseMirror 把光标滚入视口）、布局稳定与
+        // 浏览器滚动锚定都会在首帧之后把视口推向第一个标题，单次 scrollTo 会被覆盖，
+        // 因此在前几帧内复位若干次；用户一旦交互立即停止干预。
+        // 不再恢复上次滚动位置（用户反馈：打开文档应看到 frontmatter，而不是跳到第一个标题）
+        const epochAtStart = getUserInteractionEpoch();
+        for (const delay of INITIAL_SCROLL_TOP_DELAYS_MS) {
+            setTimeout(() => {
+                if (getUserInteractionEpoch() !== epochAtStart) return;
+                window.scrollTo({ top: 0 });
+            }, delay);
         }
     }
 }

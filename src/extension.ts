@@ -238,18 +238,19 @@ export function activate(context: vscode.ExtensionContext) {
                         }
                     }
                 }
-                // 先开 WYSIWYG 再关文本 tab（回归 E6：与 ec5a887 根治「资源管理器点 md 狂闪」
-                // 同一反模式——先关会让 VS Code 先激活上一个文档、再被 openWith 激活新文档，
-                // 两者互抢；先开只有一次激活转移，文本 tab 短暂共存后关闭）
+                // 先关文本 tab 再开 WYSIWYG（用户实测：先开后关会在当前 tab 右侧闪出一个
+                // 同名 tab 再消失）。ec5a887 的「先开后关」教训针对的是资源管理器点开
+                // 文本 tab 的自动转换路径（那里先关会让 VS Code 先激活上一个文档）；
+                // 本命令是用户显式切换当前文档，先关不会引起跨文档激活转移。
+                if (textTab) {
+                    await vscode.window.tabGroups.close(textTab);
+                }
                 await vscode.commands.executeCommand(
                     "vscode.openWith",
                     target,
                     MarkdownEditorProvider.viewType,
                     { viewColumn: viewCol, preview: isPreview },
                 );
-                if (textTab) {
-                    await vscode.window.tabGroups.close(textTab);
-                }
             },
         ),
     );
