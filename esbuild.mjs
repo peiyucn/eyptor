@@ -30,6 +30,10 @@ const webviewBuild = {
     platform: 'browser',
     target: 'es2020',
     format: 'esm',
+    // 代码分割：动态 import（CodeMirror 按语言加载、mermaid 等重库惰性化）拆分为
+    // 独立 chunk，首次加载只拉入口 —— 回归：无分割时 esbuild 把全部动态 import
+    // 内联进单文件（6.2MB），首次打开 md 的下载+解析+求值是首帧卡顿主因
+    splitting: true,
     loader: {
         '.ttf': 'dataurl',
         '.woff': 'dataurl',
