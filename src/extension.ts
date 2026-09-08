@@ -40,57 +40,10 @@ export function activate(context: vscode.ExtensionContext) {
         .get<string>("defaultMode", "wysiwyg");
     syncEditorAssociation(initialMode);
 
-    // priority:option 下不自动接管文件打开，用 onDidChangeTabs 监听文本 tab 并切换到 WYSIWYG
-    // diff 视图只产生 TabInputTextDiff，不会触发此逻辑
-    context.subscriptions.push(
-        vscode.window.tabGroups.onDidChangeTabs(async (event) => {
-            const mode = vscode.workspace
-                .getConfiguration("epytor")
-                .get<string>("defaultMode", "wysiwyg");
-            if (mode !== "wysiwyg") { return; }
-
-            for (const tab of event.opened) {
-                if (!(tab.input instanceof vscode.TabInputText)) { continue; }
-                const uri = (tab.input as vscode.TabInputText).uri;
-                if (uri.scheme !== "file") { continue; }
-                if (!/\.(md|markdown)$/i.test(uri.fsPath)) { continue; }
-
-                const uriStr = uri.toString();
-                if (MarkdownEditorProvider.isAutoSwitchSuppressed(uriStr)) { continue; }
-
-                // 若 URI fragment 包含行号（全局搜索传入 #L10 格式），提前存储以便 WYSIWYG 初始化后跳转
-                const fragMatch = uri.fragment?.match(/^L?(\d+)/);
-                if (fragMatch) {
-                    const fragLine = parseInt(fragMatch[1], 10);
-                    if (fragLine >= 1) {
-                        debugLog('[onDidChangeTabs] fragment line:', fragLine, 'file:', path.basename(uri.fsPath));
-                        MarkdownEditorProvider.current?.setPendingNavigation(uri.fsPath, fragLine);
-                    }
-                }
-
-                // 抑制自动切换窗口：防止本次转换自身触发的 tab 事件重入环
-                MarkdownEditorProvider.suppressAutoSwitchFor(uriStr);
-
-                // 先开 WYSIWYG 再关文本 tab（回归：先关后开会让 VS Code 把上一个文档
-                // 重新激活、随后 openWith 又激活新文档——活动编辑器在原文档与目标
-                // 文档之间来回切换狂闪；先开后关只有一次激活转移，文本 tab 与
-                // WYSIWYG tab 短暂共存后随即关闭）
-                const isPreview = tab.isPreview;
-                const viewCol = tab.group.viewColumn;
-                await vscode.commands.executeCommand(
-                    "vscode.openWith",
-                    uri,
-                    MarkdownEditorProvider.viewType,
-                    { viewColumn: viewCol, preview: isPreview },
-                );
-                try {
-                    await vscode.window.tabGroups.close(tab);
-                } catch {
-                    // 文本 tab 已被其它流程关闭（预览替换等），忽略
-                }
-            }
-        }),
-    );
+    // priority:default 下 md 直接以 WYSIWYG 打开（无「文本 tab → 转换」中间态——
+    // 该转换机制曾是打开闪动/双 tab/焦点互抢的根源，见 2026-09-08 简化设计）；
+    // defaultMode:"source" 由 syncEditorAssociation 注入 editorAssociations 实现。
+    // 全局搜索行号由 revealLine 命令拦截 + pendingNavigation 处理（见下）。
 
     // 监听文本编辑器激活事件：捕获全局搜索导航时短暂出现的 .md 文本编辑器光标位置
     context.subscriptions.push(
