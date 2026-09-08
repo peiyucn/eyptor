@@ -7,25 +7,51 @@ function debugLog(...args: unknown[]): void {
     }
 }
 
+/** 记录「workbench.editorAssociations 的 md 条目由本扩展注入」的标记（globalState） */
+const INJECTED_ASSOC_KEY = "epytor.injectedEditorAssociations";
+const MD_ASSOC_KEYS = ["*.md", "*.markdown"] as const;
+
 /**
  * 根据 defaultMode 同步 workbench.editorAssociations：
- * - "source"  → 注入 "*.md"/"*.markdown": "default"，让文本编辑器直接打开，不触发自定义编辑器
- * - "wysiwyg" → 删除上述条目，恢复 package.json 中 priority:default 生效
+ * - "source"  → 注入 "*.md"/"*.markdown": "default"（文本编辑器直接打开）
+ * - "wysiwyg" → 仅删除「本扩展注入过且值仍为 default」的条目（priority:default 自动生效）
+ *
+ * 回归（E2）：此前 wysiwyg 分支无条件 delete 用户全局配置里的 md 条目——既无法区分
+ * 「本扩展上次注入的残留」与「用户经 Reopen Editor With 主动设置的关联」，每次激活
+ * 都静默抹掉用户设置。现用 globalState 标记追踪注入来源：只清理自己写的值，
+ * 用户自定义关联一律不动（source 注入覆盖用户自定义时在 debug 日志留痕）。
  */
-function syncEditorAssociation(mode: string): void {
+function syncEditorAssociation(mode: string, context: vscode.ExtensionContext): void {
     const wbConfig = vscode.workspace.getConfiguration("workbench");
     const current: Record<string, string> = {
         ...(wbConfig.get<Record<string, string>>("editorAssociations") ?? {}),
     };
+    const injected = context.globalState.get<boolean>(INJECTED_ASSOC_KEY, false);
+
     if (mode === "source") {
-        current["*.md"] = "default";
-        current["*.markdown"] = "default";
-    } else {
-        // preview 模式：删除 association，依赖 package.json 的 priority:default 自动生效
-        delete current["*.md"];
-        delete current["*.markdown"];
+        const overwritten = MD_ASSOC_KEYS.filter((k) => current[k] !== undefined && current[k] !== "default");
+        for (const k of MD_ASSOC_KEYS) { current[k] = "default"; }
+        void wbConfig.update("editorAssociations", current, vscode.ConfigurationTarget.Global);
+        void context.globalState.update(INJECTED_ASSOC_KEY, true);
+        if (overwritten.length > 0) {
+            debugLog("[syncEditorAssociation] source 模式覆盖了用户自定义 md 关联:", overwritten.join(", "));
+        }
+        return;
     }
-    wbConfig.update("editorAssociations", current, vscode.ConfigurationTarget.Global);
+
+    // wysiwyg：只清理本扩展注入的条目；未注入过说明是用户自己的设置，绝不触碰
+    if (!injected) { return; }
+    let changed = false;
+    for (const k of MD_ASSOC_KEYS) {
+        if (current[k] === "default") {
+            delete current[k];
+            changed = true;
+        }
+    }
+    if (changed) {
+        void wbConfig.update("editorAssociations", current, vscode.ConfigurationTarget.Global);
+    }
+    void context.globalState.update(INJECTED_ASSOC_KEY, false);
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -33,11 +59,11 @@ export function activate(context: vscode.ExtensionContext) {
         MarkdownEditorProvider.register(context),
     );
 
-    // 激活时同步一次 editorAssociations
+    // 激活时同步一次 editorAssociations（非破坏性：只清理本扩展自己注入的值）
     const initialMode = vscode.workspace
         .getConfiguration("epytor")
         .get<string>("defaultMode", "wysiwyg");
-    syncEditorAssociation(initialMode);
+    syncEditorAssociation(initialMode, context);
 
     // priority:default 下 md 直接以 WYSIWYG 打开（无「文本 tab → 转换」中间态——
     // 该转换机制曾是打开闪动/双 tab/焦点互抢的根源，见 2026-09-08 简化设计）；
@@ -132,7 +158,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const mode = vscode.workspace
                     .getConfiguration("epytor")
                     .get<string>("defaultMode", "wysiwyg");
-                syncEditorAssociation(mode);
+                syncEditorAssociation(mode, context);
             }
             if (e.affectsConfiguration("epytor.debugMode")) {
                 const v = vscode.workspace
