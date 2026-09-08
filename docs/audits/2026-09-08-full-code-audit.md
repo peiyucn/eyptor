@@ -204,5 +204,14 @@
 | B12 utils.ts 死文件 | ✅ 整文件删除 | `33c6197` |
 | A9 notifyUpdate 伪兼容路径 | ✅ 发送/接收/类型/测试全删 | `33c6197` |
 | 孤儿图标 22 个 / C10 / C11 / D11 / D12 | ✅ 全删（slug.ts、image-toolbar--below、mermaidZoomKey/_seq、isDivider、getCellCoords、selectionPlugin 空回调链） | `33c6197` |
-| 其余（波次③分层、F1 死配置消费方、F3 i18n 词典、E2-E9 安全加固） | ⬜ 待续 | — |
+| B7 请求样板复制三份 | ✅ PendingRequestRegistry 统一（内联版补 10s 超时） | `3f01a47` |
+| C7 TOC 折叠 pos 键跨文档污染 | ✅ 稳定键 level:text + 点击实时重查 | `cc80716` |
+| F1 codeBlockMaxHeight 死配置 | ✅ 补 .cm-editor 消费规则 + style 回归断言 | `9522e6f` |
+| E9 保留设备名未拦截 | ✅ sanitizeBasename 纯函数 + 6 组测试 | `777d407` |
+| E3 openUrl 无白名单 | ✅ OPEN_URL_SCHEMES 双端校验 | `a356666` |
+| E4 载荷/响应无上限 | ✅ 20MB 载荷拒绝 + 1MB 响应封顶 + 测试 | `f8ae067` |
+| E5 错误回显响应体 | ✅ 不再回显（token 泄露风险） | `c388d10` |
+| E8 debug 日志绝对路径 | ✅ 改 basename | `d3cedcf` |
+| F3 i18n 词典 4 缺 39 死 | ✅ 补 4 删 34 + 静态一致性测试（零死零缺） | `01762a7` |
+| 其余（波次③分层拆分、F11/F12/F13/F14 CHANGELOG 修正、A6 图片路径正则、E6/E7 路径边界） | ⬜ 待续 | — |
 
