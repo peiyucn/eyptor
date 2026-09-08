@@ -8,6 +8,7 @@ import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
 import { computeLineMap } from "./utils/lineMap";
 import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
+import { decideExternalChange } from "./utils/externalChangeDecision";
 import type { ToExtensionMessage, ToWebviewMessage } from "../shared/messages";
 import { resolveTableWrapVars } from "../shared/tableWrap";
 
@@ -47,6 +48,8 @@ export class MarkdownEditorProvider
     // 图片 webviewUri → relPath 映射（key: docUri.toString()）
     private readonly _imageUriMaps = new Map<string, Map<string, string>>();
     private readonly _frontmatterMap = new Map<string, string>(); // uriKey → raw frontmatter string
+    // 最近一次已知的盘上内容快照（外部写盘回退决策的基准，key: docUri.toString()）
+    private readonly _lastDiskContents = new Map<string, string>();
     /** switchToTextEditor 进行中时，抑制 onDidChangeTabs 把文本 tab 再切回 WYSIWYG */
     public static readonly suppressAutoSwitch = new Set<string>();
 
@@ -263,6 +266,7 @@ export class MarkdownEditorProvider
             this._imageUriMaps.delete(uriKey);
             this._initializedPanels.delete(uriKey);
             this._wordCounts.delete(uriKey);
+            this._lastDiskContents.delete(uriKey);
             // 兜底结算未完成的拉取（面板已销毁，用内存内容）
             this._contentRequests.settleAll(uriKey);
             // 面板关闭（含预览被替换、切文本编辑器）时隐藏状态栏
@@ -387,6 +391,8 @@ export class MarkdownEditorProvider
     ): void {
         // 注意：vscode.workspace.createFileSystemWatcher 不会感知同一 Extension Host 写入的文件
         // 因此改用 Node.js fs.watch，直接监听 OS 级别事件
+        // 播种「已知盘内容」快照（面板打开时内存 = 盘上内容，外部写盘回退决策的基准）
+        this._lastDiskContents.set(uriKey, document.getText());
         import("fs").then(({ watch: fsWatch }) => {
             let debounceTimer: ReturnType<typeof setTimeout> | undefined;
             const targetFile = path.basename(document.uri.fsPath);
@@ -401,13 +407,26 @@ export class MarkdownEditorProvider
                     if (Date.now() - lastSave < SAVE_COOLDOWN_MS) { return; }
                     const cts = new vscode.CancellationTokenSource();
                     try {
-                        // 拉取式：revert 前先取 webview 最新内容，与磁盘比较；
-                        // 若用户有未落盘编辑（内容不同），保留用户内容不 revert
+                        // 外部写盘回退判定（纯函数 decideExternalChange，见其背景注释）：
+                        // 「webview 最新内容 vs 上次已知盘内容快照」判定用户是否有未落盘编辑。
+                        // 回归：旧逻辑比较 latest 与「新盘内容」，外部修改后二者必然不同，
+                        // 外部写盘永远进不了打开中的编辑器，后续保存还会覆盖它（数据丢失）。
+                        const memoryBefore = document.getText();
                         const latest = await this._requestContent(document, uriKey);
                         await document.revert(cts.token);
                         const diskContent = document.getText();
-                        if (latest !== diskContent) {
+                        const decision = decideExternalChange({
+                            latest,
+                            diskContent,
+                            lastDisk: this._lastDiskContents.get(uriKey),
+                            memoryBefore,
+                        });
+                        this._lastDiskContents.set(uriKey, decision.nextLastDisk);
+                        if (decision.keepUserContent) {
+                            // 用户有未落盘编辑：保留用户内容，并通知 VS Code 脏状态
+                            // （回归：此前静默置脏，VS Code 认为干净，关窗不提示丢编辑）
                             document.update(latest);
+                            this._markDirty(document);
                             return;
                         }
                         const panel = this._webviewPanels.get(uriKey);
@@ -500,10 +519,12 @@ export class MarkdownEditorProvider
                 document.update(newContent);
                 // 立即写盘：面板编辑后用户往往立刻切到文本编辑器核对源码。
                 // 不经过 saveCustomDocument（其内部会再次拉取 webview 正文并覆盖 frontmatter）
-                this._lastSaveTimes.set(uriKey, Date.now());
                 const cts = new vscode.CancellationTokenSource();
                 try {
                     await document.save(cts.token);
+                    // 写盘完成后再记时间戳与盘快照：自写抑制窗口锚定「写完」而非「开始写」
+                    this._lastSaveTimes.set(uriKey, Date.now());
+                    this._lastDiskContents.set(uriKey, document.getText());
                     const panel = this._webviewPanels.get(uriKey);
                     if (panel) {
                         panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeLineMap(document.getText()) });
@@ -528,10 +549,11 @@ export class MarkdownEditorProvider
                 // （拉取式架构下内存可能落后，不 flush 会导致切过去看到旧内容）
                 const latest = await this._requestContent(document, uriKey);
                 document.update(latest);
-                this._lastSaveTimes.set(uriKey, Date.now());
                 const flushCts = new vscode.CancellationTokenSource();
                 try {
                     await document.save(flushCts.token);
+                    this._lastSaveTimes.set(uriKey, Date.now());
+                    this._lastDiskContents.set(uriKey, document.getText());
                 } finally {
                     flushCts.dispose();
                 }
@@ -659,8 +681,9 @@ export class MarkdownEditorProvider
         // 拉取 webview 最新内容（无未落盘变更时与内存一致，更新为幂等）
         const content = await this._requestContent(document, uriKey);
         document.update(content);
-        this._lastSaveTimes.set(uriKey, Date.now());
         await document.save(cancellation);
+        this._lastSaveTimes.set(uriKey, Date.now());
+        this._lastDiskContents.set(uriKey, document.getText());
         const panel = this._webviewPanels.get(uriKey);
         if (panel) {
             panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeLineMap(document.getText()) });
@@ -682,6 +705,7 @@ export class MarkdownEditorProvider
         await document.revert(cancellation);
         // 推送新内容给 WebView，触发编辑器重建
         const uriKey = document.uri.toString();
+        this._lastDiskContents.set(uriKey, document.getText());
         const panel = this._webviewPanels.get(uriKey);
         if (panel) {
             const revertContent = document.getText();
