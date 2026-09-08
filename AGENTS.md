@@ -22,7 +22,6 @@ webview/ui/tooltip.ts                    — Tooltip 组件
 webview/utils/themeBus.ts               — Mermaid/CodeMirror 深浅主题统一事件总线
 webview/headingFoldPlugin.ts             — 标题折叠插件（Decoration，不修改文档）
 webview/headingStickyPlugin.ts           — 标题吸顶条（滚动跟随 + 推挤过渡）
-webview/tableSoftBreakPlugin.ts          — 表格单元格 Shift+Enter 软换行（<br>）
 webview/components/toc/index.ts         — 目录（TOC）面板（吸底工具栏下方、可固定、可拖拽宽度）
 webview/components/imageView/index.ts   — 图片 NodeView（选中/lightbox/工具栏/缩放 handle）
 webview/components/findBar/index.ts     — 编辑器内查找栏（Cmd/Ctrl+F，大小写 + 正则）
@@ -157,8 +156,8 @@ docs/tech-debt.md                        — 技术债务清单（面向开发�
 
 | 层次 | 框架 | 适用范围 |
 | :--- | :--- | :--- |
-| Extension 单元测试 | **Vitest 2.x**（Node 环境） | `src/utils/`、`src/MarkdownDocument.ts` |
-| WebView 单元测试 | **Vitest 2.x + jsdom 24.x** | `webview/utils/`、`webview/messaging.ts` |
+| Extension 单元测试 | **Vitest 4.x**（Node 环境） | `src/utils/`、`src/MarkdownDocument.ts` |
+| WebView 单元测试 | **Vitest 4.x + jsdom 30.x** | `webview/utils/`、`webview/messaging.ts` |
 | 集成测试（计划中） | **@vscode/test-electron + Mocha** | 需真实 VSCode Extension Host |
 
 `vscode` 模块通过 `__mocks__/vscode.ts` 统一 mock，由 `vitest.config.ts` 的 `resolve.alias` 注入，禁止在单个测试文件中 `vi.mock("vscode")`。
