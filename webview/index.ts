@@ -368,15 +368,24 @@ if (editorContainer) {
 	            else notifyOpenFile(clean);
 	        }
 	    }, true);
-		    // 滚动时关闭 link tooltip：先解除 hover 锁定，再隐藏
+		    // 滚动时关闭 link tooltip：先解除 hover 锁定，再隐藏。
+		    // rAF 节流 + 无浮层零工作（回归：每个 scroll 事件全量 querySelectorAll +
+		    // 合成 pointerleave 派发，即使没有任何打开的浮层也照常执行）
+	    let linkTipCloseRaf = 0;
 	    window.addEventListener("scroll", () => {
-	        document.querySelectorAll(
-	            ".milkdown-link-preview, .milkdown-link-edit"
-	        ).forEach(el => {
-	            el.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
-	            requestAnimationFrame(() => {
-	                const htmlEl = el as HTMLElement;
-	                htmlEl.dataset.show = "false";
+	        if (linkTipCloseRaf) return;
+	        linkTipCloseRaf = requestAnimationFrame(() => {
+	            linkTipCloseRaf = 0;
+	            const els = document.querySelectorAll(
+	                ".milkdown-link-preview, .milkdown-link-edit"
+	            );
+	            if (els.length === 0) return;
+	            els.forEach(el => {
+	                el.dispatchEvent(new PointerEvent("pointerleave", { bubbles: true }));
+	                requestAnimationFrame(() => {
+	                    const htmlEl = el as HTMLElement;
+	                    htmlEl.dataset.show = "false";
+	                });
 	            });
 	        });
 	    }, true);

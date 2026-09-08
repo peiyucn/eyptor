@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFrontmatterPanel } from "../components/frontmatterPanel";
 
-function flushPromises(): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
 afterEach(() => {
     vi.useRealTimers();
     document.body.innerHTML = "";
@@ -12,6 +8,7 @@ afterEach(() => {
 
 describe("frontmatterPanel 组件", () => {
     beforeEach(() => {
+        vi.clearAllMocks();
         vi.useFakeTimers();
         document.body.innerHTML = "";
     });

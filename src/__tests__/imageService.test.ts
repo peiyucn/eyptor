@@ -97,9 +97,9 @@ describe("generateFilename", () => {
     it("相同 altText 连续调用生成不同文件名", () => {
         const n1 = generateFilename("test", "image/png");
         const n2 = generateFilename("test", "image/png");
-        // 极低概率相同，足够验证唯一性设计
-        expect(typeof n1).toBe("string");
-        expect(typeof n2).toBe("string");
+        // 名称含时间戳 + 随机段；冲突概率 ~1/168 万，可直接断言不等
+        // （回归：此前只断言 typeof string，标题承诺的唯一性从未被验证）
+        expect(n1).not.toBe(n2);
     });
 });
 
