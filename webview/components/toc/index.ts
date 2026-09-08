@@ -255,7 +255,12 @@ export function initToc(getEditorView: () => EditorView | null): {
                     if (!el || !v.dom.contains(el)) return;
                     const topbar = document.querySelector(".milkdown-top-bar") as HTMLElement | null;
                     const topbarH = topbar?.getBoundingClientRect().height ?? DEFAULT_TOPBAR_HEIGHT;
-                    const top = el.getBoundingClientRect().top + window.scrollY - topbarH - VIEWPORT_PADDING;
+                    // 吸顶条可见时额外让出它的高度（回归：TOC 跳转后目标标题被吸顶条遮挡）
+                    const stickyEl = document.querySelector<HTMLElement>(".heading-sticky-title");
+                    const stickyH = stickyEl && !stickyEl.hidden && stickyEl.style.display !== "none"
+                        ? stickyEl.getBoundingClientRect().height
+                        : 0;
+                    const top = el.getBoundingClientRect().top + window.scrollY - topbarH - stickyH - VIEWPORT_PADDING;
                     window.scrollTo({ top, behavior: "smooth" });
                 } catch { /* heading 元素已不在 DOM 中，忽略此次跳转 */ }
             });
