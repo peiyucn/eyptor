@@ -41,21 +41,6 @@ function findHeadingElement(view: EditorView, pos: number): HTMLElement | null {
     return el;
 }
 
-/** 按标题文本+层级在实时文档中反查 pos（点击时重查）——
- * 回归：TOC 列表 DOM 里的 pos 会随编辑漂移，直接使用会跳到错误位置或静默失败 */
-function findHeadingPosByText(view: EditorView, level: number, text: string): number | null {
-    let result: number | null = null;
-    view.state.doc.descendants((node, pos) => {
-        if (result !== null) return false;
-        if (node.type.name === "heading" && node.attrs["level"] === level && node.textContent === text) {
-            result = pos;
-            return false;
-        }
-        return true;
-    });
-    return result;
-}
-
 function hasChildren(headings: HeadingEntry[], index: number): boolean {
     if (index >= headings.length - 1) return false;
     return headings[index + 1].level > headings[index].level;
@@ -80,6 +65,9 @@ export function initToc(getEditorView: () => EditorView | null): {
 } {
     const panel = document.createElement("div");
     panel.className = "toc-panel";
+
+    /** TOC 列表项 → 对应标题 DOM 元素（refresh 时填充，点击跳转用；P9） */
+    const headingEls = new WeakMap<HTMLElement, HTMLElement>();
 
     const header = document.createElement("div");
     header.className = "toc-header";
@@ -206,6 +194,7 @@ export function initToc(getEditorView: () => EditorView | null): {
         if (!view) return;
         const headings = getHeadings(view);
         list.innerHTML = "";
+        // headingEls 为 WeakMap：列表重建后旧项自动可回收，无需清空
         if (headings.length === 0) {
             const empty = document.createElement("div");
             empty.className = "toc-empty";
@@ -220,6 +209,9 @@ export function initToc(getEditorView: () => EditorView | null): {
             const item = document.createElement("div");
             item.className = `toc-item toc-item--h${h.level}`;
             item.style.paddingLeft = `${(h.level - 1) * 12 + 8}px`;
+            // 记录标题 DOM 元素引用（点击跳转用；P9：替代「按文本反查 pos」的 O(n) 路径）
+            const headingEl = findHeadingElement(view, h.pos);
+            if (headingEl) { headingEls.set(item, headingEl); }
 
             const hasKids = hasChildren(headings, idx);
             const toggle = document.createElement("span");
@@ -255,16 +247,16 @@ export function initToc(getEditorView: () => EditorView | null): {
                 const v = getEditorView();
                 if (!v) return;
                 try {
-                    // 点击时按文本+层级实时重查 pos（回归：列表 DOM 里的 pos 会随
-                    // 编辑漂移，直接使用会跳到错误位置或静默失败）
-                    const livePos = findHeadingPosByText(v, h.level, h.text);
-                    const el = livePos !== null ? findHeadingElement(v, livePos) : null;
-                    if (el) {
-                        const topbar = document.querySelector(".milkdown-top-bar") as HTMLElement | null;
-                        const topbarH = topbar?.getBoundingClientRect().height ?? DEFAULT_TOPBAR_HEIGHT;
-                        const top = el.getBoundingClientRect().top + window.scrollY - topbarH - VIEWPORT_PADDING;
-                        window.scrollTo({ top, behavior: "smooth" });
-                    }
+                    // 点击时用 refresh 时记录的标题 DOM 元素反查当前位置（回归 P9：
+                    // 此前按「level+文本」全文档 descendants 反查——每次点击 O(n)，
+                    // 且两个同文同级标题永远命中第一个；元素引用随 ProseMirror DOM
+                    // 复用稳定，posAtDOM 即得当前位置）
+                    const el = headingEls.get(item);
+                    if (!el || !v.dom.contains(el)) return;
+                    const topbar = document.querySelector(".milkdown-top-bar") as HTMLElement | null;
+                    const topbarH = topbar?.getBoundingClientRect().height ?? DEFAULT_TOPBAR_HEIGHT;
+                    const top = el.getBoundingClientRect().top + window.scrollY - topbarH - VIEWPORT_PADDING;
+                    window.scrollTo({ top, behavior: "smooth" });
                 } catch { /* heading 元素已不在 DOM 中，忽略此次跳转 */ }
             });
 
