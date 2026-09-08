@@ -13,5 +13,7 @@ pnpm-lock.yaml
 pnpm-workspace.yaml
 coverage/**
 scripts/**
+test.md
+AGENTS.md
 **/*.map
 **/*.ts
