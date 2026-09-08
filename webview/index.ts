@@ -67,8 +67,9 @@ const GET_PROJECT_IMAGES_TIMEOUT_MS = 10000;
 const MARK_DIRTY_DEBOUNCE_MS = 300;
 const TOC_REFRESH_DEBOUNCE_MS = 800;
 const SCROLL_SAVE_DEBOUNCE_MS = 200;
-/** 延迟定位/恢复滚动的重试计划（Milkdown 渲染 + 浏览器布局需要时间） */
-const SCROLL_RETRY_DELAYS_MS = [300, 600, 1100, 2000];
+/** 延迟定位/恢复滚动的重试计划（Milkdown 渲染 + 浏览器布局需要时间）；
+ *  init 定位与运行期 scrollToLine 共用同一计划（回归 F2：曾两套数组口径不一） */
+const SCROLL_RETRY_DELAYS_MS = [0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000];
 
 let _topBarOverflowCtl: { dispose(): void } | null = null;
 
@@ -762,12 +763,14 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         // 面板已打开时（如全局搜索点击已打开文件）直接滚动；编辑器重建中则按计划重试。
         // 与 init 定位统一走 scheduleDelayedScroll（补上了首块高度检查：此前 view 一出现
         // 就滚动，布局未完成时定位不准）
+        // 回归（F2）：此前此处另传一份内联 9 段延迟数组，与 SCROLL_RETRY_DELAYS_MS
+        // 口径不一致且无注释依据——已统一为同一常量（细粒度版对 init 也安全：
+        // 视图未就绪的早期尝试是空操作，等下一次重试）
         const scrollLine = msg.line;
         scheduleDelayedScroll(
             (view) => {
                 scrollToSourceLine(view, currentLineMap, scrollLine);
             },
-            [0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000],
         );
     } else if (msg.type === "lineMapUpdate") {
         currentLineMap = msg.lineMap;
