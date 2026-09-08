@@ -10,6 +10,7 @@ import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, bu
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
 import { ExpiryWindowMap } from "./utils/expiryWindowMap";
+import { sanitizeBasename } from "./utils/safeBasename";
 import {
     DEFAULT_CODE_BLOCK_MAX_HEIGHT,
     DEFAULT_EDITOR_MAX_WIDTH,
@@ -1023,12 +1024,9 @@ export class MarkdownEditorProvider
             // 验证文件存在
             await vscode.workspace.fs.stat(oldUri);
 
-            // 安全化新文件名：去除非法字符，保留原扩展名
+            // 安全化新文件名：过滤非法字符 + 拦截 Windows 保留设备名（sanitizeBasename 纯函数）
             const oldExt = path.extname(oldAbsPath);
-            const safeBasename = newBasename
-                .replace(/[<>:"/\\|?*\x00-\x1f]/g, '')
-                .replace(/\.+$/, '')
-                .trim();
+            const safeBasename = sanitizeBasename(newBasename);
             if (!safeBasename) {
                 panel.webview.postMessage({ type: 'imageRenameError', id, error: 'Invalid filename' });
                 return;
