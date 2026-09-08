@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findMatches } from "../utils/findMatches";
+import { findMatches, MAX_MATCHES } from "../utils/findMatches";
 
 describe("findMatches：普通模式", () => {
     it("存在多个匹配时 应该 返回全部区间", () => {
@@ -24,6 +24,19 @@ describe("findMatches：普通模式", () => {
     it("空查询 应该 返回空结果", () => {
         const r = findMatches("abc", "", { caseSensitive: false, useRegex: false });
         expect(r.matches).toEqual([]);
+        expect(r.truncated).toBe(false);
+    });
+
+    it("匹配数超上限（MAX_MATCHES）应该 截断并标记 truncated（回归：病态查询无上限冻结主线程）", () => {
+        const text = "a".repeat(MAX_MATCHES + 1000);
+        const r = findMatches(text, "a", { caseSensitive: false, useRegex: false });
+        expect(r.matches).toHaveLength(MAX_MATCHES);
+        expect(r.truncated).toBe(true);
+    });
+
+    it("匹配数未达上限 应该 truncated 为 false", () => {
+        const r = findMatches("foo foo", "foo", { caseSensitive: false, useRegex: false });
+        expect(r.truncated).toBe(false);
     });
 });
 
@@ -58,5 +71,11 @@ describe("findMatches：正则模式", () => {
         expect(r.invalidRegex).toBe(false);
         expect(r.matches.length).toBeGreaterThan(0);
         expect(elapsed).toBeLessThan(500);
+    });
+
+    it("正则匹配数超上限 应该 截断并标记 truncated", () => {
+        const r = findMatches("a".repeat(MAX_MATCHES + 500), "a", { caseSensitive: false, useRegex: true });
+        expect(r.matches).toHaveLength(MAX_MATCHES);
+        expect(r.truncated).toBe(true);
     });
 });

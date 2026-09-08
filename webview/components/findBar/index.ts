@@ -3,7 +3,7 @@ import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../../../shared/constan
 import { createButton } from "@/ui/dom";
 import { IconChevronUp, IconChevronDown, IconX } from "@/ui/icons";
 import { t, kbd } from "@/i18n";
-import { findMatches } from "@/utils/findMatches";
+import { findMatches, MAX_MATCHES } from "@/utils/findMatches";
 
 // TypeScript 类型声明：CSS Custom Highlight API（Chromium 105+ / Electron 22+）
 declare class Highlight {
@@ -87,6 +87,8 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
     let matchRanges: Range[] = [];
     let currentIdx = 0;
     let debounceTimer = 0;
+    /** 本轮搜索是否因达到上限被截断（计数显示「N+」） */
+    let truncated = false;
 
     // ── 高亮更新 ─────────────────────────────────────────
     function updateHighlights() {
@@ -112,6 +114,7 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
     function search(query: string) {
         matchRanges = [];
         currentIdx = 0;
+        truncated = false;
 
         if (!query) {
             count.textContent = "";
@@ -133,10 +136,19 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
                 break;
             }
             for (const m of result.matches) {
+                // 聚合上限：匹配总数封顶 MAX_MATCHES（防单个 Highlight 注册海量 Range）
+                if (matchRanges.length >= MAX_MATCHES) {
+                    truncated = true;
+                    break;
+                }
                 const r = new Range();
                 r.setStart(node, m.start);
                 r.setEnd(node, m.end);
                 matchRanges.push(r);
+            }
+            if (result.truncated || matchRanges.length >= MAX_MATCHES) {
+                truncated = true;
+                break;
             }
         }
 
@@ -149,7 +161,7 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
         }
 
         if (matchRanges.length) {
-            count.textContent = `1/${matchRanges.length}`;
+            count.textContent = `1/${matchRanges.length}${truncated ? "+" : ""}`;
             bar.classList.remove("find-bar--no-results");
             scrollToMatch(0);
         } else {
@@ -162,7 +174,7 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
     function scrollToMatch(idx: number) {
         if (!matchRanges[idx]) { return; }
         currentIdx = idx;
-        count.textContent = `${currentIdx + 1}/${matchRanges.length}`;
+        count.textContent = `${currentIdx + 1}/${matchRanges.length}${truncated ? "+" : ""}`;
         updateHighlights();
         const r = matchRanges[idx];
         const node = r.startContainer;
