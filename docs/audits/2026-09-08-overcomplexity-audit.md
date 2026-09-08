@@ -374,17 +374,20 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 ***
 
-## 执行顺序建议（草案，待全部域返回后定稿）
+## 执行顺序建议（四批，每步独立提交 + verify + 手测）
 
-按「低风险高收益优先、每步独立提交 + verify + 手测」分四批：
-
-**第一批（零风险纯删除，先行清场）**：E8 死机制三件、F8 死代码、P7 三重聚焦保险（保留一层）、E3 死重双生机制（若与第二批 E1/E5 联动需排序，建议先 E8/F8）
+**第一批（零风险清场）✅ 2026-09-08 完成**：
+- ✅ **B2** `.vscodeignore` 补排除 `.github/**`、`test*.md`、`releases/**`、`*.vsix`（VSIX 256→250 文件；test-5000.md 349KB 与 5 个工作流/模板文件不再进包）
+- ✅ **E8** 删 `scrollPanelToLine` / `_pinnedDocuments` / `ExpiryWindowMap.purgeExpired`（+ 其测试）
+- ✅ **F8** 删 `logTableSel`/`setLogTableSel` / `getLineMap` 导出 / `getMarkdownSource` 导出
+- ✅ **P10** 删 TOC `updatePanelPosition` 死重函数（面板位置回归 toc.css 静态声明，零视觉变化）
+- ✅ **B7** `switchToTextEditor` 注释与实现对齐
 
 **第二批（低风险行为修复，各含真实 bug）**：E1 搜索跳转拦截修复、E2 停止改写用户全局配置、F1 配置双载体统一、P2 tableSoftBreak 删插件改上游配置、P3 findBar timer 清理
 
-**第三批（结构性收敛，需手测矩阵）**：E4 保存路径统一、E5 导航机制收敛、E7 图片往返口径对齐、F2 重试数组合一、F4 交互跟踪合一、P4 补全生命周期合一、P5 表格换行 handler 化、E6 双向命令合并
+**第三批（结构性收敛，需手测矩阵）**：E4 保存路径统一、E5/C1 导航机制收敛、E7 图片往返口径对齐、E6/C5 双向命令与快捷键合并、F2 重试数组合一、F4 交互跟踪合一、P4/C4 补全生命周期合一、P5 表格换行 handler 化、C3 生命周期 payload 工厂、C6 visibilitychange 收敛、E3/C2 死重双生机制删除
 
-**第四批（大重构，单独排期）**：P1 标题子系统统一索引、F3 cmObserver 走正路、P6 TOC 折叠键定方案、E9/E10 状态栏与配置广播收敛
+**第四批（大重构，单独排期）**：P1 标题子系统统一索引、F3 cmObserver 走正路、P6 TOC 折叠键定方案、P8 图片 uriMap 单向化、P9 TOC 点击改存 DOM 引用、P7 frontmatter 聚焦层数、E9/E10 状态栏与配置广播收敛、B1 katex 双版本对齐、B3 debugMode 单命令、B4 扩展名单一事实源、B5/B6
 
 ***
 
