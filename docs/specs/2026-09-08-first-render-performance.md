@@ -88,12 +88,47 @@ jsdom 无真实布局/合成，真实浏览器通常快一个数量级，但分�
 
 ## 验收标准
 
-- [ ] 生产构建：`dist/webview.js`（入口）体积显著下降（目标 < 1.5 MB 压缩口径）；`dist/webview.css` < 200 KB
-- [ ] `pnpm run verify` 全绿
-- [ ] 回归：含 mermaid/数学公式/各语言代码块的文档渲染结果与优化前一致（手测清单）
-- [ ] 首帧基准：jsdom `firstRender.bench.ts` 记录优化前后对照
-- [ ] 数学公式：行内公式最终渲染为 KaTeX；块级公式预览正常；编辑器内 $…$ 输入规则、toolbar 数学按钮、序列化往返（`$...$`/`$$...$$`）保持
-- [ ] Mermaid：代码块预览、缩放、深/浅主题切换重绘保持
+- [x] 生产构建：`dist/webview.js`（入口）体积显著下降（目标 < 1.5 MB 压缩口径）——实测 **1036.3 KB**
+- [x] `dist/webview.css` < 200 KB——实测 **74.7 KB**
+- [x] `pnpm run verify` 全绿（typecheck + 40 文件 / 303 测试 + 生产构建）
+- [ ] 回归：含 mermaid/数学公式/各语言代码块的文档渲染结果与优化前一致（自动化已绿；行为一致性待手测确认）
+- [x] 首帧基准：jsdom `firstRender.bench.ts` 前后对照已记录（create 耗时同量级、测试模块求值 3.31s→2.38s；真实首屏收益来自 6.2MB→1.4MB 负载）
+- [x] 数学公式：行内公式渲染为 KaTeX（NodeView 异步）；块级公式预览走异步契约；$…$ 输入规则、toolbar 数学按钮（FeaturesCtx 标志）、序列化往返——5 条回归测试覆盖
+- [ ] Mermaid：代码块预览、缩放、深/浅主题切换重绘（代码路径已惰性化，行为待手测确认）
+
+## 实施记录（2026-09-08）
+
+### 产出对比
+
+| 指标 | 优化前 | 优化后 | 提交 |
+| :--- | :--- | :--- | :--- |
+| `dist/webview.js`（入口，压缩） | 6240.9 KB 单文件 | **1036.3 KB** | `279fcb5` `0990fff` `9428a4e` |
+| 首屏急切闭包 JS（压缩，含共享 chunk） | ~6.2 MB | **1441 KB**（6 文件） | 同上 |
+| `dist/webview.css` | 1500.0 KB | **74.7 KB** | `9428a4e` |
+| KaTeX 样式（惰性，首个数学渲染时 <link> 注入） | 混在入口 CSS | 1425.5 KB 独立 `katex-styles.css` | `9428a4e` |
+| VSIX | 2.83 MB（23 文件） | 2.91 MB（255 文件，chunk 化） | — |
+
+### 关键实现决策（偏离原方案的记录）
+
+1. **KaTeX 样式不进 JS import 图**：esbuild 会把动态 import 的 CSS 同时复制进入口 CSS 与惰性 chunk（最小实验实证）——改为独立 CSS 入口 `katex-styles`，运行时用 `import.meta.url` 解析注入 `<link>`（与 CSP cspSource 同源）。
+2. **vendor 不 import `codeBlockConfig`**：pnpm 下 `@milkdown/components` 存在多个 peer 变体实例（根 `@milkdown/kit` 与 crepe 内部 kit 解析到不同实例），其 SliceType symbol 分裂——跨上下文 `ctx.update(codeBlockConfig.key)` 抛 contextNotFound（探针实证：`isInjected=false` 但上游 latex 同链路成功）。块级公式预览改由 editor.ts 的 `renderPreview` 统一接管（与 mermaid 同路径），vendor 仅导出 `renderLatexPreview`。
+3. **katex stub 覆盖两个上游死路径**：@milkdown/crepe index 内联 latex feature + micromark-extension-math 的 html.js（remark-math 的 HTML 输出路径，epytor 只用于 mdast 解析）——均已逐行核实模块作用域零 katex 调用，stub 被调用时显式抛错（宁可暴露不静默）。
+4. **直接依赖对齐 crepe 7.22.1**：katex ^0.18.0、remark-math ^6.0.0、unist-util-visit ^5.0.0、vue ^3.5.20（vendor 模块的显式依赖声明）。
+5. **esbuild 构建前清理 dist**：chunk 文件名随内容哈希变化，esbuild 不清空 outdir，旧 chunk 会残留并混进 VSIX。
+
+### 回归测试
+
+- `webview/__tests__/latexFeature.test.ts`（5 条）：$…$ 解析与序列化往返、$$…$$ 块公式往返、ToggleLatex 双向切换、katex 加载未决时源码占位 + 就绪后按 token 只渲染最新值、样式 <link> 幂等。
+- 全量 `pnpm test`：40 文件 / 303 测试全绿（含全部既有回归）。
+
+### 手测清单
+
+1. 打开含 mermaid 代码块的文档 → 预览、缩放、深/浅主题切换重绘正常
+2. 打开含行内/块级数学公式的文档 → 公式渲染为 KaTeX；编辑器中输入 `$…$` 转公式、toolbar 数学按钮可用
+3. 打开含 cpp/php/vue 等语言的代码块文档 → 语法高亮正常（chunk 按需加载）
+4. 首次打开感受：中等/大文档打开时间显著缩短
+5. 查找替换、图片上传、表格编辑、折叠、TOC、frontmatter 面板——全功能回归抽查
+6. 中文界面下数学预览 loading 等无英文原文回归
 
 ## 不做的事（明确边界）
 

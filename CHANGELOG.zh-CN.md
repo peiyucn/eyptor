@@ -33,6 +33,7 @@
 ### 变更
 
 * **Milkdown** 升级 7.22.0 → 7.22.1（行内代码 mark 修复 + dompurify 安全升级）
+* **打开 Markdown 文件显著提速**：编辑器负载改为按需加载（Mermaid、KaTeX、各语言语法支持仅在用到时加载），打开后的收尾工作不再阻塞首帧
 * **列表键盘行为对齐官方默认**：空项行首 Backspace 删除该项、非空项行首 Backspace 并入上一项，编号自动重排
 * **`epytor.tableWrapMode` 简化为两档**（wrap / nowrap）：旧值自动迁移（normal/aggressive → wrap，none → nowrap）
 

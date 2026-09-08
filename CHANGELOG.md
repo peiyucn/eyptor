@@ -33,6 +33,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 ### Changed
 
 - **Milkdown** upgraded 7.22.0 → 7.22.1 (inline code mark fix + dompurify security update)
+- **Opening a Markdown file is significantly faster**: the editor payload now loads on demand (Mermaid, KaTeX, and per-language syntax support load only when used) and post-open bookkeeping no longer blocks the first frame
 - **List keyboard behavior** now follows the official defaults: Backspace at the start of an empty item deletes it, on a non-empty item merges into the previous one, and numbering reflows automatically
 - **`epytor.tableWrapMode` simplified** from three modes to two (`wrap` / `nowrap`); old values migrate automatically (normal/aggressive → wrap, none → nowrap)
 
