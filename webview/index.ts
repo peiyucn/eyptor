@@ -593,6 +593,10 @@ const restoreEditorFocus = () => {
     if (!_isActivePanel) return; // 非激活面板不抢焦点
     requestAnimationFrame(() => {
         if (!_isActivePanel) return;
+        // 文档未持有焦点时不抢（回归：从资源管理器树点击切换文件时焦点在侧边栏，
+        // 无条件 view.focus() 与 VS Code 焦点管理互抢 → 狂闪；tab 点击时 VS Code
+        // 已把焦点交给 webview，document.hasFocus() 为 true，恢复路径不受影响）
+        if (!document.hasFocus()) return;
         const view = getEditorView();
         if (view && !view.hasFocus()) {
             // 面板输入框有焦点时不抢（用户可能正在编辑 frontmatter/查找框）
