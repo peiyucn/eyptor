@@ -6,7 +6,7 @@ import { getNonce } from "./utils/getNonce";
 import { ZH_CN_WEBVIEW } from "./i18n/webviewTranslations";
 import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
 import { computeLineMap } from "./utils/lineMap";
-import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter, extractImageSyntaxes } from "./utils/contentTransform";
+import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter, extractImageSyntaxes, rebuildImageSyntax } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
 import { ExpiryWindowMap } from "./utils/expiryWindowMap";
@@ -894,8 +894,9 @@ export class MarkdownEditorProvider
             ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const uriMap = this._imageUriMaps.get(uriKey) ?? new Map<string, string>();
         this._imageUriMaps.set(uriKey, uriMap);
-        // 逐图替换：extractImageSyntaxes 的 src 捕获支持空格与嵌套括号
-        // （回归：旧正则 [^)\s"]+ 在空格/括号处截断，显示破裂且保存往返改写畸形内容）
+        // 逐图替换：extractImageSyntaxes 的 src 捕获支持空格与嵌套括号、title 单独捕获
+        // （回归①：旧正则 [^)\s"]+ 在空格/括号处截断，显示破裂且保存往返改写畸形内容；
+        //  回归②：src 吞 title 致带引号路径 404 图片不显示，rebuildImageSyntax 只换 src 保 title）
         let result = content;
         for (const m of extractImageSyntaxes(content)) {
             if (/^(https?:|data:|vscode-resource:|vscode-webview-)/.test(m.src)) { continue; }
@@ -910,7 +911,7 @@ export class MarkdownEditorProvider
                 }
                 const webviewUri = panel.webview.asWebviewUri(vscode.Uri.file(absPath)).toString();
                 uriMap.set(webviewUri, m.src);
-                result = result.split(m.fullMatch).join(`![${m.alt}](${webviewUri})`);
+                result = result.split(m.fullMatch).join(rebuildImageSyntax(m, webviewUri));
             } catch {
                 // 解析失败：原样保留（不登记 uriMap）
             }

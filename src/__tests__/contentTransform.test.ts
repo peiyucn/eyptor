@@ -5,6 +5,7 @@ import {
     convertTableBrForDisplay,
     buildContentWithFrontmatter,
     extractImageSyntaxes,
+    rebuildImageSyntax,
 } from "../../src/utils/contentTransform";
 import { computeLineMap } from "../../src/utils/lineMap";
 
@@ -253,7 +254,7 @@ describe("buildContentWithFrontmatter", () => {
 describe("extractImageSyntaxes", () => {
     it("常规相对路径 应该 完整捕获", () => {
         const [m] = extractImageSyntaxes("![alt](./img/a.png)");
-        expect(m).toEqual({ fullMatch: "![alt](./img/a.png)", alt: "alt", src: "./img/a.png" });
+        expect(m).toEqual({ fullMatch: "![alt](./img/a.png)", alt: "alt", src: "./img/a.png", title: null });
     });
 
     it("含空格路径 应该 完整捕获（回归：旧正则 [^)\\s\"]+ 在空格处截断，显示破裂 + 保存往返改写畸形内容）", () => {
@@ -264,6 +265,30 @@ describe("extractImageSyntaxes", () => {
     it("含括号路径（一层嵌套） 应该 完整捕获（回归：旧正则在 ) 处截断）", () => {
         const [m] = extractImageSyntaxes("![alt](my file (v2).png)");
         expect(m.src).toBe("my file (v2).png");
+    });
+
+    it("双引号 title 应该 与 src 分离捕获（回归：src 贪吃 title，路径带引号解析必然 404，图片不显示）", () => {
+        const [m] = extractImageSyntaxes('![alt](./img/a.png "ratio:0.36")');
+        expect(m.src).toBe("./img/a.png");
+        expect(m.title).toBe("ratio:0.36");
+    });
+
+    it("单引号 title 应该 与 src 分离捕获", () => {
+        const [m] = extractImageSyntaxes("![alt](./img/a.png 'ratio:0.36')");
+        expect(m.src).toBe("./img/a.png");
+        expect(m.title).toBe("ratio:0.36");
+    });
+
+    it("含空格路径 + title 应该 两者都正确捕获", () => {
+        const [m] = extractImageSyntaxes('![alt](my image.png "ratio:0.5")');
+        expect(m.src).toBe("my image.png");
+        expect(m.title).toBe("ratio:0.5");
+    });
+
+    it("含括号路径 + title 应该 两者都正确捕获", () => {
+        const [m] = extractImageSyntaxes('![alt](my file (v2).png "ratio:0.5")');
+        expect(m.src).toBe("my file (v2).png");
+        expect(m.title).toBe("ratio:0.5");
     });
 
     it("同一行多个图片 应该 各自独立捕获", () => {
@@ -280,5 +305,25 @@ describe("extractImageSyntaxes", () => {
 
     it("无图片 应该 返回空数组", () => {
         expect(extractImageSyntaxes("# 正文\n\n无图")).toEqual([]);
+    });
+});
+
+describe("rebuildImageSyntax", () => {
+    it("应该 仅替换 src 并保留 alt 与 title（回归：重建丢 title 导致 ratio 宽高比失效）", () => {
+        const [m] = extractImageSyntaxes('![alt](./img/a.png "ratio:0.36")');
+        expect(rebuildImageSyntax(m, "vscode-webview-resource://x/a.png"))
+            .toBe('![alt](vscode-webview-resource://x/a.png "ratio:0.36")');
+    });
+
+    it("单引号 title 应该 原样保留引号风格", () => {
+        const [m] = extractImageSyntaxes("![alt](./img/a.png 'ratio:0.36')");
+        expect(rebuildImageSyntax(m, "vscode-webview-resource://x/a.png"))
+            .toBe("![alt](vscode-webview-resource://x/a.png 'ratio:0.36')");
+    });
+
+    it("无 title 应该 不加多余引号", () => {
+        const [m] = extractImageSyntaxes("![alt](./img/a.png)");
+        expect(rebuildImageSyntax(m, "vscode-webview-resource://x/a.png"))
+            .toBe("![alt](vscode-webview-resource://x/a.png)");
     });
 });
