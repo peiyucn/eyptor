@@ -280,21 +280,53 @@ mousedown 已 preventDefault+stopPropagation 防夺焦，click 里仍叠三层�
 - **vitest 配置**：extension/webview 双 project + 分模块覆盖率底线（AGENTS 已编码）+ bench 独立配置——与测试规范一致
 - **package.json**：customEditors 已在 `1f6c8fa` 简化为 priority:default；命令/快捷键结构问题归 E6/E10
 
-## 五、跨切面状态与消息（主会话补审）
+## 五、跨切面状态与消息（后台审计域已返回，并入本报告）
 
-全量消息面盘点：`shared/messages.ts` 共 35 种消息（ToWebviewMessage 21 + ToExtensionMessage 14）。多数是请求-响应配对的固有形态；重叠部分已由 E4（内容拉取重复）、E5（行号三通道）覆盖。本域独立发现：
+全量消息面盘点：`shared/messages.ts` 共 31 种（ToExtension 14 + ToWebview 17）；6 对请求-响应中**注册表机制竟有 3 套**（ContentRequestCoordinator + PendingRequestRegistry×3 + 两处手写 Map+setTimeout）。为补偿「另一侧无法得知状态」而存在的消息多数必要（panelActiveState/requestContent/wordCount/lineMapUpdate），只有 requestSwitchToTextEditor 与行号多通道属于绕路。
 
-### ⚪ C1 · init 与 revert 消息同构双类型：webview 侧同一个 handler 处理，类型仅差一个可选字段
+### 🔴 C1 · 同一「行号」目标八通道：4 生产者 × 2 存储 × 2 TTL × 5 投递点 × 4 消费点 + 抑制窗口（E1+E5 的跨切面全景，两域独立确认）
 
-**位置**：`shared/messages.ts:46-48`；`webview/index.ts:713-718`
+**位置**：`src/extension.ts:50-62,67-110,227-230`；`src/MarkdownEditorProvider.ts:29-32,69,72-75,83-94,123-137,146-161,312-365,500-521`；`webview/index.ts:72,728-742,761-771`
 
-**当前机制**：`init` = {content, active?, lineMap?, scrollToLine?, frontmatter?, imageUriMap?}，`revert` = 同样的载荷减去 active/scrollToLine——两个类型、一份载荷；webview 侧 `if (msg.type === "init" || msg.type === "revert")` 合流进同一 handler，再在内部按 type 分流三个 if。
+生产者 4 个（revealLine 拦截 / onDidChangeActiveTextEditor / switchToPreview / openFile 链接）、存储 2 套（pending Map 5s + 全局兜底 10s + 抑制窗口 1.5s）、投递 5 点（直发不删表项 / ready / viewState 立即 / viewState 1s 复查 / 死代码 scrollPanelToLine）、webview 消费 4 点（init 与消息两套重试计划 / scrollY 恢复 / visibilitychange 恢复）。E1（广播吞掉非 md 搜索跳转）与 E5（六机制收敛）均落在这个全景里，**简化方案合并执行**：删全局兜底+10s TTL、删 viewState 立即/延迟消费、删广播与 tab 扫描兜底、revealRange 无条件执行、两套重试计划合一、删 scrollPanelToLine——只保留 `_pendingNavigations` 单存储 + ready 消费 + initialized 直发（发后删除）。
 
-**为何过度**（④重复路径的小型实例）：类型层面的差异没有行为语义——真正驱动行为的三个 if（active 设置 / window.focus / scrollToLine）都可改为「字段存在即生效」或由 Extension 侧决定。
+**风险**：中。手测时序矩阵（已开/未开/未初始化）×（revealLine 先/后于激活）× 多 group。
 
-**简化方案**：合并为单一 `loadDocument` 消息（active/scrollToLine 可选字段语义化：`focusOnLoad`/`scrollToLine`），webview 删三个 type 分流 if；或至少把两个类型定义合并为带 `isInit` 判别——后者收益太小，建议前者。
+### 🔴 C2 · onDidChangeActiveTextEditor + ExpiryWindowMap 抑制窗口双生机制（与 E3 独立确认，未修复）
 
-**风险**：低。纯消息契约重构，行为等价；messaging.test.ts 需同步。
+与 E3 同结论，补充一个关键对照：抑制窗口的存在恰与 switchToPreview 的**刻意捕获**行为相反（同一「离开/进入文本编辑器时的行号」关注点，一边故意记（extension.ts:226-230）、一边专门拦（extension.ts:56 + provider:593））。合并执行 E3 的删除方案。
+
+### 🟠 C3 · init/revert 同构消息：Provider 三处 payload 构造逐字重复 + webview 冗余分支重查
+
+**位置**：`shared/messages.ts:45-48`；`src/MarkdownEditorProvider.ts:479,510-520,790-796`；`webview/index.ts:698-744`
+
+init 与 revert 的语义差异真实存在（init=恢复滚动/抢焦点，revert=内容重载不抢焦点不滚），**不建议合并类型**；但 Extension 侧把几乎相同的 payload 字面量写了**三遍**（watcher revert :479 / ready→init :510-520 / revertCustomDocument :790-796），webview 侧 handleEditorLifecycleMessage 已收窄类型后又在函数体内重查 `msg.type === "init" || msg.type === "revert"`、再按 type 分三处 if。
+
+**简化方案**：Provider 提取 `_buildLifecyclePayload(uriKey, content, opts)` 单工厂（三处调用改一行）；index.ts 删冗余重查，init-only 分支改为对解构出的 `msg.active/msg.scrollToLine` 判空。**风险**：极低。
+
+### 🟠 C4 · 请求-响应注册表三套机制并存 + pathSuggestions 单消息双分发
+
+**位置**：`webview/utils/pendingRequest.ts:25-97`；`webview/index.ts:148-158,821-822`；`webview/components/pathLink/pathComplete.ts:20,127-147`；`webview/components/imageView/imgPathComplete.ts:16-38,46-55,137-159`
+
+PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，index.ts 3 实例），但路径补全两条链仍手写等价且更弱的 Map + 手写 id + 手写 setTimeout（P4 的镜像问题在**记账层**的具体形态）；index.ts 把同一 pathSuggestions 回包分发给两个注册表各查一遍；PATH_* 三对常量双份。
+
+**简化方案**：pathComplete/imgPathComplete 改用 PendingRequestRegistry<T>；三对常量收编 shared/constants.ts；双分发随注册表合一消失。**风险**：低（相关测试随接口微调）。
+
+### ⚪ C5 · Cmd+Shift+M 快捷键双实现：webview keydown + keybinding 命令两条路径，requestSwitchToTextEditor 往返只服务菜单
+
+**位置**：`package.json:74-79`；`webview/index.ts:561-568,755-760`；`src/extension.ts:184-214`
+
+同一手势两条实现：webview keydown 直接发 notifySwitchToTextEditor；package.json keybinding → 命令 → requestSwitchToTextEditor 往返。webview 监听器无条件 preventDefault → 焦点在 webview 时 keybinding 永不触发——命令路径实际只服务菜单/命令面板。
+
+**简化方案**：二选一删其一（建议删 package.json keybinding，webview keydown 已覆盖聚焦场景；菜单仍走命令往返）。**风险**：低（手测三入口行号定位一致）。
+
+### ⚪ C6 · visibilitychange 处理器与其注释的诊断结论自相矛盾（「visibility 恒 visible」却仍写滚动恢复）
+
+**位置**：`webview/index.ts:575-582,584-630,733-741`
+
+注释自证 VS Code 切 tab 时 visibilitychange 不触发，处理器却仍在滚滚动位置并调 restoreEditorFocus；标题写「不滚动」其下却 scrollTo。滚动恢复三条路径中仅 init 路径有交互守卫。
+
+**简化方案**：删 visibilitychange 处理器（或仅留 restoreEditorFocus 删滚动段）；滚动恢复收敛为唯一 restoreScrollY(target) 走 scheduleDelayedScroll；修正注释。**风险**：低（手测重启恢复标签页滚动位置、最小化恢复）。
 
 ### 判定为必要复杂度（跨切面视角）
 
