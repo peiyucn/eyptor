@@ -53,11 +53,11 @@ import { initFindBar } from "./components/findBar";
 import { initToc } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
 import { editorViewCtx } from "@milkdown/kit/core";
-import { applyTooltip } from "./ui/tooltip";
-import { IconMaximize2 } from "./ui/icons";
 import { t } from "./i18n";
 import { createFrontmatterPanel, type FrontmatterPanelHandle } from "./components/frontmatterPanel";
 import { initTopBarOverflow } from "./components/topBarOverflow";
+import { enhanceCodeBlocks } from "./components/codeBlockEnhance";
+import { setupTopBarBrand, setupTopBarTooltips } from "./components/topBar/topBarDecorations";
 
 // ─── 语义常量（*_MS 命名；回归：超时/防抖裸数字散落各处理函数） ─────────────
 const RENAME_IMAGE_TIMEOUT_MS = 15000;
@@ -66,7 +66,6 @@ const GET_PROJECT_IMAGES_TIMEOUT_MS = 10000;
 const MARK_DIRTY_DEBOUNCE_MS = 300;
 const TOC_REFRESH_DEBOUNCE_MS = 800;
 const SCROLL_SAVE_DEBOUNCE_MS = 200;
-const COPY_FEEDBACK_RESET_MS = 1500;
 /** 延迟定位/恢复滚动的重试计划（Milkdown 渲染 + 浏览器布局需要时间） */
 const SCROLL_RETRY_DELAYS_MS = [300, 600, 1100, 2000];
 
@@ -531,187 +530,6 @@ document.addEventListener("paste", (e) => {
         );
 });
 
-
-// ── 代码块复制 + 全屏 ───────────────────────────────────────────────────────
-
-function enhanceCodeBlocks(container: HTMLElement): void {
-    // ── 复制按钮：点击后弹 ✔ 提示 ────────────────────────────────────
-    container.addEventListener('click', (e) => {
-        const btn = (e.target as Element).closest('.copy-button') as HTMLElement | null;
-        if (!btn) return;
-        setTimeout(() => {
-            const tip = applyTooltip(btn, '✔ ' + t('Copied!'));
-            tip.show();
-            setTimeout(() => tip.setText(t('Copy Code')), COPY_FEEDBACK_RESET_MS);
-        }, 100);
-    });
-
-    // ── 全屏按钮（我们的自定义功能，不是 Crepe 的，直接创建）─────────────
-    const addFullscreenBtn = (block: Element): void => {
-        const copyBtn = block.querySelector('.copy-button') as HTMLElement | null;
-        if (copyBtn && !copyBtn.dataset.tip) { copyBtn.dataset.tip = '1'; applyTooltip(copyBtn, t('Copy Code')); }
-        const previewBtn = block.querySelector('.preview-toggle-button') as HTMLElement | null;
-        if (previewBtn && !previewBtn.dataset.tip) { previewBtn.dataset.tip = '1'; applyTooltip(previewBtn, t('Toggle preview')); }
-
-        if (block.querySelector('.epytor-fullscreen-btn')) return;
-        const btnGroup = block.querySelector('.tools-button-group');
-        if (!btnGroup) return;
-
-        const fsBtn = document.createElement('button');
-        fsBtn.className = 'epytor-fullscreen-btn';
-        fsBtn.innerHTML = IconMaximize2;
-        applyTooltip(fsBtn, t('View Fullscreen'));
-        fsBtn.addEventListener('mousedown', (ev) => {
-            ev.preventDefault(); ev.stopPropagation();
-            const cmEditor = block.querySelector('.cm-editor') as HTMLElement | null;
-            const cmHost = block.querySelector('.codemirror-host') as HTMLElement | null;
-            const previewPanel = block.querySelector('.preview-panel') as HTMLElement | null;
-            if (!cmEditor) return;
-            const langBtn = block.querySelector('.language-button');
-            const lang = langBtn?.textContent?.trim() || '';
-
-            const lb = document.createElement('div');
-            lb.className = 'epytor-fs-lightbox';
-            const header = document.createElement('div');
-            header.className = 'epytor-fs-header';
-            const langSpan = document.createElement('span');
-            langSpan.className = 'epytor-fs-lang';
-            langSpan.textContent = lang;  // 安全注入，避免 XSS
-            const closeBtn = document.createElement('button');
-            closeBtn.className = 'epytor-fs-close';
-            closeBtn.textContent = '✕';
-            header.appendChild(langSpan);
-            header.appendChild(closeBtn);
-            const body = document.createElement('div');
-            body.className = 'epytor-fs-body';
-            lb.appendChild(header);
-            lb.appendChild(body);
-            document.body.appendChild(lb);
-            body.appendChild(cmEditor);
-            if (previewPanel) body.appendChild(previewPanel);
-
-            const close = () => {
-                if (cmHost && cmEditor.parentElement !== cmHost) cmHost.appendChild(cmEditor);
-                if (previewPanel && previewPanel.parentElement !== block) block.appendChild(previewPanel);
-                if (document.body.contains(lb)) document.body.removeChild(lb);
-                document.removeEventListener('keydown', onKey);
-            };
-            const onKey = (ke: KeyboardEvent) => {
-                if (ke.key === 'Escape') { ke.preventDefault(); close(); }
-            };
-            document.addEventListener('keydown', onKey);
-            lb.querySelector('.epytor-fs-close')!.addEventListener('mousedown', (me) => { me.preventDefault(); close(); });
-            lb.addEventListener('mousedown', (me) => { if (me.target === lb) close(); });
-        });
-        btnGroup.appendChild(fsBtn);
-    };
-
-    // 初次 + 后续代码块都加上全屏按钮
-    const scanBlocks = () => container.querySelectorAll('.milkdown-code-block').forEach(addFullscreenBtn);
-    requestAnimationFrame(scanBlocks);
-    new MutationObserver(() => requestAnimationFrame(scanBlocks))
-        .observe(container, { childList: true, subtree: true });
-
-    // 语言搜索框键盘导航：{activeIndex} 显式状态（WeakMap 按输入框隔离）。
-    // 回归：以 DOM .focused class 为唯一状态源——输入过滤重渲染后高亮丢失、ArrowDown/Up
-    // 从头开始；无 Escape 取消；Enter 无高亮时静默无操作
-    const navStates = new WeakMap<HTMLElement, { activeIndex: number }>();
-    container.addEventListener('keydown', (e) => {
-        const input = e.target as HTMLElement;
-        if (!input.closest('.search-box')) return;
-        const list = input.closest('.list-wrapper')?.querySelector<HTMLElement>('.language-list');
-        if (!list) return;
-        const items = list.querySelectorAll<HTMLElement>('.language-list-item');
-        if (items.length === 0) return;
-        const state = navStates.get(input) ?? { activeIndex: -1 };
-        navStates.set(input, state);
-        const clamp = (i: number) => Math.max(-1, Math.min(i, items.length - 1));
-        const apply = () => {
-            items.forEach(el => el.classList.remove('focused'));
-            const el = items[state.activeIndex];
-            if (el) {
-                el.classList.add('focused');
-                el.scrollIntoView({ block: 'nearest' });
-            }
-        };
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            state.activeIndex = clamp(state.activeIndex + 1);
-            apply();
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            state.activeIndex = clamp(state.activeIndex - 1);
-            apply();
-        } else if (e.key === 'Enter') {
-            e.preventDefault();
-            // 无高亮时选第一项（回归：此前静默无操作）
-            const target = items[Math.max(state.activeIndex, 0)];
-            target?.click();
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            state.activeIndex = -1;
-            input.blur(); // 取消搜索
-        }
-    });
-}
-
-/** 为 Crepe top-bar 按钮添加自定义 tooltip（i18n 翻译，无快捷键） */
-function setupTopBarTooltips(container: HTMLElement): void {
-    const TOOLTIPS = [
-        t('Table of Contents'), // toc
-        t('Undo'),             // history: undo
-        t('Redo'),             // history: redo
-        t('Bold'),             // formatting: bold
-        t('Italic'),           // formatting: italic
-        t('Strikethrough'),    // formatting: strikethrough
-        t('Inline Code'),      // formatting: code
-        t('Clear Formatting'), // formatting: clear-format
-        t('Bullet List'),      // list: bullet
-        t('Ordered List'),     // list: ordered
-        t('Task List'),        // list: task
-        t('Insert/Edit Link'), // insert: link
-        t('Insert Image'),     // insert: image
-        t('Insert Table'),     // insert: table
-        t('Code Block'),       // block: code-block
-        t('Math Formula'),     // block: math
-        t('Blockquote'),       // more: quote
-        t('Horizontal Rule'),  // more: hr
-        t('Settings'),         // settings
-    ];
-
-    const applyAll = () => {
-        const topBar = container.querySelector('.milkdown-top-bar');
-        if (!topBar) return;
-        const items = topBar.querySelectorAll<HTMLElement>('.top-bar-item');
-        items.forEach((item, idx) => {
-            if (item.dataset.tip) return;
-            const text = TOOLTIPS[idx];
-            if (text) {
-                item.dataset.tip = '1';
-                applyTooltip(item, text, { placement: 'below' });
-            }
-        });
-    };
-
-    requestAnimationFrame(applyAll);
-    new MutationObserver(() => requestAnimationFrame(applyAll))
-        .observe(container, { childList: true, subtree: true });
-}
-
-/** 将 EPYTOR🦖 品牌标识注入为 top-bar 真实 flex 子元素（替代 CSS ::after） */
-function setupTopBarBrand(container: HTMLElement): void {
-    const inject = () => {
-        const topBar = container.querySelector('.milkdown-top-bar');
-        if (!topBar || topBar.querySelector('.epytor-brand')) return;
-        const brand = document.createElement('span');
-        brand.className = 'epytor-brand';
-        brand.textContent = 'EPYTOR🦖';
-        topBar.insertBefore(brand, topBar.firstChild);
-    };
-    requestAnimationFrame(inject);
-    new MutationObserver(() => requestAnimationFrame(inject))
-        .observe(container, { childList: true, subtree: true });
-}
 
 // Cmd/Ctrl+F：打开查找栏（预填当前选区文字）
 window.addEventListener("keydown", (e) => {

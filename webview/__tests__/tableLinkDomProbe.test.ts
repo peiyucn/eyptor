@@ -74,7 +74,11 @@ describe("表格内自动链接 DOM 形态诊断", () => {
         expect(td).not.toBeNull();
         expect(td!.closest(".milkdown")).not.toBeNull();
         expect(td!.closest(".ProseMirror")).not.toBeNull();
-        // 回归：旧前缀类名不存在（若上游未来加回包装层需同步调整规则）
+        // 基础渲染无 .milkdown-table-block 包装层（7.22.1 表格体直接在 .ProseMirror 下）。
+        // 注意：这不与 style.test 中「.milkdown-table-block .cell-handle」规则矛盾——
+        // cell-handle 是行/列选中时条件挂载的 Vue overlay（其祖先链含 .milkdown-table-block），
+        // 基础渲染阶段必然不存在；该 overlay 路径在真实浏览器手测已验证（v1.2.0 手测清单）。
+        // 若上游未来给表格体加回包装层，需同步调整本断言与断行规则前缀。
         expect(document.querySelector(".milkdown-table-block")).toBeNull();
     });
 });
