@@ -10,8 +10,25 @@ interface HeadingEntry {
     level: number;
     text: string;
     pos: number;
-    /** 折叠状态的稳定键（level:text，与文档位置无关——pos 会随编辑漂移且跨文档复用） */
+    /** 折叠状态的稳定键（level:text#序号，与文档位置无关——pos 会随编辑漂移） */
     key: string;
+}
+
+/** 折叠键：同名同级标题按「第几次出现」区分（回归 P6：此前 level:text 让同一文档
+ * 两个「## 安装」共用一个折叠开关；文档身份维度不需要——每个文档独立 webview 状态） */
+export function headingFoldKey(level: number, text: string, nth: number): string {
+    return `${level}:${text}#${nth}`;
+}
+
+/** 为标题序列分配折叠键（纯函数，供测试；输入只需 level/text） */
+export function assignFoldKeys<T extends { level: number; text: string }>(headings: T[]): (T & { key: string })[] {
+    const seen = new Map<string, number>();
+    return headings.map((h) => {
+        const base = `${h.level}:${h.text}`;
+        const nth = (seen.get(base) ?? 0) + 1;
+        seen.set(base, nth);
+        return { ...h, key: headingFoldKey(h.level, h.text, nth) };
+    });
 }
 
 const TOC_WIDTH = 200;
@@ -20,14 +37,17 @@ const TOC_MAX_WIDTH = 500;
 
 /** 从 EditorView 提取所有 heading 节点 */
 function getHeadings(view: EditorView): HeadingEntry[] {
-    const headings: HeadingEntry[] = [];
+    const headings: Omit<HeadingEntry, "key">[] = [];
     view.state.doc.nodesBetween(0, view.state.doc.content.size, (node, pos) => {
         if (node.type.name === "heading") {
-            const level = node.attrs["level"] as number;
-            headings.push({ level, text: node.textContent, pos, key: `${level}:${node.textContent}` });
+            headings.push({
+                level: node.attrs["level"] as number,
+                text: node.textContent,
+                pos,
+            });
         }
     });
-    return headings;
+    return assignFoldKeys(headings);
 }
 
 /** 根据 heading 在文档中的位置找到对应的标题 DOM 元素 */
@@ -131,13 +151,15 @@ export function initToc(getEditorView: () => EditorView | null): {
     }
     panel.style.width = `${panelWidth}px`;
 
-    // ── 折叠状态（稳定键：level:text；回归——曾以文档 pos 为键，跨文档恢复时
-    // 新文档标题被旧 pos 集合错误折叠，且编辑漂移后折叠指示错位） ──────────────
+    // ── 折叠状态（稳定键：level:text#序号；回归——曾以文档 pos 为键，跨文档恢复时
+    // 新文档标题被旧 pos 集合错误折叠，且编辑漂移后折叠指示错位；再回归 P6——仅
+    // level:text 时同名同级标题共用一个开关） ────────────────────────────────
     const collapsedHeadings = new Set<string>();
     if (Array.isArray(savedState?.tocCollapsed)) {
         for (const key of savedState.tocCollapsed) {
-            // 仅接受字符串键；旧版本持久化的数字 pos 数据一律丢弃（一次性迁移）
-            if (typeof key === "string") collapsedHeadings.add(key);
+            // 仅接受当前格式的字符串键；旧版本持久化的数字 pos 与 level:text 键
+            // 一律丢弃（一次性迁移：老键不会匹配新键，留着只会被反复持久化）
+            if (typeof key === "string" && key.includes("#")) collapsedHeadings.add(key);
         }
     }
     updateCollapseBtn();

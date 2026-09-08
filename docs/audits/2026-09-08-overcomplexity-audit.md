@@ -254,15 +254,15 @@ serializeCleanMarkdown 全是 split/map/replace 纯字符串操作，无 throw �
 
 **风险**：中。表格序列化是历史 bug 高发区，必须逐项过 tableBrRoundtrip/tableSoftBreak 测试并手测空表/转义管道/多行单元格；分两步：先 handler 化③，观察稳定后再议④。
 
-### ⚪ P6 · TOC 折叠键 level:text 与文档折叠 pos 键两套体系；level:text 键跨文档复用（同名同级标题共享折叠态、折叠状态跨文档继承）
+### ⚪ P6 · TOC 折叠键 level:text 让同一文档同名同级标题共享折叠态 ✅ 2026-09-08 已修
 
 **位置**：`webview/components/toc/index.ts:13-14,27,147-155,195-202`；`webview/headingFoldPlugin.ts:20`
 
-**为何过度**（①补偿性机制）：level:text 键是补偿「pos 键跨文档误折叠」旧 bug 的方案，但补偿引入新问题：同一文档两个同名同级标题共享一个折叠开关；状态无文档身份维度——文档 A 折叠的「## 简介」会静默折叠文档 B 的同名标题。
+**为何过度**（①补偿性机制）：level:text 键是补偿「pos 键随编辑漂移」的方案，但补偿引入新问题：同一文档两个同名同级标题共享一个折叠开关。
 
-**简化方案**：二选一：a) 折叠态仅会话内保留、不写 setState（删持久化，彻底消除跨文档继承）；b) 若要持久化，键加入文档身份（init 消息带 docUri，键 = `${docId}:${idx}:${level}:${text}`）。文件头写明：TOC 折叠与文档折叠是独立功能、不合并。
+**复核更正**：本条原写「折叠状态跨文档继承」——**不成立**。webview 状态是 `vscode.setState()`（每文档独立 webview，`supportsMultipleEditorsDocument: false`），文档 A 的折叠集合不会进文档 B。真实问题只有「同文档同名同级共享」这一条。
 
-**风险**：低。a 方案是删代码（失去「跨会话记住 TOC 折叠」这一未在 README 承诺的行为）。
+**实际修复**：键加「第几次出现」序号（`level:text#nth`，`assignFoldKeys` 纯函数 + 4 例测试）；恢复持久化状态时丢弃旧格式键（一次性迁移）。未采用「折叠态仅会话内保留」方案——折叠状态记住是本仓库既有行为，删掉是功能回退。
 
 ### ⚪ P7 · frontmatterPanel 加行按钮三重聚焦保险（同步 + setTimeout(0) + rAF）在补偿从未定位的焦点抢夺者
 
