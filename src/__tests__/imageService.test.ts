@@ -330,12 +330,27 @@ describe("saveImageLocally — 额外路径分支", () => {
 
     it("相对 imageLocalPath + 无 workspace folder：使用 .md 同级目录拼接路径", async () => {
         const docUri = vscode.Uri.file("/project/docs/note.md");
-
         const cfg = makeCfg({ imageLocalPath: "imgs" });
         await saveImageLocally(docUri, cfg as never, imageData, "image/png", "x");
 
         const [callUri] = mockFs.writeFile.mock.calls[0] as [{ fsPath: string }];
         expect(callUri.fsPath).toContain("imgs");
+    });
+
+    it("工作区级 imageLocalPath 指向工作区外 应该 降级默认 images/（回归：恶意仓库设置越界写任意目录）", async () => {
+        const docUri = vscode.Uri.file("/project/docs/note.md");
+        (vscode.workspace.getWorkspaceFolder as ReturnType<typeof vi.fn>)
+            .mockReturnValue({ uri: vscode.Uri.file("/project") });
+        const cfg = {
+            get: vi.fn((key: string, def?: unknown) =>
+                key === "imageLocalPath" ? "/outside/evil" : def,
+            ),
+            inspect: vi.fn(() => ({ workspaceValue: "/outside/evil" })),
+        };
+        await saveImageLocally(docUri, cfg as never, imageData, "image/png", "x");
+
+        const [createdUri] = mockFs.createDirectory.mock.calls[0] as [{ fsPath: string }];
+        expect(createdUri.fsPath).toContain(path.join("docs", "images"));
     });
 
     it("untitled（非 file scheme）文档降级保存到 home/images/ 目录", async () => {

@@ -4,6 +4,7 @@ import * as https from "https";
 import * as http from "http";
 import * as crypto from "crypto";
 import * as vscode from "vscode";
+import { isPathWithinBase } from "./pathGuard";
 
 // ─── 常量 ────────────────────────────────────────────────────
 const MAX_ALT_TEXT_LENGTH = 20;
@@ -84,17 +85,24 @@ export async function saveImageLocally(
     const customPath = cfg.get<string>("imageLocalPath", "").trim();
 
     if (customPath) {
-        // 自定义路径：绝对路径直接用，相对路径优先 workspace root 再退回 .md 目录
-        if (path.isAbsolute(customPath)) {
-            targetDir = vscode.Uri.file(customPath);
-        } else {
-            const wsFolder = vscode.workspace.getWorkspaceFolder(docUri);
-            if (wsFolder) {
-                targetDir = vscode.Uri.joinPath(wsFolder.uri, customPath);
-            } else {
-                targetDir = vscode.Uri.joinPath(docUri, "..", customPath);
-            }
-        }
+        // 自定义路径：绝对路径直接用，相对路径优先 workspace root 再退回 .md 目录。
+        // 边界校验仅针对「工作区级」配置（恶意仓库可随 .vscode/settings.json 注入、
+        // 把 imageLocalPath 指向任意目录如 ~/.ssh）；用户级全局配置是用户自己的选择，
+        // 信任放行。越界时降级默认 images/。
+        const inspect = cfg.inspect?.<string>("imageLocalPath");
+        const workspaceLevel =
+            inspect?.workspaceValue !== undefined ||
+            inspect?.workspaceFolderValue !== undefined;
+        const wsFolder = vscode.workspace.getWorkspaceFolder(docUri);
+        const mdDir = path.dirname(docUri.fsPath);
+        const resolved = path.isAbsolute(customPath)
+            ? customPath
+            : path.resolve(wsFolder?.uri.fsPath ?? mdDir, customPath);
+        const allowedBase = wsFolder?.uri.fsPath ?? mdDir;
+        targetDir =
+            !workspaceLevel || isPathWithinBase(resolved, allowedBase)
+                ? vscode.Uri.file(resolved)
+                : vscode.Uri.file(path.join(mdDir, "images"));
         // 确保目录存在
         await vscode.workspace.fs.createDirectory(targetDir);
     } else if (docUri.scheme !== "file") {
