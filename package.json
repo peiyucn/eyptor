@@ -62,12 +62,8 @@
         "icon": "$(eye)"
       },
       {
-        "command": "epytor.debugModeEnable",
-        "title": "%command.debugModeEnable.title%"
-      },
-      {
-        "command": "epytor.debugModeDisable",
-        "title": "%command.debugModeDisable.title%"
+        "command": "epytor.toggleDebugMode",
+        "title": "%command.toggleDebugMode.title%"
       }
     ],
     "keybindings": [
@@ -97,14 +93,9 @@
           "when": "(resourceExtname == '.md' || resourceExtname == '.markdown') && activeCustomEditorId != 'epytor.editor'"
         },
         {
-          "command": "epytor.debugModeEnable",
+          "command": "epytor.toggleDebugMode",
           "group": "9_debug",
-          "when": "activeCustomEditorId == 'epytor.editor' && !epytor.debugModeActive"
-        },
-        {
-          "command": "epytor.debugModeDisable",
-          "group": "9_debug",
-          "when": "activeCustomEditorId == 'epytor.editor' && epytor.debugModeActive"
+          "when": "activeCustomEditorId == 'epytor.editor'"
         }
       ]
     },

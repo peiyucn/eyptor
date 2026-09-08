@@ -112,40 +112,19 @@ export function activate(context: vscode.ExtensionContext) {
         ),
     );
 
-    // 调试模式：初始化 context 变量
-    const initialDebug = vscode.workspace
-        .getConfiguration("epytor")
-        .get<boolean>("debugMode", false);
-    vscode.commands.executeCommand(
-        "setContext",
-        "epytor.debugModeActive",
-        initialDebug,
-    );
-
-    // 调试模式开关命令（两个互斥命令，通过 when 条件切换显示，实现 ✓ 前缀效果）
+    // 调试模式开关命令：单命令，仅写配置——状态同步（postToAll 广播）统一由下方
+    // onDidChangeConfiguration 监听器处理（回归 B3：此前命令处理器与监听器双写，
+    // cfg.update 触发监听后同一动作执行两遍、每个面板收到两条相同消息）
     const toggleDebugMode = () => {
         const cfg = vscode.workspace.getConfiguration("epytor");
-        const next = !cfg.get<boolean>("debugMode", false);
-        cfg.update("debugMode", next, vscode.ConfigurationTarget.Global);
-        vscode.commands.executeCommand(
-            "setContext",
-            "epytor.debugModeActive",
-            next,
+        cfg.update(
+            "debugMode",
+            !cfg.get<boolean>("debugMode", false),
+            vscode.ConfigurationTarget.Global,
         );
-        MarkdownEditorProvider.current?.postToAll({
-            type: "setDebugMode",
-            enabled: next,
-        });
     };
     context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "epytor.debugModeEnable",
-            toggleDebugMode,
-        ),
-        vscode.commands.registerCommand(
-            "epytor.debugModeDisable",
-            toggleDebugMode,
-        ),
+        vscode.commands.registerCommand("epytor.toggleDebugMode", toggleDebugMode),
     );
 
     // 监听设置手动变更（从 VSCode 设置 UI 修改时同步）
@@ -161,11 +140,6 @@ export function activate(context: vscode.ExtensionContext) {
                 const v = vscode.workspace
                     .getConfiguration("epytor")
                     .get<boolean>("debugMode", false);
-                vscode.commands.executeCommand(
-                    "setContext",
-                    "epytor.debugModeActive",
-                    v,
-                );
                 MarkdownEditorProvider.current?.postToAll({
                     type: "setDebugMode",
                     enabled: v,
