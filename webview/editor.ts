@@ -24,12 +24,6 @@ import { $prose, getMarkdown } from "@milkdown/kit/utils";
 import { CrepeBuilder } from "@milkdown/crepe";
 import { linkTooltip } from "@milkdown/crepe/feature/link-tooltip";
 
-// 调试日志开关（由 index.ts setDebugMode 消息驱动）
-let logTableSel = false;
-export function setLogTableSel(enabled: boolean): void {
-    logTableSel = enabled;
-}
-
 // ─── Crepe 原生功能 ──────────────────────────────────────────────────────────
 // 以下 feature 由 @milkdown/crepe 官方维护，替换我们的自定义实现：
 //   feature/table       → 替换 addButtons + handles + toolbar（1,562 行）

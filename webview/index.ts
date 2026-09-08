@@ -23,7 +23,6 @@ import {
     destroyEditor,
     getEditorView,
     getMarkdownForSave,
-    setLogTableSel,
     setSerializationMode,
     setSerializationDebug,
 } from "./editor";
@@ -85,15 +84,9 @@ document.addEventListener('keyup', (e) => {
     if (!e.ctrlKey && !e.metaKey) document.body.classList.remove('epytor-modifier-active');
 });
 window.addEventListener('blur', () => document.body.classList.remove('epytor-modifier-active'));
-export function getLineMap(): number[] {
-    return currentLineMap;
-}
 
 // 存储原始 markdown 内容（来自 init/revert 消息，未经 Milkdown 序列化）
 let markdownSource = "";
-export function getMarkdownSource(): string {
-    return markdownSource;
-}
 
 /** 将 lineMap 中的源码行号（1-indexed）对应的块滚动到视口顶部，段内做比例插值 */
 function scrollToSourceLine(view: EditorView, lineMap: number[], targetLine: number): void {
@@ -110,7 +103,7 @@ function scrollToSourceLine(view: EditorView, lineMap: number[], targetLine: num
 
     // 段内比例插值：目标行在段落源码中的位置比例 → 对应渲染块中的滚动偏移
     const blockStartLine = lineMap[blockIdx];
-    const totalSourceLines = getMarkdownSource().split('\n').length;
+    const totalSourceLines = markdownSource.split('\n').length;
     const nextBlockStartLine = blockIdx + 1 < lineMap.length ? lineMap[blockIdx + 1] : totalSourceLines + 1;
     const blockLineCount = nextBlockStartLine - blockStartLine;
     const lineOffset = targetLine - blockStartLine;
@@ -773,7 +766,6 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         currentLineMap = msg.lineMap;
     } else if (msg.type === "setDebugMode") {
         _debugLog = msg.enabled;
-        setLogTableSel(msg.enabled);
         setSerializationDebug(msg.enabled);
     } else if (msg.type === "setSerializationMode") {
         setSerializationMode(msg.mode);
