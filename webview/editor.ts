@@ -51,7 +51,6 @@ import { EditorView as CMEditorView } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { defaultHighlightStyle, syntaxHighlighting, LanguageDescription, type LanguageSupport } from "@codemirror/language";
 import { languages as allCodeLanguages } from "@codemirror/language-data";
-import mermaid from "mermaid";
 import { onThemeChange } from "./utils/themeBus";
 import { t } from "./i18n";
 import { enhanceMermaidPreview } from "./components/mermaidZoom";
@@ -476,23 +475,47 @@ export async function createEditor(
     const mermaidCodeMap = new Map<string, string>();
     let mermaidSeq = 0;
 
-    const renderMermaid = (code: string): Promise<string> => {
+    // ── Mermaid 惰性加载 ────────────────────────────────────────────────
+    // 首帧性能：mermaid 系（core + parser + cytoscape + 各 diagram）是 webview 包
+    // 最大单一依赖，静态 import 会把 ~1.3MB（压缩口径）压进入口。改为首个 mermaid
+    // 代码块渲染时才加载；主题切换在未加载时只记录目标主题，加载时统一初始化。
+    let _mermaidModule: typeof import("mermaid").default | null = null;
+    let _mermaidThemeInitializedFor: boolean | null = null;
+    async function loadMermaid(): Promise<typeof import("mermaid").default> {
+        if (!_mermaidModule) {
+            const mod = await import("mermaid");
+            _mermaidModule = mod.default;
+        }
+        if (_mermaidThemeInitializedFor !== isDark) {
+            _mermaidModule.initialize({ startOnLoad: false, theme: isDark ? "dark" : "default" });
+            _mermaidThemeInitializedFor = isDark;
+        }
+        return _mermaidModule;
+    }
+
+    const renderMermaid = async (code: string): Promise<string> => {
         const id = "mermaid-" + Math.random().toString(36).slice(2, 8);
-        return mermaid.render(id, code).then(({ svg }) => svg);
+        const mermaid = await loadMermaid();
+        const { svg } = await mermaid.render(id, code);
+        return svg;
     };
 
     _unsubscribeTheme = onThemeChange((dark) => {
         isDark = dark;
-        mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
-        // 重绘已有 mermaid 预览
-        mermaidCodeMap.forEach((code, key) => {
-            const el = document.querySelector<HTMLElement>(`[data-mermaid-key="${key}"]`);
-            if (el) renderMermaid(code).then((svg) => {
-                el.innerHTML = svg;
-                const svgEl = el.querySelector<SVGElement>("svg");
-                if (svgEl) enhanceMermaidPreview(el, svgEl);
-            }).catch(() => { /* 单图渲染失败不影响其他图与主题切换（错误图保持旧内容） */ });
-        });
+        // 重绘已有 mermaid 预览（仅 mermaid 已加载时——未加载说明尚无预览可重绘，
+        // 主题偏好由 loadMermaid 在首次渲染时套用）
+        if (_mermaidModule) {
+            _mermaidModule.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
+            _mermaidThemeInitializedFor = dark;
+            mermaidCodeMap.forEach((code, key) => {
+                const el = document.querySelector<HTMLElement>(`[data-mermaid-key="${key}"]`);
+                if (el) renderMermaid(code).then((svg) => {
+                    el.innerHTML = svg;
+                    const svgEl = el.querySelector<SVGElement>("svg");
+                    if (svgEl) enhanceMermaidPreview(el, svgEl);
+                }).catch(() => { /* 单图渲染失败不影响其他图与主题切换（错误图保持旧内容） */ });
+            });
+        }
         // 重配 CodeMirror
         reconfigureAllCM();
     });
