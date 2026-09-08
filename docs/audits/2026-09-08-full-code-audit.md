@@ -197,5 +197,12 @@
 | D3 findHeadingPos O(H×N) | ✅ view.posAtDOM DOM 反查 | `e9456cc` |
 | D4 纯选区事务触发重建 | ✅ update 仅 doc/折叠状态变化重建 | `e9456cc` |
 | D5 吸顶抑制无法解除 | ✅ 400ms 定时兜底解除 + destroy 清理 | `35f9a1a` |
-| 其余（A4 状态机主线、波次③④） | ⬜ 待续 | — |
+| A4 导航/切换抑制全局化 | ✅ ExpiryWindowMap 按文档时间戳窗口（含 6 测试）；保存态形式化由 A1/A2 结构化解法覆盖 | `8d72086` |
+| F2 README 过时自动保存 | ✅ 改为原生 files.autoSave 口径 | `58ed9e4` |
+| F4 README 三档换行 | ✅ 改两档 wrap/nowrap | `58ed9e4` |
+| F6/D9 Mermaid 缩放漂移 | ✅ 文档统一 0.2×–3× | `58ed9e4` |
+| B12 utils.ts 死文件 | ✅ 整文件删除 | `33c6197` |
+| A9 notifyUpdate 伪兼容路径 | ✅ 发送/接收/类型/测试全删 | `33c6197` |
+| 孤儿图标 22 个 / C10 / C11 / D11 / D12 | ✅ 全删（slug.ts、image-toolbar--below、mermaidZoomKey/_seq、isDivider、getCellCoords、selectionPlugin 空回调链） | `33c6197` |
+| 其余（波次③分层、F1 死配置消费方、F3 i18n 词典、E2-E9 安全加固） | ⬜ 待续 | — |
 
