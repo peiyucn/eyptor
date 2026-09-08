@@ -55,7 +55,7 @@ export function activate(context: vscode.ExtensionContext) {
                 if (!/\.(md|markdown)$/i.test(uri.fsPath)) { continue; }
 
                 const uriStr = uri.toString();
-                if (MarkdownEditorProvider.suppressAutoSwitch.has(uriStr)) { continue; }
+                if (MarkdownEditorProvider.isAutoSwitchSuppressed(uriStr)) { continue; }
 
                 // 若 URI fragment 包含行号（全局搜索传入 #L10 格式），提前存储以便 WYSIWYG 初始化后跳转
                 const fragMatch = uri.fragment?.match(/^L?(\d+)/);
@@ -87,9 +87,9 @@ export function activate(context: vscode.ExtensionContext) {
             if (!editor) { return; }
             const { uri } = editor.document;
             if (!uri.fsPath.endsWith('.md')) { return; }
-            // 切换到文本编辑器期间（suppressNavFromTextEditor 已设置），跳过行号回传
+            // 切换到文本编辑器期间（按文档抑制窗口），跳过行号回传
             // 避免主动切走时行号被反馈给 WebView 触发多余的 scrollToLine
-            if (MarkdownEditorProvider.current?.isNavFromTextEditorSuppressed) { return; }
+            if (MarkdownEditorProvider.current?.isNavFromTextEditorSuppressed(uri.toString())) { return; }
             const line = editor.selection.active.line + 1; // 转为 1-indexed
             if (line >= 1) {
                 MarkdownEditorProvider.current?.setPendingNavigation(uri.fsPath, line);

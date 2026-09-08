@@ -9,6 +9,7 @@ import { computeLineMap } from "./utils/lineMap";
 import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
+import { ExpiryWindowMap } from "./utils/expiryWindowMap";
 import {
     DEFAULT_CODE_BLOCK_MAX_HEIGHT,
     DEFAULT_EDITOR_MAX_WIDTH,
@@ -59,8 +60,12 @@ export class MarkdownEditorProvider
     private readonly _frontmatterMap = new Map<string, string>(); // uriKey → raw frontmatter string
     // 最近一次已知的盘上内容快照（外部写盘回退决策的基准，key: docUri.toString()）
     private readonly _lastDiskContents = new Map<string, string>();
-    /** switchToTextEditor 进行中时，抑制 onDidChangeTabs 把文本 tab 再切回 WYSIWYG */
-    public static readonly suppressAutoSwitch = new Set<string>();
+    /** switchToTextEditor 后按文档抑制 onDidChangeTabs 把文本 tab 自动切回 WYSIWYG
+     * （到期时间戳窗口：替代静态 Set + 裸 setTimeout——连续切换时定时器交叉曾提前复位） */
+    private static readonly _autoSwitchWindow = new ExpiryWindowMap(AUTO_SWITCH_SUPPRESS_DURATION_MS);
+    /** 切换到文本编辑器期间按文档抑制 onDidChangeActiveTextEditor 的行号回传
+     * （回归：曾为全局单布尔——切文档 A 时文档 B 的搜索导航行号一并被吞） */
+    private readonly _navSuppressionWindow = new ExpiryWindowMap(NAV_SUPPRESS_DURATION_MS);
 
     // 待跳转行号（全局搜索点击 / 切换编辑器时临时存储）key: fsPath
     private readonly _pendingNavigations = new Map<string, { line: number; ts: number }>();
@@ -70,10 +75,6 @@ export class MarkdownEditorProvider
 
     // 已完成 WebView 初始化（发送过 ready 消息）的面板 key: uriKey
     private readonly _initializedPanels = new Set<string>();
-
-    // 切换到文本编辑器期间，抑制 onDidChangeActiveTextEditor 的行号回传
-    // 避免文本编辑器打开后，行号被错误地反馈给 WebView 触发多余的 scrollToLine
-    private _suppressNavFromTextEditor = false;
 
     public static current: MarkdownEditorProvider | null = null;
 
@@ -107,15 +108,28 @@ export class MarkdownEditorProvider
         return paths;
     }
 
-    /** 切换到文本编辑器时调用：1.5 秒内屏蔽来自文本编辑器的行号回传 */
-    public suppressNavFromTextEditor(): void {
-        this._suppressNavFromTextEditor = true;
-        setTimeout(() => { this._suppressNavFromTextEditor = false; }, NAV_SUPPRESS_DURATION_MS);
+    /** 切换到文本编辑器时调用：按文档屏蔽来自文本编辑器的行号回传（NAV_SUPPRESS_DURATION_MS 内） */
+    public suppressNavFromTextEditor(uriKey: string): void {
+        this._navSuppressionWindow.mark(uriKey);
     }
 
-    /** extension.ts 检查是否需要跳过 onDidChangeActiveTextEditor 的行号回传 */
-    public get isNavFromTextEditorSuppressed(): boolean {
-        return this._suppressNavFromTextEditor;
+    /** extension.ts 检查是否需要跳过 onDidChangeActiveTextEditor 的行号回传（按文档） */
+    public isNavFromTextEditorSuppressed(uriKey: string): boolean {
+        return this._navSuppressionWindow.isActive(uriKey);
+    }
+
+    /** switchToTextEditor 完成时调用：按文档抑制 onDidChangeTabs 自动切回（AUTO_SWITCH_SUPPRESS_DURATION_MS 内） */
+    public static suppressAutoSwitchFor(uriStr: string): void {
+        MarkdownEditorProvider._autoSwitchWindow.mark(uriStr);
+        // 抑制表防无界：超过阈值时清扫已到期条目
+        if (MarkdownEditorProvider._autoSwitchWindow.size > 64) {
+            MarkdownEditorProvider._autoSwitchWindow.purgeExpired();
+        }
+    }
+
+    /** extension.ts 检查某 uri 是否处于自动切换抑制窗口内 */
+    public static isAutoSwitchSuppressed(uriStr: string): boolean {
+        return MarkdownEditorProvider._autoSwitchWindow.isActive(uriStr);
     }
 
     /** 从 extension.ts 调用：暂存待跳转行号；如果面板可见且已就绪则直接发送 */
@@ -293,6 +307,7 @@ export class MarkdownEditorProvider
             this._wordCounts.delete(uriKey);
             this._lastDiskContents.delete(uriKey);
             this._fallbackWarnedUris.delete(uriKey);
+            this._navSuppressionWindow.delete(uriKey);
             // 兜底结算未完成的拉取（面板已销毁，用内存内容）
             this._contentRequests.settleAll(uriKey);
             // 面板关闭（含预览被替换、切文本编辑器）时隐藏状态栏
@@ -581,11 +596,10 @@ export class MarkdownEditorProvider
                 } finally {
                     flushCts.dispose();
                 }
-                // 抑制接下来 onDidChangeActiveTextEditor 的行号回传（1.5s 内）
-                this.suppressNavFromTextEditor();
-                // 抑制 onDidChangeTabs 的自动 WYSIWYG 切换（防止切回去）
-                MarkdownEditorProvider.suppressAutoSwitch.add(document.uri.toString());
-                setTimeout(() => MarkdownEditorProvider.suppressAutoSwitch.delete(document.uri.toString()), AUTO_SWITCH_SUPPRESS_DURATION_MS);
+                // 抑制接下来 onDidChangeActiveTextEditor 的行号回传（按文档，1.5s 窗口）
+                this.suppressNavFromTextEditor(uriKey);
+                // 抑制 onDidChangeTabs 的自动 WYSIWYG 切换（防止切回去；时间戳窗口，无交叉定时器）
+                MarkdownEditorProvider.suppressAutoSwitchFor(document.uri.toString());
                 const textDoc = await vscode.workspace.openTextDocument(document.uri);
                 const viewCol = webviewPanel.viewColumn;
 
