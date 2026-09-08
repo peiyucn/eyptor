@@ -142,7 +142,7 @@ export class MarkdownEditorProvider
         // 面板已存在且已初始化 → 直接发送，无需等待 onDidChangeViewState
         const uriKey = vscode.Uri.file(fsPath).toString();
         const initialized = this._initializedPanels.has(uriKey);
-        if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[setPendingNav] fsPath:', fsPath, 'line:', line, '| initialized:', initialized);
+        if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[setPendingNav] file:', path.basename(fsPath), 'line:', line, '| initialized:', initialized);
         if (initialized) {
             const panel = this._webviewPanels.get(uriKey);
             // 只在面板当前可见时立即发送（面板已隐藏说明用户刚切换走，不应回传行号）

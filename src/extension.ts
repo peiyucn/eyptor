@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "path";
 import { MarkdownEditorProvider } from "./MarkdownEditorProvider";
 
 function debugLog(...args: unknown[]): void {
@@ -62,7 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
                 if (fragMatch) {
                     const fragLine = parseInt(fragMatch[1], 10);
                     if (fragLine >= 1) {
-                        debugLog('[onDidChangeTabs] fragment line:', fragLine, 'fsPath:', uri.fsPath);
+                        debugLog('[onDidChangeTabs] fragment line:', fragLine, 'file:', path.basename(uri.fsPath));
                         MarkdownEditorProvider.current?.setPendingNavigation(uri.fsPath, fragLine);
                     }
                 }
@@ -123,7 +124,7 @@ export function activate(context: vscode.ExtensionContext) {
                         if (tab.input instanceof vscode.TabInputCustom) {
                             const uri = (tab.input as vscode.TabInputCustom).uri;
                             if (uri.fsPath.endsWith('.md') && tab.isActive) {
-                                debugLog('[revealLine] 找到 active .md 自定义 tab，fsPath:', uri.fsPath);
+                                debugLog('[revealLine] 找到 active .md 自定义 tab，file:', path.basename(uri.fsPath));
                                 MarkdownEditorProvider.current?.setPendingNavigation(uri.fsPath, targetLine);
                                 return;
                             }
