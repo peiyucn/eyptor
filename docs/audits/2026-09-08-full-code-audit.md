@@ -190,5 +190,12 @@
 | C4 重命名失败静默 | ✅ tooltip 显示宿主侧本地化错误 | `b1767d7` |
 | D2 查找匹配无上限 | ✅ MAX_MATCHES=5000 截断 + N+ 计数 | `4f2ed91` |
 | B1 首帧假脏标记 | ✅ settle 时初始化 prevDoc 基准 | `a4281b0` |
-| 其余（波次②③④） | ⬜ 待续 | — |
+| B2 revert 不清防抖 timer | ✅ 重建前 releaseDocTimers | `ae3618b` |
+| B3 themeBus 订阅泄漏 | ✅ destroyEditor 统一销毁出口（退订+观察器断开） | `ae3618b` |
+| B4 消息处理器可重入 | ✅ init/revert 串行链 + 其余消息并行分发 | `de2f96c` |
+| B8 滚动定位三份复制 | ✅ scheduleDelayedScroll 状态机合一 | `13a7687` |
+| D3 findHeadingPos O(H×N) | ✅ view.posAtDOM DOM 反查 | `e9456cc` |
+| D4 纯选区事务触发重建 | ✅ update 仅 doc/折叠状态变化重建 | `e9456cc` |
+| D5 吸顶抑制无法解除 | ✅ 400ms 定时兜底解除 + destroy 清理 | `35f9a1a` |
+| 其余（A4 状态机主线、波次③④） | ⬜ 待续 | — |
 
