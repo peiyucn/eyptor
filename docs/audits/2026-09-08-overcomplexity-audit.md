@@ -377,17 +377,18 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 ## 执行顺序建议（四批，每步独立提交 + verify + 手测）
 
 **第一批（零风险清场）✅ 2026-09-08 完成**：
-- ✅ **B2** `.vscodeignore` 补排除 `.github/**`、`test*.md`、`releases/**`、`*.vsix`（VSIX 256→250 文件；test-5000.md 349KB 与 5 个工作流/模板文件不再进包）
-- ✅ **E8** 删 `scrollPanelToLine` / `_pinnedDocuments` / `ExpiryWindowMap.purgeExpired`（+ 其测试）
-- ✅ **F8** 删 `logTableSel`/`setLogTableSel` / `getLineMap` 导出 / `getMarkdownSource` 导出
-- ✅ **P10** 删 TOC `updatePanelPosition` 死重函数（面板位置回归 toc.css 静态声明，零视觉变化）
-- ✅ **B7** `switchToTextEditor` 注释与实现对齐
 
-**第二批（低风险行为修复，各含真实 bug）**：E1 搜索跳转拦截修复、E2 停止改写用户全局配置、F1 配置双载体统一、P2 tableSoftBreak 删插件改上游配置、P3 findBar timer 清理
+* ✅ **B2** `.vscodeignore` 补排除 `.github/**`、`test*.md`、`releases/**`、`*.vsix`（VSIX 256→250 文件；test-5000.md 349KB 与 5 个工作流/模板文件不再进包）
+* ✅ **E8** 删 `scrollPanelToLine` / `_pinnedDocuments` / `ExpiryWindowMap.purgeExpired`（+ 其测试）
+* ✅ **F8** 删 `logTableSel`/`setLogTableSel` / `getLineMap` 导出 / `getMarkdownSource` 导出
+* ✅ **P10** 删 TOC `updatePanelPosition` 死重函数（面板位置回归 toc.css 静态声明，零视觉变化）
+* ✅ **B7** `switchToTextEditor` 注释与实现对齐
 
-**第三批（结构性收敛，需手测矩阵）**：E4 保存路径统一、E5/C1 导航机制收敛、E7 图片往返口径对齐、E6/C5 双向命令与快捷键合并、F2 重试数组合一、F4 交互跟踪合一、P4/C4 补全生命周期合一、P5 表格换行 handler 化、C3 生命周期 payload 工厂、C6 visibilitychange 收敛、E3/C2 死重双生机制删除
+**第二批（低风险行为修复，各含真实 bug）✅ 2026-09-08 完成**：F1（revert 不再回滚配置，含复现测试）、E1（搜索跳转拦截 + 同文档直接投递补漏）、E2（不再删用户全局关联）、P2（tableSoftBreak → 上游 hardbreakFilterNodes 一行配置）、P3（findBar 关闭清 timer，含复现测试）
 
-**第四批（大重构，单独排期）**：P1 标题子系统统一索引、F3 cmObserver 走正路、P6 TOC 折叠键定方案、P8 图片 uriMap 单向化、P9 TOC 点击改存 DOM 引用、P7 frontmatter 聚焦层数、E9/E10 状态栏与配置广播收敛、B1 katex 双版本对齐、B3 debugMode 单命令、B4 扩展名单一事实源、B5/B6
+**第三批（结构性收敛）部分完成 2026-09-08**：E3/C2（双生机制整套删除，净删 ~110 行）、E5 部分（1s 复查定时器 + directOnly 语义）、F2（重试计划统一）、C3（生命周期 payload 工厂）、C6/F5（visibilitychange 删除）、E9（状态栏统一刷新）、E10（配置广播表驱动）、P7（聚焦层数）、P9（TOC 改存 DOM 引用）、B4（.markdown 对齐）、B6（CI Job Summary + 文档修正）、B3（debugMode 单命令）、B5（onStartupFinished）、P11（tech-debt 登记）
+
+**剩余（下轮继续）**：E4 保存路径统一、E6/C5 双向命令与快捷键合并、E7 图片往返口径、F4 交互跟踪合一、P4/C4 补全生命周期与注册表统一、P8 图片 uriMap 单向化、P6 TOC 折叠键、F3 cmObserver 走正路、P5 表格换行 handler 化、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
 
 ***
 
