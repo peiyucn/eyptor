@@ -4,6 +4,7 @@ import {
     restoreContentForSave,
     convertTableBrForDisplay,
     buildContentWithFrontmatter,
+    extractImageSyntaxes,
 } from "../../src/utils/contentTransform";
 import { computeLineMap } from "../../src/utils/lineMap";
 
@@ -243,5 +244,41 @@ describe("buildContentWithFrontmatter", () => {
             new Map([["vscode-webview://img.png", "img.png"]]),
         );
         expect(result).toBe("---\ntitle: A\n---\n![alt](img.png)\n");
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// extractImageSyntaxes
+// ─────────────────────────────────────────────────────────────
+describe("extractImageSyntaxes", () => {
+    it("常规相对路径 应该 完整捕获", () => {
+        const [m] = extractImageSyntaxes("![alt](./img/a.png)");
+        expect(m).toEqual({ fullMatch: "![alt](./img/a.png)", alt: "alt", src: "./img/a.png" });
+    });
+
+    it("含空格路径 应该 完整捕获（回归：旧正则 [^)\\s\"]+ 在空格处截断，显示破裂 + 保存往返改写畸形内容）", () => {
+        const [m] = extractImageSyntaxes("![alt](my image.png)");
+        expect(m.src).toBe("my image.png");
+    });
+
+    it("含括号路径（一层嵌套） 应该 完整捕获（回归：旧正则在 ) 处截断）", () => {
+        const [m] = extractImageSyntaxes("![alt](my file (v2).png)");
+        expect(m.src).toBe("my file (v2).png");
+    });
+
+    it("同一行多个图片 应该 各自独立捕获", () => {
+        const matches = extractImageSyntaxes("![a](x.png) and ![b](y z.png)");
+        expect(matches).toHaveLength(2);
+        expect(matches[0].src).toBe("x.png");
+        expect(matches[1].src).toBe("y z.png");
+    });
+
+    it("http/data 图片 应该 也被捕获（由调用方跳过处理）", () => {
+        const [m] = extractImageSyntaxes("![alt](https://example.com/a.png)");
+        expect(m.src).toBe("https://example.com/a.png");
+    });
+
+    it("无图片 应该 返回空数组", () => {
+        expect(extractImageSyntaxes("# 正文\n\n无图")).toEqual([]);
     });
 });

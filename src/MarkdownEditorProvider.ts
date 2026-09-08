@@ -6,7 +6,7 @@ import { getNonce } from "./utils/getNonce";
 import { ZH_CN_WEBVIEW } from "./i18n/webviewTranslations";
 import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
 import { computeLineMap } from "./utils/lineMap";
-import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter } from "./utils/contentTransform";
+import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter, extractImageSyntaxes } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import { decideExternalChange } from "./utils/externalChangeDecision";
 import { ExpiryWindowMap } from "./utils/expiryWindowMap";
@@ -886,24 +886,28 @@ export class MarkdownEditorProvider
             ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const uriMap = this._imageUriMaps.get(uriKey) ?? new Map<string, string>();
         this._imageUriMaps.set(uriKey, uriMap);
-        return content.replace(/!\[([^\]]*)\]\(([^)\s"]+)/g, (match, alt, src) => {
-            if (/^(https?:|data:|vscode-resource:|vscode-webview-)/.test(src)) { return match; }
+        // 逐图替换：extractImageSyntaxes 的 src 捕获支持空格与嵌套括号
+        // （回归：旧正则 [^)\s"]+ 在空格/括号处截断，显示破裂且保存往返改写畸形内容）
+        let result = content;
+        for (const m of extractImageSyntaxes(content)) {
+            if (/^(https?:|data:|vscode-resource:|vscode-webview-)/.test(m.src)) { continue; }
             try {
                 let absPath: string;
-                if (src.startsWith('@/')) {
+                if (m.src.startsWith('@/')) {
                     // @/ 是 workspace root 别名，解析到工作区根目录
                     const root = workspaceRoot ?? mdDir;
-                    absPath = path.join(root, src.slice(2));
+                    absPath = path.join(root, m.src.slice(2));
                 } else {
-                    absPath = path.resolve(mdDir, src);
+                    absPath = path.resolve(mdDir, m.src);
                 }
                 const webviewUri = panel.webview.asWebviewUri(vscode.Uri.file(absPath)).toString();
-                uriMap.set(webviewUri, src);
-                return `![${alt}](${webviewUri}`;
+                uriMap.set(webviewUri, m.src);
+                result = result.split(m.fullMatch).join(`![${m.alt}](${webviewUri})`);
             } catch {
-                return match;
+                // 解析失败：原样保留（不登记 uriMap）
             }
-        });
+        }
+        return result;
     }
 
     private _prepareContentForSave(content: string, uriKey: string): string {

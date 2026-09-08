@@ -73,3 +73,26 @@ export function buildContentWithFrontmatter(
     const newContent = restoreContentForSave(body, newFrontmatter, uriMap);
     return newContent === currentContent ? null : newContent;
 }
+
+/**
+ * 图片语法匹配：src 允许空格与一层嵌套括号（Windows 常见路径如
+ * "my image.png" / "my file (v2).png"）。
+ * 回归：旧正则 `[^)\s"]+` 在空格/括号处截断 src → 图片显示破裂、
+ * uriMap 登记截断值、保存往返把该行改写成畸形内容写回磁盘。
+ */
+const IMAGE_SYNTAX_RE = /!\[([^\]]*)\]\(([^()]*(?:\([^()]*\)[^()]*)*)\)/g;
+
+export interface ImageSyntaxMatch {
+    /** 完整匹配文本（`![alt](src)`），用于定位替换 */
+    fullMatch: string;
+    alt: string;
+    src: string;
+}
+
+export function extractImageSyntaxes(markdown: string): ImageSyntaxMatch[] {
+    const out: ImageSyntaxMatch[] = [];
+    for (const m of markdown.matchAll(IMAGE_SYNTAX_RE)) {
+        out.push({ fullMatch: m[0], alt: m[1], src: m[2] });
+    }
+    return out;
+}
