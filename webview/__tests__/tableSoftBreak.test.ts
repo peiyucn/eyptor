@@ -1,17 +1,16 @@
 /**
  * 表格软换行回归测试：单元格内 Shift+Enter 应插入 hardbreak（序列化为 <br>）。
- * 实现路径（P2 简化后）：上游 hardbreakKeymap（Shift-Enter）本就在，单元格内被拦
- * 只因 hardbreakFilterNodes ctx 默认含 "table"——editor.ts 把该 ctx 改为
- * ["code_block"]（放行 table）。本测试用同样配置复现该行为。
+ * 实现路径：webview/softBreakKeymap.ts 始终插入 hardbreak（不采用上游命令的
+ * 「行尾已有 hardbreak 时转段落」行为——表格单元格内反直觉，用户实测反馈）。
  * 历史：更早版本官方 tableKeymap 曾把 Shift+Enter 绑定 goToNextCell（7.22.1 已移除）。
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { CrepeBuilder } from "@milkdown/crepe";
 import { editorViewCtx, remarkStringifyOptionsCtx } from "@milkdown/kit/core";
-import { hardbreakFilterNodes } from "@milkdown/kit/preset/commonmark";
 import { getMarkdown } from "@milkdown/kit/utils";
 import { TextSelection } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
+import { softBreakKeymap } from "../softBreakKeymap";
 import { withTableBreakHandler } from "../utils/markdownSerializer";
 
 if (typeof (window as unknown as Record<string, unknown>).ResizeObserver === "undefined") {
@@ -36,9 +35,8 @@ async function makeEditor(md: string) {
     const crepe = new CrepeBuilder({ root, defaultValue: md });
     crepe.editor.config((ctx) => {
         ctx.update(remarkStringifyOptionsCtx, (options) => withTableBreakHandler(options));
-        // 与 editor.ts 的配置一致：放行 table 内的 hardbreak（保留 code_block 拦截）
-        ctx.set(hardbreakFilterNodes.key, ["code_block"]);
     });
+    crepe.editor.use(softBreakKeymap);
     const editor = await crepe.create();
     return editor;
 }
@@ -70,7 +68,7 @@ afterEach(() => {
     document.body.innerHTML = "";
 });
 
-describe("表格软换行（上游 hardbreakFilterNodes 配置）", () => {
+describe("表格软换行（softBreakKeymap）", () => {
     it("单元格内 Shift+Enter 应该 插入换行并序列化为 <br>", async () => {
         const editor = await makeEditor("| A | B |\n| --- | --- |\n| x | y |\n");
         const view = getView(editor);
@@ -117,5 +115,24 @@ describe("表格软换行（上游 hardbreakFilterNodes 配置）", () => {
         });
         expect(handled).toBe(true);
         expect(hasHardbreak).toBe(true);
+    });
+
+    it("单元格内连续两次 Shift+Enter 应该 插入两个 hardbreak（回归：上游命令会把行尾 hardbreak 转段落）", async () => {
+        const editor = await makeEditor("| A |\n| --- |\n| x |\n");
+        const view = getView(editor);
+        let cellPos = -1;
+        view.state.doc.descendants((node, pos) => {
+            if (cellPos < 0 && node.type.name === "table_cell") cellPos = pos;
+        });
+        setCursor(view, cellPos + 3); // 光标在 "x" 之后
+
+        expect(pressShiftEnter(view)).toBe(true);
+        expect(pressShiftEnter(view)).toBe(true);
+
+        let hardbreakCount = 0;
+        view.state.doc.descendants((node) => {
+            if (node.type.name === "hardbreak") hardbreakCount++;
+        });
+        expect(hardbreakCount).toBe(2);
     });
 });

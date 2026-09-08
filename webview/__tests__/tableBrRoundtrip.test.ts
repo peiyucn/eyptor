@@ -7,10 +7,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { CrepeBuilder } from "@milkdown/crepe";
 import { editorViewCtx, remarkStringifyOptionsCtx } from "@milkdown/kit/core";
-import { hardbreakFilterNodes } from "@milkdown/kit/preset/commonmark";
 import { getMarkdown } from "@milkdown/kit/utils";
 import { TextSelection } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
+import { softBreakKeymap } from "../softBreakKeymap";
 import { withTableBreakHandler } from "../utils/markdownSerializer";
 
 if (typeof (window as unknown as Record<string, unknown>).ResizeObserver === "undefined") {
@@ -33,9 +33,8 @@ async function makeEditor(md: string) {
     const crepe = new CrepeBuilder({ root, defaultValue: md });
     crepe.editor.config((ctx) => {
         ctx.update(remarkStringifyOptionsCtx, (options) => withTableBreakHandler(options));
-        // 与 editor.ts 的配置一致：放行 table 内的 hardbreak（P2：上游官方扩展点）
-        ctx.set(hardbreakFilterNodes.key, ["code_block"]);
     });
+    crepe.editor.use(softBreakKeymap);
     const editor = await crepe.create();
     return editor;
 }

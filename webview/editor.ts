@@ -52,9 +52,9 @@ import { t } from "./i18n";
 import { enhanceMermaidPreview } from "./components/mermaidZoom";
 import { headingFoldPlugin } from "./headingFoldPlugin";
 import { headingStickyPlugin } from "./headingStickyPlugin";
+import { softBreakKeymap } from "./softBreakKeymap";
 import { applyMinimalChanges } from "./utils/minimalDiff";
 import { remarkStringifyOptionsCtx } from "@milkdown/kit/core";
-import { hardbreakFilterNodes } from "@milkdown/kit/preset/commonmark";
 import {
     cleanTextHandler,
     serializeCleanMarkdown,
@@ -593,12 +593,9 @@ export async function createEditor(
         .config((ctx) => {
             _savedMarkdown = initialMarkdown;
 
-            // 表格单元格内 Shift+Enter 软换行：使用上游官方扩展点——上游
-            // hardbreakKeymap 本就绑定 Shift-Enter，单元格内被拦只因
-            // hardbreakFilterNodes ctx 默认含 "table"；放行 table（保留 code_block
-            // 拦截）即得官方命令（含 hardbreakClearMarkPlugin 的 marks 清理 meta）。
-            // 回归（P2）：此前自建 tableSoftBreakPlugin 重复实现该键位且丢失 meta。
-            ctx.set(hardbreakFilterNodes.key, ["code_block"]);
+            // 表格单元格内 Shift+Enter 软换行由 softBreakKeymap 负责（见其文件头：
+            // 上游命令在行尾已有 hardbreak 时会「转段落」，表格内反直觉，故不采用）。
+            // 代码块内的 Shift+Enter 仍走上游默认（softBreakKeymap 返回 false 放行）。
 
             // Milkdown 的默认 text handler 会对普通文本中的 `_`、`*`、`[`
             // 过度转义。保留其上下文安全规则，只在 Clean 模式放宽已知误报。
@@ -640,6 +637,7 @@ export async function createEditor(
         .use(formatKeymapPlugin)    // 保留：自定义格式化快捷键
         .use(headingFoldPlugin)     // 标题折叠（Decoration，不修改文档）
         .use(headingStickyPlugin)   // 标题吸顶条（滚动跟随 + 推挤过渡）
+        .use(softBreakKeymap)       // Shift+Enter 软换行（表格内允许；见文件头回归说明）
         .use(cellClickFixPlugin)    // 表格单击→光标定位，拖拽→多选
         .use(listSpreadNormalizePlugin); // 保留：列表 spread 规范化
 
