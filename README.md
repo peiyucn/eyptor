@@ -10,13 +10,7 @@
 
 A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.dev/). Edit `.md` / `.markdown` as rich text, saved as standard Markdown.
 
-> Originally based on [git-xing/md-wysiwyg-editor](https://github.com/git-xing/md-wysiwyg-editor) (MIT) v0.1.6.
->
-> v1.0.0 / v1.0.1: adapted for VS Code Marketplace, fixed critical issues (blank-line accumulation, table-cell enter).
->
-> v1.1.0: rebuilt foundations (Milkdown 7.21.2 + Crepe / CodeMirror 6), new features (LaTeX math, image enhancements, toolbar, TOC).
->
-> **v1.1.3 onwards: independently developed.** See [CHANGELOG](CHANGELOG.md).
+> Based on the open-source work of [git-xing/md-wysiwyg-editor](https://github.com/git-xing/md-wysiwyg-editor) (MIT). Version history: [CHANGELOG](CHANGELOG.md).
 
 ## Features
 

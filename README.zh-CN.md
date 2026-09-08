@@ -10,13 +10,7 @@
 
 基于 [Milkdown](https://milkdown.dev/) 的 VSCode 所见即所得 Markdown 编辑器。富文本编辑 `.md` / `.markdown`，保存为标准 Markdown。
 
-> 最初基于 [git-xing/md-wysiwyg-editor](https://github.com/git-xing/md-wysiwyg-editor) (MIT) v0.1.6 开发。
->
-> v1.0.0 / v1.0.1：适配 VS Code Marketplace，修复关键问题（粘贴空行累积、表格单元格回车）。
->
-> v1.1.0：重构根基（Milkdown 7.21.2 + Crepe / CodeMirror 6），新增功能（LaTeX 公式、图片增强、工具栏、TOC）。
->
-> **v1.1.3 起独立开发。** 详见 [CHANGELOG](CHANGELOG.zh-CN.md)。
+> 基于 [git-xing/md-wysiwyg-editor](https://github.com/git-xing/md-wysiwyg-editor) (MIT) 的开源工作开发。版本历史见 [CHANGELOG](CHANGELOG.zh-CN.md)。
 
 ## 功能
 

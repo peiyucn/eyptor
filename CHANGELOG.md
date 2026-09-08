@@ -5,14 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 English | [简体中文](CHANGELOG.zh-CN.md)
 
-## [1.2.0] - 2026-09-05
+## [1.2.0] - Unreleased
 
 ### Added
 
 - **Clean Markdown serialization mode** (`epytor.markdown.serializationMode`: clean / compatible) — minimizes unnecessary escapes and placeholder table breaks; default `clean` (#15, thanks @dongjha)
 - **Table grid picker**: 8×8 grid on the insert-table button with any row × column size
 - **FindBar regular-expression search** (`.*` toggle) with invalid-pattern feedback and zero-width match protection
-- **Heading sticky title with sibling folding** (Decoration-based; the underlying document is never modified)
+- **Heading sticky title with sibling folding** (the document content is never modified)
 - **Table wrap modes** (`epytor.tableWrapMode`: wrap / nowrap) and Shift+Enter soft breaks inside table cells (serialized as `<br>`)
 - **Editable frontmatter panel** (key/value rows with add/remove)
 - **Toolbar overflow menu**: buttons collapse into a "⋯" menu on narrow windows (replaces the old wrapping layout)
@@ -20,8 +20,8 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 ### Fixed
 
-- **Large-document editing lag on macOS IME input**: bounded-LCS diff + IME-aware scheduling (#16, thanks @dongjha)
-- **Large-document input lag (10k-line scale)**: heading-fold decorations made single-pass and cached; zero serialization while typing (pull-based saving) — smooth up to ~3000 lines (see Known Limitations)
+- **Large-document editing lag on macOS IME input** (#16, thanks @dongjha)
+- **Large-document input lag (10k-line scale)**: editing stays smooth up to ~3000 lines (see Known Limitations)
 - **Table soft breaks survive save/reload**: Shift+Enter inside a cell serializes as GFM `<br>` and round-trips without loss
 - **Inline code at the end of a block**: typing keeps the code style (path completion for `./` `@/` stays usable); ArrowRight exits with an in/out side indicator
 - **Editor focus restored** when switching back from another file (cursor visible but input dead)
@@ -33,12 +33,11 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 ### Changed
 
 - **Milkdown** upgraded 7.22.0 → 7.22.1 (inline code mark fix + dompurify security update)
-- **Pull-based saving**: edits only send a light dirty mark; the extension pulls content from the WebView and serializes once when saving (Cmd+S / auto save)
+- **List keyboard behavior** now follows the official defaults: Backspace at the start of an empty item deletes it, on a non-empty item merges into the previous one, and numbering reflows automatically
 - **`epytor.tableWrapMode` simplified** from three modes to two (`wrap` / `nowrap`); old values migrate automatically (normal/aggressive → wrap, none → nowrap)
 
 ### Removed
 
-- **Dead code**: `selectionToolbar` (~900 lines) and related leftovers after the official toolbar feature took over
 - **`epytor.autoSave` / `epytor.autoSaveDelay`**: auto save now uses the built-in VS Code `files.autoSave` (off / afterDelay / onFocusChange / onWindowChange)
 
 ## [1.1.6] - 2026-08-06
