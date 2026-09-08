@@ -7,6 +7,7 @@ import { ZH_CN_WEBVIEW } from "./i18n/webviewTranslations";
 import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
 import { computeLineMap } from "./utils/lineMap";
 import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter } from "./utils/contentTransform";
+import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
 import type { ToExtensionMessage, ToWebviewMessage } from "../shared/messages";
 import { resolveTableWrapVars } from "../shared/tableWrap";
 
@@ -31,8 +32,8 @@ export class MarkdownEditorProvider
     public readonly onDidChangeCustomDocument =
         this._onDidChangeCustomDocument.event;
 
-    // 保存时拉取的等待者（key: document uri string → resolve(content)）
-    private readonly _pendingContentResolvers = new Map<string, (content: string) => void>();
+    // 保存时拉取的内容请求协调器（单飞 + 等待队列，杜绝单槽覆盖导致保存悬挂，见 ContentRequestCoordinator）
+    private readonly _contentRequests: ContentRequestCoordinator;
 
     // 记录每个 document 对应的 webviewPanel（用于 revert 时推送新内容）
     private readonly _webviewPanels = new Map<string, vscode.WebviewPanel>();
@@ -189,6 +190,12 @@ export class MarkdownEditorProvider
             100,
         );
         this._statusBarItem.hide();
+        this._contentRequests = new ContentRequestCoordinator(
+            (uriKey) => {
+                this._webviewPanels.get(uriKey)?.webview.postMessage({ type: "requestContent" });
+            },
+            CONTENT_REQUEST_TIMEOUT_MS,
+        );
     }
 
     async openCustomDocument(
@@ -256,12 +263,8 @@ export class MarkdownEditorProvider
             this._imageUriMaps.delete(uriKey);
             this._initializedPanels.delete(uriKey);
             this._wordCounts.delete(uriKey);
-            // 兜底 resolve 未完成的拉取（面板已销毁，用内存内容）
-            const resolver = this._pendingContentResolvers.get(uriKey);
-            if (resolver) {
-                this._pendingContentResolvers.delete(uriKey);
-                resolver(document.getText());
-            }
+            // 兜底结算未完成的拉取（面板已销毁，用内存内容）
+            this._contentRequests.settleAll(uriKey);
             // 面板关闭（含预览被替换、切文本编辑器）时隐藏状态栏
             // 若有其他活跃 MD 面板，其 wordCount / onDidChangeViewState 会重新显示
             this._statusBarItem.hide();
@@ -472,11 +475,12 @@ export class MarkdownEditorProvider
                 break;
             }
             case "contentResponse": {
-                // 保存时拉取的响应：resolve 对应等待者
-                const resolver = this._pendingContentResolvers.get(uriKey);
-                if (resolver) {
-                    this._pendingContentResolvers.delete(uriKey);
-                    resolver(this._prepareContentForSave(message.content, uriKey));
+                // 保存时拉取的响应：结算该文档的全部等待者
+                if (this._contentRequests.has(uriKey)) {
+                    this._contentRequests.resolve(
+                        uriKey,
+                        this._prepareContentForSave(message.content, uriKey),
+                    );
                 }
                 break;
             }
@@ -636,21 +640,15 @@ export class MarkdownEditorProvider
     /**
      * 保存时拉取（拉取式架构核心）：请求 webview 序列化当前内容并等待回传。
      * webview 未就绪 / 超时（CONTENT_REQUEST_TIMEOUT_MS）时回退内存内容。
+     * 并发调用（Cmd+S / autoSave / watcher / frontmatter / 切文本编辑器）经
+     * ContentRequestCoordinator 单飞排队，共享同一次回包，无一悬挂。
      */
     private _requestContent(document: MarkdownDocument, uriKey: string): Promise<string> {
         const panel = this._webviewPanels.get(uriKey);
         if (!panel) {
             return Promise.resolve(document.getText());
         }
-        return new Promise((resolve) => {
-            this._pendingContentResolvers.set(uriKey, resolve);
-            panel.webview.postMessage({ type: "requestContent" });
-            setTimeout(() => {
-                if (this._pendingContentResolvers.delete(uriKey)) {
-                    resolve(document.getText());
-                }
-            }, CONTENT_REQUEST_TIMEOUT_MS);
-        });
+        return this._contentRequests.request(uriKey, document.getText());
     }
 
     async saveCustomDocument(
