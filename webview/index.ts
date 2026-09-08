@@ -601,32 +601,45 @@ function enhanceCodeBlocks(container: HTMLElement): void {
     new MutationObserver(() => requestAnimationFrame(scanBlocks))
         .observe(container, { childList: true, subtree: true });
 
-    // 语言搜索框键盘导航
+    // 语言搜索框键盘导航：{activeIndex} 显式状态（WeakMap 按输入框隔离）。
+    // 回归：以 DOM .focused class 为唯一状态源——输入过滤重渲染后高亮丢失、ArrowDown/Up
+    // 从头开始；无 Escape 取消；Enter 无高亮时静默无操作
+    const navStates = new WeakMap<HTMLElement, { activeIndex: number }>();
     container.addEventListener('keydown', (e) => {
         const input = e.target as HTMLElement;
         if (!input.closest('.search-box')) return;
-        const list = input.closest('.list-wrapper')?.querySelector('.language-list');
+        const list = input.closest('.list-wrapper')?.querySelector<HTMLElement>('.language-list');
         if (!list) return;
         const items = list.querySelectorAll<HTMLElement>('.language-list-item');
         if (items.length === 0) return;
-        const focused = list.querySelector<HTMLElement>('.language-list-item.focused');
-        let idx = -1;
-        if (focused) items.forEach((el, i) => { if (el === focused) idx = i; });
+        const state = navStates.get(input) ?? { activeIndex: -1 };
+        navStates.set(input, state);
+        const clamp = (i: number) => Math.max(-1, Math.min(i, items.length - 1));
+        const apply = () => {
+            items.forEach(el => el.classList.remove('focused'));
+            const el = items[state.activeIndex];
+            if (el) {
+                el.classList.add('focused');
+                el.scrollIntoView({ block: 'nearest' });
+            }
+        };
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            const next = Math.min(idx + 1, items.length - 1);
-            items.forEach(el => el.classList.remove('focused'));
-            items[next].classList.add('focused');
-            items[next].scrollIntoView({ block: 'nearest' });
+            state.activeIndex = clamp(state.activeIndex + 1);
+            apply();
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            const prev = Math.max(idx - 1, 0);
-            items.forEach(el => el.classList.remove('focused'));
-            items[prev].classList.add('focused');
-            items[prev].scrollIntoView({ block: 'nearest' });
+            state.activeIndex = clamp(state.activeIndex - 1);
+            apply();
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            if (focused) focused.click();
+            // 无高亮时选第一项（回归：此前静默无操作）
+            const target = items[Math.max(state.activeIndex, 0)];
+            target?.click();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            state.activeIndex = -1;
+            input.blur(); // 取消搜索
         }
     });
 }
