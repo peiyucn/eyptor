@@ -172,3 +172,23 @@
 - 本记录中标注「已复核」的条目推翻或补充了 tech-debt 旧结论：F1 推翻「无死配置」、A6/B6 补充「类型安全未达成」、D1 补充 slug.ts 连带清理。
 - 修复完成后，已清偿条目按项目惯例移入 `docs/tech-debt.md` 已清偿区，未修条目登记待处理区。
 - 用户未跟踪的 `docs/specs/2026-09-06-typora-replication-assessment.md` 不属本审计范围，未读取未改动。
+
+## 修复进度（2026-09-08 起按波次推进）
+
+| 条目 | 状态 | 提交 |
+| :--- | :--- | :--- |
+| A1 保存拉取单槽竞态（critical） | ✅ 单飞+等待队列 ContentRequestCoordinator | `a3df75e` |
+| A2 外部写盘永不采纳（critical） | ✅ 已知盘快照判定 + _markDirty + 写盘完成锚定 | `427e90c` |
+| A3 过期内存写盘三路径 | ✅ SaveAs/备份先拉取 + 超时警告（l10n 双语） | `4cb0f06` |
+| A7 自建保存失败静默 | ✅ _saveWithFeedback 统一出口 | `cf22d87` |
+| D1 frontmatter 面板丢行（critical） | ✅ kv/raw 有序条目模型 | `95e2d17` |
+| E1 配置注入 WebView HTML | ✅ webviewConfigSanitize 净化 | `68e23ca` |
+| C1 补全 detach 泄漏 | ✅ 保存并调用 detach | `0e755f8` |
+| C2 补全响应无过期守卫 | ✅ latestId 守卫 + isConnected 双保险 | `0e755f8` |
+| C3 fileInput 点击递归 | ✅ 移出 dropZone | `5a0eeeb` |
+| C5 上传失败静默 | ✅ 成功才关闭 + 失败提示 + 可重试 | `5a0eeeb` |
+| C4 重命名失败静默 | ✅ tooltip 显示宿主侧本地化错误 | `b1767d7` |
+| D2 查找匹配无上限 | ✅ MAX_MATCHES=5000 截断 + N+ 计数 | `4f2ed91` |
+| B1 首帧假脏标记 | ✅ settle 时初始化 prevDoc 基准 | `a4281b0` |
+| 其余（波次②③④） | ⬜ 待续 | — |
+
