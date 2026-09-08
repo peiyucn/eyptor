@@ -638,7 +638,11 @@ onMessage((msg) => {
     }
     if (msg.type === "init" || msg.type === "revert") {
         _editorLifecycleChain = _editorLifecycleChain.then(() =>
-            handleEditorLifecycleMessage(msg, container),
+            handleEditorLifecycleMessage(msg, container).catch((err) => {
+                // 编辑器重建失败：给出诊断而非静默白屏
+                // （回归：异常穿透 async 回调后页面无任何提示、什么都渲染不出来）
+                console.error("[epytor] 编辑器初始化失败:", err);
+            }),
         );
         return _editorLifecycleChain;
     }

@@ -86,12 +86,10 @@ export function notifyWordCount(
 
 export function onMessage(handler: (msg: IncomingMessage) => void): void {
     window.addEventListener("message", (event: MessageEvent) => {
-        // 最小运行时守卫（回归：event.data 曾直接断言为 IncomingMessage，无来源/形状校验）：
-        // 仅接受来自同 window 的对象载荷（webview 内合法来源只有 Extension 的 postMessage；
-        // jsdom 中 source 为 null，视为本窗口环境放行以便测试）
-        if (event.source !== null && event.source !== window) {
-            return;
-        }
+        // 最小运行时守卫：只校验载荷形状（回归：event.data 曾直接断言为 IncomingMessage，
+        // 无任何校验）。注意：不做 event.source 校验——VS Code WebView 中 Extension 的
+        // postMessage 到达时 source 是父窗口而非自身 window，校验来源会丢光合法消息
+        // （2026-09-08 曾误加 `event.source === window` 导致整页不渲染，已回退）。
         const data = event.data as unknown;
         if (data === null || typeof data !== "object") {
             return;
