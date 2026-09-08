@@ -76,7 +76,6 @@ export function initToc(getEditorView: () => EditorView | null): {
     panel: HTMLElement;
     toggle: () => void;
     refresh: () => void;
-    updatePosition: () => void;
     show: () => void;
 } {
     const panel = document.createElement("div");
@@ -386,32 +385,24 @@ export function initToc(getEditorView: () => EditorView | null): {
         }
     }
 
-    // ── 动态对齐到 topbar 底部，同步 tab 垂直位置 ──────────
-    function updatePanelPosition(): void {
-        // TOC 吸顶：从视口最顶部开始，全高
-        panel.style.top = '36px';
-        panel.style.height = 'calc(100vh - 36px)';
-        // tab 全高细竖条，CSS 已处理
-    }
+    // 面板位置（top/height）由 toc.css 静态声明（与 topbar 高度 36px 对齐）——
+    // 回归：此前 updatePanelPosition() 每次调用都写入与 CSS 相同的定值，且被
+    // rAF 初始化与 resize 重复调用、永不产生不同结果（死重函数，已删除）
 
     updateTabPos();
     requestAnimationFrame(() => {
-        updatePanelPosition();
         if (isPinned && !isOpen) {
             openPanel(true);
         }
         checkAutoShow();
     });
 
-    window.addEventListener("resize", () => {
-        updatePanelPosition();
-        checkAutoShow();
-    });
+    window.addEventListener("resize", checkAutoShow);
 
     function show(): void {
         panel.style.visibility = 'visible';
         tabEl.style.visibility = 'visible';
     }
 
-    return { panel, toggle, refresh, updatePosition: updatePanelPosition, show };
+    return { panel, toggle, refresh, show };
 }

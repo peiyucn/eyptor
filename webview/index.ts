@@ -326,7 +326,6 @@ async function initEditor(
         () => toc.toggle(),
         window.__i18n?.serializationMode ?? "clean",
     );
-    toc.updatePosition(); // 工具栏已就绪，更新 TOC 吸顶位置
     toc.show();    // toolbar 就绪，显示 TOC 面板
     // TOC 全量重建 + 字数统计：双 rAF 延迟到首帧绘制后（首帧性能：万行文档 TOC
     // 重建与全文遍历在 create() 后同步执行会阻塞首帧；首帧先出正文，收尾工作下一帧补齐）
