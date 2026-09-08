@@ -12,6 +12,7 @@ import "@milkdown/crepe/theme/common/link-tooltip.css";
 import "./style.css"; // 必须在 Crepe CSS 之后加载，用 VSCode 变量覆盖 Crepe 主题
 import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../shared/constants";
 import { resolveTableWrapVars } from "../shared/tableWrap";
+import type { ToWebviewMessage } from "../shared/messages";
 import { applyTableWrapVars } from "./utils/tableWrap";
 import { computeHeadingSignature } from "./utils/headingFold";
 import {
@@ -850,12 +851,30 @@ for (const evt of ["wheel", "mousedown", "keydown", "touchstart"] as const) {
 }
 
 // 监听来自 Extension 侧的消息
-onMessage(async (msg) => {
+// init/revert（编辑器生命周期）串行链：并发到达时按序重建——
+// 回归：旧实现无互斥，首次 init 的 createEditor 尚未 resolve 时 revert 到达，
+// 两个 createEditor 在同一容器并发执行，先完成的 DOM 被后者清空、实例孤儿化
+let _editorLifecycleChain: Promise<unknown> = Promise.resolve();
+
+onMessage((msg) => {
     const container = document.getElementById("editor");
     if (!container) {
         return;
     }
+    if (msg.type === "init" || msg.type === "revert") {
+        _editorLifecycleChain = _editorLifecycleChain.then(() =>
+            handleEditorLifecycleMessage(msg, container),
+        );
+        return _editorLifecycleChain;
+    }
+    return handleRegularMessage(msg);
+});
 
+/** init/revert：编辑器重建（串行执行，见 _editorLifecycleChain） */
+async function handleEditorLifecycleMessage(
+    msg: Extract<ToWebviewMessage, { type: "init" | "revert" }>,
+    container: HTMLElement,
+): Promise<void> {
     if (msg.type === "init" || msg.type === "revert") {
         markdownSource = msg.content; // 保存原始内容，供行号搜索使用
         currentLineMap = msg.lineMap ?? [];
@@ -915,7 +934,12 @@ onMessage(async (msg) => {
                 }
             }
         }
-    } else if (msg.type === "requestSwitchToTextEditor") {
+    }
+}
+
+/** 非生命周期消息：直接分发（无编辑器重建副作用，可并行处理） */
+function handleRegularMessage(msg: ToWebviewMessage): void {
+    if (msg.type === "requestSwitchToTextEditor") {
         // 来自菜单按钮/命令面板的"切换到文本编辑器"请求
         // 与 Cmd+Shift+M 快捷键逻辑相同：先获取当前可见行再通知 Extension
         const view = getEditorView();
@@ -1013,4 +1037,4 @@ onMessage(async (msg) => {
     } else if (msg.type === "imagePathResolved") {
         dispatchImagePathResolved(msg.id, msg.webviewUri);
     }
-});
+}
