@@ -21,12 +21,20 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 ### Fixed
 
 - **Large-document editing lag on macOS IME input**: bounded-LCS diff + IME-aware scheduling (#16, thanks @dongjha)
-- **Large-document input lag (10k-line scale)**: heading-fold decorations O(n²) made single-pass + pull-based saving (zero serialization while typing)
+- **Large-document input lag (10k-line scale)**: heading-fold decorations made single-pass and cached; zero serialization while typing (pull-based saving) — smooth up to ~3000 lines (see Known Limitations)
+- **Table soft breaks survive save/reload**: Shift+Enter inside a cell serializes as GFM `<br>` and round-trips without loss
+- **Inline code at the end of a block**: typing keeps the code style (path completion for `./` `@/` stays usable); ArrowRight exits with an in/out side indicator
+- **Editor focus restored** when switching back from another file (cursor visible but input dead)
+- **No false "unsaved" dot** when merely moving the cursor
+- **Table row/column selection toolbar**: themed to match the editor and easier to reach (closer to the handle, larger buttons)
+- **Toolbar overflow**: "⋯" no longer overlaps buttons (fixed right edge; Settings pinned to the menu)
+- **Mermaid zoom baseline**: zooms relative to the original rendered size instead of the container width
 
 ### Changed
 
 - **Milkdown** upgraded 7.22.0 → 7.22.1 (inline code mark fix + dompurify security update)
 - **Pull-based saving**: edits only send a light dirty mark; the extension pulls content from the WebView and serializes once when saving (Cmd+S / auto save)
+- **`epytor.tableWrapMode` simplified** from three modes to two (`wrap` / `nowrap`); old values migrate automatically (normal/aggressive → wrap, none → nowrap)
 
 ### Removed
 
