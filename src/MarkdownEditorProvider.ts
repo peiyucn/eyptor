@@ -538,10 +538,8 @@ export class MarkdownEditorProvider
                 // 不经过 saveCustomDocument（其内部会再次拉取 webview 正文并覆盖 frontmatter）
                 const cts = new vscode.CancellationTokenSource();
                 try {
-                    await document.save(cts.token);
-                    // 写盘完成后再记时间戳与盘快照：自写抑制窗口锚定「写完」而非「开始写」
-                    this._lastSaveTimes.set(uriKey, Date.now());
-                    this._lastDiskContents.set(uriKey, document.getText());
+                    const saved = await this._saveWithFeedback(document, uriKey, cts.token);
+                    if (!saved) break;
                     const panel = this._webviewPanels.get(uriKey);
                     if (panel) {
                         panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeLineMap(document.getText()) });
@@ -568,9 +566,9 @@ export class MarkdownEditorProvider
                 document.update(latest);
                 const flushCts = new vscode.CancellationTokenSource();
                 try {
-                    await document.save(flushCts.token);
-                    this._lastSaveTimes.set(uriKey, Date.now());
-                    this._lastDiskContents.set(uriKey, document.getText());
+                    const saved = await this._saveWithFeedback(document, uriKey, flushCts.token);
+                    // 写盘失败：中止切换并保留面板（回归：此前静默继续，交互失效无提示）
+                    if (!saved) break;
                 } finally {
                     flushCts.dispose();
                 }
@@ -674,6 +672,37 @@ export class MarkdownEditorProvider
             undo: () => { /* TODO */ },
             redo: () => { /* TODO */ },
         });
+    }
+
+    /**
+     * 统一保存出口（自建保存路径：frontmatterUpdate / switchToTextEditor）：
+     * 写盘 + 时间戳/盘快照记录；失败时标记 dirty（VS Code 才会提示保存，关窗不丢编辑）
+     * 并弹出用户可见错误。返回是否成功，调用方据此中止后续动作。
+     * 回归：此前这两条路径只有 try/finally 无 catch——磁盘只读/锁定/满时静默失败，
+     * VS Code 还认为文档干净，frontmatter 编辑在用户无感知下丢失、切文本编辑器静默失效。
+     */
+    private async _saveWithFeedback(
+        document: MarkdownDocument,
+        uriKey: string,
+        token: vscode.CancellationToken,
+    ): Promise<boolean> {
+        try {
+            await document.save(token);
+            this._lastSaveTimes.set(uriKey, Date.now());
+            this._lastDiskContents.set(uriKey, document.getText());
+            return true;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) {
+                console.error("[epytor] save failed:", message);
+            }
+            // 内存已 ≠ 盘上内容：通知 VS Code 脏状态，避免关窗静默丢编辑
+            this._markDirty(document);
+            void vscode.window.showErrorMessage(
+                vscode.l10n.t("Failed to save file: {0}", message),
+            );
+            return false;
+        }
     }
 
     /**
