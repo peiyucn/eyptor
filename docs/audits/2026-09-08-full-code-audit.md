@@ -224,5 +224,12 @@
 | F8 tech-debt 100% 声明 | ✅ 实测复核：imageService 行覆盖确为 100%，原存疑不成立 | `9f801f1` |
 | F9 测试名不副实 | ✅ 唯一性测试改真断言（部分） | `9f801f1` |
 | F15 flushPromises 死助手 | ✅ 删除 + 补 clearAllMocks | `9f801f1` |
-| 其余（波次③分层拆分、B9/B11/B15、D7/D8/D13、F5/F10-F14 收尾） | ⬜ 待续 | — |
+| B6 buildTopBar 巨型回调 + 8 any | ✅ 拆分为 components/topBar/buildTopBar.ts，类型从官方 TopBarFeatureConfig 推导，8 any 全清，editor.ts -299 行 | `40cd3c6` |
+| B9 语言导航 DOM 状态源 | ✅ WeakMap activeIndex 显式状态 + Escape/Enter 兜底 | `383ea32` |
+| B11 index.ts 魔法数字 | ✅ 8 个 *_MS 语义常量收编 | `797db89` |
+| B15 空 catch / D13 防抖常量 | ✅ mermaid 空 catch 补注释 + CACHE_REBUILD_DEBOUNCE_MS | `e1fca5f` |
+| F5 l10n bundle 漂移 | ✅ 补 3 删 1，双份对齐源码 8 键 | `a814377` |
+| F11/F12/F14 CHANGELOG 口径 | ✅ 补列表行为条目、实现细节改行为级、日期改 Unreleased、删死代码条目 | `d5499e3` |
+| F13 README 开发史段 | ✅ 删除（保留上游致谢 + CHANGELOG 链接） | `d5499e3` |
+| 其余（C8 补全核心合并、index.ts 八职责拆分、D7/D8 需实测项、F10 DOM 前提探针） | ⬜ 待续 | — |
 
