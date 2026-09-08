@@ -127,4 +127,30 @@ describe("messaging — postMessage 格式验证", () => {
         notifyOpenSettings();
         expect(mockVscodeApi.postMessage).toHaveBeenCalledWith({ type: "openSettings" });
     });
+
+    it("onMessage 合法对象载荷 应该 转发给 handler（回归：无任何运行时校验直接断言类型）", async () => {
+        const { onMessage } = await import("../../webview/messaging");
+        const handler = vi.fn();
+        onMessage(handler);
+        window.dispatchEvent(new MessageEvent("message", {
+            data: { type: "wordCount", lines: 1, words: 2, charsNoSpace: 3, charsWithSpace: 4 },
+        }));
+        expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it("onMessage 非对象载荷（字符串）应该 丢弃", async () => {
+        const { onMessage } = await import("../../webview/messaging");
+        const handler = vi.fn();
+        onMessage(handler);
+        window.dispatchEvent(new MessageEvent("message", { data: "not-an-object" }));
+        expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("onMessage 缺少 type 的对象 应该 丢弃", async () => {
+        const { onMessage } = await import("../../webview/messaging");
+        const handler = vi.fn();
+        onMessage(handler);
+        window.dispatchEvent(new MessageEvent("message", { data: { content: "x" } }));
+        expect(handler).not.toHaveBeenCalled();
+    });
 });

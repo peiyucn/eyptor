@@ -86,7 +86,21 @@ export function notifyWordCount(
 
 export function onMessage(handler: (msg: IncomingMessage) => void): void {
     window.addEventListener("message", (event: MessageEvent) => {
-        handler(event.data as IncomingMessage);
+        // 最小运行时守卫（回归：event.data 曾直接断言为 IncomingMessage，无来源/形状校验）：
+        // 仅接受来自同 window 的对象载荷（webview 内合法来源只有 Extension 的 postMessage；
+        // jsdom 中 source 为 null，视为本窗口环境放行以便测试）
+        if (event.source !== null && event.source !== window) {
+            return;
+        }
+        const data = event.data as unknown;
+        if (data === null || typeof data !== "object") {
+            return;
+        }
+        const msg = data as IncomingMessage;
+        if (typeof msg.type !== "string") {
+            return;
+        }
+        handler(msg);
     });
 }
 

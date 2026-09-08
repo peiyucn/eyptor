@@ -932,5 +932,8 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         dispatchImgPathSuggestions(msg.id, msg.items);
     } else if (msg.type === "imagePathResolved") {
         dispatchImagePathResolved(msg.id, msg.webviewUri);
+    } else {
+        // 未知消息类型：安全默认（丢弃），debug 模式给出可见性（回归：静默丢弃无诊断）
+        if (_debugLog) console.warn("[epytor] 未知消息类型:", (msg as { type: string }).type);
     }
 }
