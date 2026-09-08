@@ -81,7 +81,7 @@
         "command": "epytor.switchToPreview",
         "key": "ctrl+shift+m",
         "mac": "cmd+shift+m",
-        "when": "resourceExtname == '.md' && activeCustomEditorId != 'epytor.editor'"
+        "when": "(resourceExtname == '.md' || resourceExtname == '.markdown') && activeCustomEditorId != 'epytor.editor'"
       }
     ],
     "menus": {
@@ -94,7 +94,7 @@
         {
           "command": "epytor.switchToPreview",
           "group": "navigation",
-          "when": "resourceExtname == '.md' && activeCustomEditorId != 'epytor.editor'"
+          "when": "(resourceExtname == '.md' || resourceExtname == '.markdown') && activeCustomEditorId != 'epytor.editor'"
         },
         {
           "command": "epytor.debugModeEnable",
