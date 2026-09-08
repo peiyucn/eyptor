@@ -66,6 +66,7 @@
 ### 🔴 上游 workaround
 
 * [ ] **`cellClickFixPlugin`**（~130 行，[editor.ts:236-363](../webview/editor.ts#L236)）— `filterTransaction` + `appendTransaction` + `requestAnimationFrame` 多层拦截，对抗 Crepe 表格单击行为不稳定。**需等 Milkdown 上游修复后移除。**
+* [ ] **vendor latex feature 上游同步**（2026-09-08 新增，`webview/vendor/latexFeature.ts`）— 升级 `@milkdown/crepe` 时需按文件头「§上游对照」逐节 diff 上游 `src/feature/latex/*`；若上游 latex feature 改为惰性加载 katex，可移除本 vendor 与 esbuild.mjs 的 katex-stub-for-crepe 插件
 
 ### 🔴 官方无替代（已查证）
 
