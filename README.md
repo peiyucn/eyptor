@@ -48,6 +48,11 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 | `epytor.tableWrapMode` | `"wrap"` | Table cell wrapping: `wrap` (break anywhere) / `nowrap` (no wrap + horizontal scroll) |
 | `epytor.imageStorage` | `"local"` | Image storage: `local` / `server` |
 | `epytor.imageLocalPath` | `""` | Local image path |
+| `epytor.imageServerUrl` | `""` | Image upload endpoint URL (used when `imageStorage` is `server`) |
+| `epytor.imageServerFieldName` | `"file"` | Form field name for the image file in the upload request |
+| `epytor.imageServerExtraParams` | `""` | Extra upload request parameters as a JSON object string, e.g. `{"token":"xxx"}` |
+| `epytor.imageServerResponsePath` | `"url"` | Dot-notation path to extract the image URL from the upload response JSON, e.g. `data.url` |
+| `epytor.imageSelectionColor` | `"rgba(52, 211, 153, 0.6)"` | Border color when an image is selected in the editor |
 | `epytor.debugMode` | `false` | Debug mode |
 | `epytor.markdown.serializationMode` | `"clean"` | Markdown save mode: `clean` / `compatible` |
 

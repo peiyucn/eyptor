@@ -48,6 +48,11 @@
 | `epytor.tableWrapMode` | `"wrap"` | 表格单元格换行：`wrap`（任意字符断行）/ `nowrap`（不换行 + 横向滚动） |
 | `epytor.imageStorage` | `"local"` | 图片存储：`local` / `server` |
 | `epytor.imageLocalPath` | `""` | 本地图片路径 |
+| `epytor.imageServerUrl` | `""` | 图片上传接口地址（`imageStorage` 为 `server` 时使用） |
+| `epytor.imageServerFieldName` | `"file"` | 上传请求中图片文件的字段名 |
+| `epytor.imageServerExtraParams` | `""` | 上传请求附加参数，JSON 对象字符串格式，如 `{"token":"xxx"}` |
+| `epytor.imageServerResponsePath` | `"url"` | 从上传响应 JSON 中提取图片 URL 的点分路径，如 `data.url` |
+| `epytor.imageSelectionColor` | `"rgba(52, 211, 153, 0.6)"` | 编辑器中选中图片时的边框颜色 |
 | `epytor.debugMode` | `false` | 调试模式 |
 | `epytor.markdown.serializationMode` | `"clean"` | Markdown 保存模式：`clean` / `compatible` |
 
