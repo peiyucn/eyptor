@@ -198,6 +198,22 @@ export class MarkdownEditorProvider
                 this._webviewPanels.get(uriKey)?.webview.postMessage({ type: "requestContent" });
             },
             CONTENT_REQUEST_TIMEOUT_MS,
+            (uriKey) => this._warnContentFallback(uriKey),
+        );
+    }
+
+    /** 已弹过「编辑器未响应、内容可能过期」警告的文档（每文档每会话一次，防每次保存重复骚扰） */
+    private readonly _fallbackWarnedUris = new Set<string>();
+
+    /**
+     * 拉取超时兜底触发：保存仍以内存内容完成，但必须告知用户内容可能过期
+     * （回归：此前静默写入过期内存，无任何信号）。
+     */
+    private _warnContentFallback(uriKey: string): void {
+        if (this._fallbackWarnedUris.has(uriKey)) return;
+        this._fallbackWarnedUris.add(uriKey);
+        void vscode.window.showWarningMessage(
+            vscode.l10n.t("The editor is not responding; the file was saved with possibly outdated content"),
         );
     }
 
@@ -267,6 +283,7 @@ export class MarkdownEditorProvider
             this._initializedPanels.delete(uriKey);
             this._wordCounts.delete(uriKey);
             this._lastDiskContents.delete(uriKey);
+            this._fallbackWarnedUris.delete(uriKey);
             // 兜底结算未完成的拉取（面板已销毁，用内存内容）
             this._contentRequests.settleAll(uriKey);
             // 面板关闭（含预览被替换、切文本编辑器）时隐藏状态栏
@@ -695,6 +712,11 @@ export class MarkdownEditorProvider
         destination: vscode.Uri,
         cancellation: vscode.CancellationToken,
     ): Promise<void> {
+        // 拉取式架构：内存可能落后于 webview 未落盘编辑，先拉最新内容再另存
+        // （回归：直接 saveAs 会写出缺最近编辑的文件）
+        const uriKey = document.uri.toString();
+        const content = await this._requestContent(document, uriKey);
+        document.update(content);
         await document.saveAs(destination, cancellation);
     }
 
@@ -725,6 +747,10 @@ export class MarkdownEditorProvider
         context: vscode.CustomDocumentBackupContext,
         cancellation: vscode.CancellationToken,
     ): Promise<vscode.CustomDocumentBackup> {
+        // 热退出备份同样先拉最新内容（回归：备份缺最近编辑，热退出恢复丢内容）
+        const uriKey = document.uri.toString();
+        const content = await this._requestContent(document, uriKey);
+        document.update(content);
         return document.backup(context.destination, cancellation);
     }
 

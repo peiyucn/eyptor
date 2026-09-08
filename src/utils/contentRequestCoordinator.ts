@@ -22,6 +22,8 @@ export class ContentRequestCoordinator {
     constructor(
         private readonly send: (uriKey: string) => void,
         private readonly timeoutMs: number,
+        /** 超时兜底触发时的回调（保存仍以兜底内容完成，回调用于用户可见警告） */
+        private readonly onTimeout?: (uriKey: string) => void,
     ) {}
 
     /** 是否有 in-flight 请求（回包到达时先查，避免无谓的内容预处理） */
@@ -39,7 +41,10 @@ export class ContentRequestCoordinator {
             const entry: PendingRequest = {
                 resolvers: [resolve],
                 fallbackContent,
-                timer: setTimeout(() => this._settle(uriKey, entry.fallbackContent), this.timeoutMs),
+                timer: setTimeout(() => {
+                    this._settle(uriKey, entry.fallbackContent);
+                    this.onTimeout?.(uriKey);
+                }, this.timeoutMs),
             };
             this._pending.set(uriKey, entry);
             this.send(uriKey);

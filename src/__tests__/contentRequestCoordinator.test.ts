@@ -75,4 +75,25 @@ describe("ContentRequestCoordinator 拉取协调", () => {
         const coord = new ContentRequestCoordinator(vi.fn(), 3000);
         expect(() => coord.settleAll("doc")).not.toThrow();
     });
+
+    it("超时 应该 触发 onTimeout 回调（保存不悬挂且宿主可给用户警告）", async () => {
+        vi.useFakeTimers();
+        const onTimeout = vi.fn();
+        const coord = new ContentRequestCoordinator(vi.fn(), 3000, onTimeout);
+        const p = coord.request("doc", "memory");
+        await vi.advanceTimersByTimeAsync(3000);
+        await expect(p).resolves.toBe("memory");
+        expect(onTimeout).toHaveBeenCalledWith("doc");
+    });
+
+    it("正常回包结算 应该 不触发 onTimeout（不误报编辑器未响应）", async () => {
+        vi.useFakeTimers();
+        const onTimeout = vi.fn();
+        const coord = new ContentRequestCoordinator(vi.fn(), 3000, onTimeout);
+        const p = coord.request("doc", "memory");
+        coord.resolve("doc", "fresh");
+        await expect(p).resolves.toBe("fresh");
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(onTimeout).not.toHaveBeenCalled();
+    });
 });
