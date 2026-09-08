@@ -423,7 +423,10 @@ export class MarkdownEditorProvider
                         if (panel) {
                             const revertContent = document.getText();
                             const displayContent = this._prepareContentForDisplay(revertContent, document, panel, uriKey);
-                            panel.webview.postMessage({ type: "revert", content: displayContent, lineMap: computeLineMap(revertContent), frontmatter: this._frontmatterMap.get(uriKey) || undefined, imageUriMap: Object.fromEntries(this._imageUriMaps.get(uriKey) ?? []) });
+                            panel.webview.postMessage({
+                                type: "revert",
+                                ...this._lifecyclePayload(uriKey, displayContent, computeLineMap(revertContent)),
+                            });
                         }
                     } finally {
                         cts.dispose();
@@ -457,7 +460,7 @@ export class MarkdownEditorProvider
                 const cfg = vscode.workspace.getConfiguration("epytor");
                 webviewPanel.webview.postMessage({
                     type: "init",
-                    content: displayContent,
+                    ...this._lifecyclePayload(uriKey, displayContent, computeLineMap(initContent)),
                     // 发送时的面板激活态（webview 侧焦点守卫用；后续变化由
                     // panelActiveState 消息实时同步）
                     active: webviewPanel.active,
@@ -465,9 +468,6 @@ export class MarkdownEditorProvider
                     // revert 不会把用户中途改的配置静默回滚）
                     serializationMode: sanitizeSerializationMode(cfg.get("markdown.serializationMode", "clean")),
                     debugMode: cfg.get<boolean>("debugMode", false) === true,
-                    lineMap: computeLineMap(initContent),
-                    frontmatter: this._frontmatterMap.get(uriKey) || undefined,
-                    imageUriMap: Object.fromEntries(this._imageUriMaps.get(uriKey) ?? []),
                     ...(scrollToLine !== undefined ? { scrollToLine } : {}),
                 });
                 break;
@@ -739,12 +739,26 @@ export class MarkdownEditorProvider
             const displayContent = this._prepareContentForDisplay(revertContent, document, panel, uriKey);
             panel.webview.postMessage({
                 type: "revert",
-                content: displayContent,
-                lineMap: computeLineMap(revertContent),
-                frontmatter: this._frontmatterMap.get(uriKey) || undefined,
-                imageUriMap: Object.fromEntries(this._imageUriMaps.get(uriKey) ?? []),
+                ...this._lifecyclePayload(uriKey, displayContent, computeLineMap(revertContent)),
             });
         }
+    }
+
+    /**
+     * 生命周期消息（init/revert）共享载荷工厂（回归 C3：同构 payload 曾在三处
+     * 逐字重复——watcher revert / ready→init / revertCustomDocument）
+     */
+    private _lifecyclePayload(
+        uriKey: string,
+        content: string,
+        lineMap: number[],
+    ): { content: string; lineMap: number[]; frontmatter: string | undefined; imageUriMap: Record<string, string> } {
+        return {
+            content,
+            lineMap,
+            frontmatter: this._frontmatterMap.get(uriKey) || undefined,
+            imageUriMap: Object.fromEntries(this._imageUriMaps.get(uriKey) ?? []),
+        };
     }
 
     async backupCustomDocument(

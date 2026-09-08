@@ -689,52 +689,52 @@ async function handleEditorLifecycleMessage(
     msg: Extract<ToWebviewMessage, { type: "init" | "revert" }>,
     container: HTMLElement,
 ): Promise<void> {
-    if (msg.type === "init" || msg.type === "revert") {
-        markdownSource = msg.content; // 保存原始内容，供行号搜索使用
-        currentLineMap = msg.lineMap ?? [];
-        renderFrontmatterPanel(msg.frontmatter);
-        if (msg.imageUriMap) { setImageUriMap(msg.imageUriMap); }
-        if (msg.type === "init") {
-            _isActivePanel = msg.active ?? true;
-            // 运行期配置以 init 载荷为准（回归 F1：此前由 createEditor 用启动快照重置，
-            // revert 会把用户中途改的 serializationMode/debugMode 静默回滚）
-            if (msg.serializationMode) { setSerializationMode(msg.serializationMode); }
-            if (msg.debugMode !== undefined) {
-                _debugLog = msg.debugMode;
-                setSerializationDebug(msg.debugMode);
-            }
+    // 类型已由签名收窄（回归 C3：此前在函数体内重查 msg.type === init || revert）
+    const isInit = msg.type === "init";
+    markdownSource = msg.content; // 保存原始内容，供行号搜索使用
+    currentLineMap = msg.lineMap ?? [];
+    renderFrontmatterPanel(msg.frontmatter);
+    if (msg.imageUriMap) { setImageUriMap(msg.imageUriMap); }
+    if (isInit) {
+        _isActivePanel = msg.active ?? true;
+        // 运行期配置以 init 载荷为准（回归 F1：此前由 createEditor 用启动快照重置，
+        // revert 会把用户中途改的 serializationMode/debugMode 静默回滚）
+        if (msg.serializationMode) { setSerializationMode(msg.serializationMode); }
+        if (msg.debugMode !== undefined) {
+            _debugLog = msg.debugMode;
+            setSerializationDebug(msg.debugMode);
         }
-        await initEditor(container, msg.content);
-        // 新 WebView 打开时主动获取 DOM 焦点。
-        // 若不调用：旧 WebView（path-link-test.md）在 Cmd+Click 后 blur() 释放了焦点，
-        // 但新 WebView（README.md）的 iframe 未必自动获得焦点；
-        // VS Code 可能仍将 Cmd+W 路由到旧 iframe，导致两个 .md 标签都被关闭。
-        // init 仅在首次打开时触发（revert 是内容变更），此处只对首次打开生效。
-        // 根因修复：延迟到下一帧并按面板激活态守卫——多 webview 时后台 webview 的
-        // 迟到 window.focus() 会抢走当前文档焦点（帧前消息队列已同步最新激活态）。
-        if (msg.type === "init") {
-            requestAnimationFrame(() => {
-                if (_isActivePanel) {
-                    window.focus();
-                }
-            });
-        }
-        // 全局搜索导航或切换回预览时，滚动到指定源码行
-        // Milkdown 渲染 + 浏览器布局需要时间，统一走 scheduleDelayedScroll 重试
-        if (msg.type === "init" && msg.scrollToLine) {
-            const targetLine = msg.scrollToLine;
-            scheduleDelayedScroll((view) => {
-                scrollToSourceLine(view, currentLineMap, targetLine);
-            });
-        } else if (msg.type === "init") {
-            // WebView 重建场景（VSCode 重启恢复标签页等）：从持久状态恢复滚动位置
-            const saved = getWebviewState();
-            if (saved?.scrollY) {
-                const targetY = saved.scrollY as number;
-                scheduleDelayedScroll(() => {
-                    window.scrollTo({ top: targetY });
-                });
+    }
+    await initEditor(container, msg.content);
+    // 新 WebView 打开时主动获取 DOM 焦点。
+    // 若不调用：旧 WebView（path-link-test.md）在 Cmd+Click 后 blur() 释放了焦点，
+    // 但新 WebView（README.md）的 iframe 未必自动获得焦点；
+    // VS Code 可能仍将 Cmd+W 路由到旧 iframe，导致两个 .md 标签都被关闭。
+    // init 仅在首次打开时触发（revert 是内容变更），此处只对首次打开生效。
+    // 根因修复：延迟到下一帧并按面板激活态守卫——多 webview 时后台 webview 的
+    // 迟到 window.focus() 会抢走当前文档焦点（帧前消息队列已同步最新激活态）。
+    if (isInit) {
+        requestAnimationFrame(() => {
+            if (_isActivePanel) {
+                window.focus();
             }
+        });
+    }
+    // 全局搜索导航或切换回预览时，滚动到指定源码行
+    // Milkdown 渲染 + 浏览器布局需要时间，统一走 scheduleDelayedScroll 重试
+    if (isInit && msg.scrollToLine) {
+        const targetLine = msg.scrollToLine;
+        scheduleDelayedScroll((view) => {
+            scrollToSourceLine(view, currentLineMap, targetLine);
+        });
+    } else if (isInit) {
+        // WebView 重建场景（VSCode 重启恢复标签页等）：从持久状态恢复滚动位置
+        const saved = getWebviewState();
+        if (saved?.scrollY) {
+            const targetY = saved.scrollY as number;
+            scheduleDelayedScroll(() => {
+                window.scrollTo({ top: targetY });
+            });
         }
     }
 }
