@@ -21,24 +21,23 @@ function getTopbarBottom(): number {
 }
 
 function getVisibleHeadings(view: EditorView): HTMLElement[] {
-    // 仅顶层标题（与折叠能力口径一致）：doc.forEach 只遍历顶层块——嵌套在引用/列表内
-    // 的标题 DOM 也会被 querySelectorAll 命中，吸顶条可见却永无折叠按钮（回归 D7）。
-    // 探针证实 7.22.1 schema 允许 blockquote 内标题，口径不一致真实存在。
-    const topLevel = new Set<number>();
-    view.state.doc.forEach((node, offset) => {
-        if (node.type.name === "heading") topLevel.add(offset);
-    });
+    // 仅顶层标题（与折叠能力口径一致）：嵌套在引用/列表内的标题 DOM 也会被
+    // querySelectorAll 命中，吸顶条可见却永无折叠按钮（回归 D7）。
+    // 顶层判定用 resolve 后「父节点是 doc（depth 1）」的语义口径——
+    // 回归：posAtDOM(元素, 0) 返回元素起始 + 1（offset 是子节点索引语义），
+    // 与 doc.forEach 的 offset（节点起始）直接比对恒差 1，全部标题被过滤、
+    // 吸顶条永远隐藏（探针实证 [0,17,34] vs [1,18,35]）。
     return Array.from(view.dom.querySelectorAll<HTMLElement>(HEADING_SELECTOR)).filter((heading) => {
         const rect = heading.getBoundingClientRect();
         if (!(rect.width > 0 && rect.height > 0)) return false;
         if (heading.classList.contains("heading-fold-hidden")) return false;
-        let pos: number;
         try {
-            pos = view.posAtDOM(heading, 0);
+            const pos = view.posAtDOM(heading, 0);
+            const $pos = view.state.doc.resolve(pos);
+            return $pos.depth === 1 && $pos.node(1).type.name === "heading";
         } catch {
             return false;
         }
-        return topLevel.has(pos);
     });
 }
 
