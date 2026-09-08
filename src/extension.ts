@@ -68,16 +68,26 @@ export function activate(context: vscode.ExtensionContext) {
                     }
                 }
 
-                // 先关文本 tab，再开 WYSIWYG（与 switchToPreview 命令保持一致）
+                // 抑制自动切换窗口：防止本次转换自身触发的 tab 事件重入环
+                MarkdownEditorProvider.suppressAutoSwitchFor(uriStr);
+
+                // 先开 WYSIWYG 再关文本 tab（回归：先关后开会让 VS Code 把上一个文档
+                // 重新激活、随后 openWith 又激活新文档——活动编辑器在原文档与目标
+                // 文档之间来回切换狂闪；先开后关只有一次激活转移，文本 tab 与
+                // WYSIWYG tab 短暂共存后随即关闭）
                 const isPreview = tab.isPreview;
                 const viewCol = tab.group.viewColumn;
-                await vscode.window.tabGroups.close(tab);
                 await vscode.commands.executeCommand(
                     "vscode.openWith",
                     uri,
                     MarkdownEditorProvider.viewType,
                     { viewColumn: viewCol, preview: isPreview },
                 );
+                try {
+                    await vscode.window.tabGroups.close(tab);
+                } catch {
+                    // 文本 tab 已被其它流程关闭（预览替换等），忽略
+                }
             }
         }),
     );
