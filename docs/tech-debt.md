@@ -36,7 +36,7 @@
 
 ### 🟡 中优先级
 
-* [x] **下拉补全重复** — `pathComplete` / `imgPathComplete` → 提取 `closeDropdown`/`updateActiveItem` 到 `ui/dropdownComplete.ts`（~40 行重复消除）；2026-09-08 进一步提取 `ui/pathCompleteCore.ts`（渲染+键盘导航合一，剩余镜像全清）
+* [x] **下拉补全重复** — `pathComplete` / `imgPathComplete` → 提取 `closeDropdown`/`updateActiveItem` 到 `ui/dropdownComplete.ts`（~40 行重复消除）；2026-09-08 进一步提取 `ui/pathCompleteCore.ts`（渲染+键盘导航合一）；同日审计发现「剩余镜像全清」不成立——**请求生命周期**（id 生成 + pending Map + 超时清理）仍是两套手写实现，已统一到 `utils/pathSuggestionRequests.ts` 单一注册表（详见 `docs/audits/2026-09-08-overcomplexity-audit.md` P4/C4）；「防抖/过期守卫/关闭时机」因触发源与语义不同保留两份
 * [x] **确认/取消编辑重复** — `startCaptionEdit` / `startSrcEdit` → 提取 `startToolbarInlineEdit` 到 `imageView/index.ts` 模块级
 * [x] **顶栏 P 下拉菜单不显示** — `.top-bar-inner` 的 `overflow: hidden` 裁剪了 Crepe heading dropdown；改为 `overflow: visible` 并补充 CSS 回归测试
 * [x] **空 catch 块**（12 处）— 已全部添加描述性注释（4 处已有充分注释未改，8 处补充）

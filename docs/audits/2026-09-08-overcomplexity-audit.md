@@ -387,7 +387,10 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 **第三批（结构性收敛）部分完成 2026-09-08**：E3/C2（双生机制整套删除，净删 ~110 行）、E5 部分（1s 复查定时器 + directOnly 语义）、F2（重试计划统一）、C3（生命周期 payload 工厂）、C6/F5（visibilitychange 删除）、E9（状态栏统一刷新）、E10（配置广播表驱动）、P7（聚焦层数）、P9（TOC 改存 DOM 引用）、B4（.markdown 对齐）、B6（CI Job Summary + 文档修正）、B3（debugMode 单命令）、B5（onStartupFinished）、P11（tech-debt 登记）
 
-**剩余（下轮继续）**：P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
+**剩余（下轮继续，本轮有意未做）**：
+
+* **P1 标题子系统统一索引**——需要拆两步（先共享 `buildHeadingIndex`、再统一 TOC 的深度口径），而第二步是**用户可见行为变更**（TOC 不再列出嵌套标题，按审计要求须进 CHANGELOG）。放在同一轮手测里会与另外 9 项改动混在一起、回归无法归因，故留到独立一轮，先与用户确认口径。
+* **B1 katex 双版本对齐**——需要在真实浏览器里验证 mermaid 数学标签的渲染结果，当前环境无法验证，不凭猜测改动。
 
 **第四批（用户实测反馈的两项严重问题 + 复核中新发现）**：
 
