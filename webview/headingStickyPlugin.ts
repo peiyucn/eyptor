@@ -65,6 +65,8 @@ export const headingStickyPlugin = $prose(() =>
 
             const STICKY_SCROLL_OFFSET_PX = 8;
             const SUPPRESS_AUTO_RELEASE_MS = 400;
+            /** 缓存重建防抖时长（连续输入合并为一次全量布局测量） */
+            const CACHE_REBUILD_DEBOUNCE_MS = 300;
 
             const scrollHeadingIntoStickyPosition = (headingPos: number) => {
                 requestAnimationFrame(() => {
@@ -198,7 +200,7 @@ export const headingStickyPlugin = $prose(() =>
                 rebuildTimer = setTimeout(() => {
                     rebuildCache();
                     scheduleUpdate();
-                }, 300);
+                }, CACHE_REBUILD_DEBOUNCE_MS);
             };
 
             const updateSticky = () => {
