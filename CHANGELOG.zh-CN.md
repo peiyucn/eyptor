@@ -16,7 +16,7 @@
 * **表格换行模式**（`epytor.tableWrapMode`：wrap / nowrap）+ 单元格内 Shift+Enter 软换行（序列化为 `<br>`）
 * **Frontmatter 面板可编辑**（key/value 行编辑 + 增删行）
 * **工具栏溢出菜单**：窗口收窄时按钮收进「⋯」菜单（替代旧换行布局）
-* **Mermaid 预览缩放**（0.4×–3×，可重置，横向滚动）
+* **Mermaid 预览缩放**（0.2×–3×，可重置，横向滚动）
 
 ### 修复
 

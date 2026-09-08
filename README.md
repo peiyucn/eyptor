@@ -22,9 +22,9 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 
 * **Rich text**: headings, bold, italic, strikethrough, inline code, blockquote, horizontal rule, lists
 * **LaTeX math**: inline `$...$` / block `$$...$$`, KaTeX rendering
-* **Tables**: GFM tables, grid picker (8×8), insert/delete rows & columns, drag reorder, column alignment, wrap modes (`normal` / `aggressive` / `none`), Shift+Enter soft breaks inside cells
+* **Tables**: GFM tables, grid picker (8×8), insert/delete rows & columns, drag reorder, column alignment, wrap modes (`wrap` / `nowrap`), Shift+Enter soft breaks inside cells
 * **Code blocks**: CodeMirror 6 highlighting, language picker, copy, fullscreen
-* **Mermaid diagrams**: inline rendering, source/preview toggle, preview zoom (0.4×–3×)
+* **Mermaid diagrams**: inline rendering, source/preview toggle, preview zoom (0.2×–3×)
 * **Images**: paste/drag/picker insert, drag resize, caption, load retry
 * **TOC**: auto-generated, pinnable, click to navigate
 * **Headings**: sticky current-section title while scrolling, sibling folding (document unchanged)
@@ -32,7 +32,7 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 * **Frontmatter**: editable key/value panel
 * **Path autocomplete**: `@/`, `./`, `../` triggers directory browsing
 * **Toolbars**: sticky top bar + floating selection toolbar + overflow menu on narrow windows
-* **Auto save**: writes to disk 1s after editing stops
+* **Auto save**: follows the built-in VS Code `files.autoSave` setting (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`)
 * **Clean Markdown save**: minimizes unnecessary escaping and redundant table breaks
 
 ## Settings

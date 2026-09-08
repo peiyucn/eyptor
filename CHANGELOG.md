@@ -16,7 +16,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Table wrap modes** (`epytor.tableWrapMode`: wrap / nowrap) and Shift+Enter soft breaks inside table cells (serialized as `<br>`)
 - **Editable frontmatter panel** (key/value rows with add/remove)
 - **Toolbar overflow menu**: buttons collapse into a "⋯" menu on narrow windows (replaces the old wrapping layout)
-- **Mermaid preview zoom** (0.4×–3×, reset control, horizontal scroll)
+- **Mermaid preview zoom** (0.2×–3×, reset control, horizontal scroll)
 
 ### Fixed
 

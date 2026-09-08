@@ -29,7 +29,7 @@ webview/components/findBar/index.ts     — 编辑器内查找栏（Cmd/Ctrl+F�
 webview/components/pathLink/            — 路径链接自动补全
 webview/components/tableGridPicker/     — 表格网格选择器（顶栏表格按钮弹出 8×8 网格）
 webview/components/topBarOverflow/      — 工具栏溢出菜单（窄窗口按钮收进 ⋯ 面板）
-webview/components/mermaidZoom/         — Mermaid 预览缩放（0.4–3× + 控制条）
+webview/components/mermaidZoom/         — Mermaid 预览缩放（0.2–3× + 控制条）
 docs/specs/                              — 功能 spec 文档（2026-09-04-* 为本批 v1.2 功能）
 docs/checklists/                         — 手测清单
 docs/roadmap.md                          — 项目路线图（面向用户的功能规划）
