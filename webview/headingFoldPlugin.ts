@@ -12,7 +12,7 @@ import type { Node as ProseNode } from "@milkdown/kit/prose/model";
 import { IconChevronDown, IconChevronRight } from "./ui/icons";
 import { applyTooltip, hideTooltip } from "./ui/tooltip";
 import { t } from "./i18n";
-import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, computeAllHeadingFoldRanges, computeHeadingSignature } from "./utils/headingFold";
+import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, buildHeadingIndex, computeHeadingSignature } from "./utils/headingFold";
 
 export type HeadingFoldMeta = { type: "toggle"; pos: number };
 type HeadingFoldRange = { from: number; to: number };
@@ -78,39 +78,35 @@ function createFoldGutter(
 export function buildFoldDecorations(doc: ProseNode, folded: ReadonlySet<number>): DecorationSet {
     const decorations: Decoration[] = [];
     const hiddenRanges: HeadingFoldRange[] = [];
-    // 单遍 O(n) 计算所有标题折叠范围（回归：曾每标题全量扫描，1 万行 315ms/次）
-    const foldRanges = computeAllHeadingFoldRanges(doc);
+    // 共享标题索引（P1）：枚举 + 折叠范围一趟产出，与 TOC / 吸顶同口径
+    for (const entry of buildHeadingIndex(doc)) {
+        if (!entry.topLevel) continue; // 折叠只作用于顶层标题（嵌套标题不装饰、不吸顶）
 
-    doc.forEach((node, offset) => {
-        if (!isHeadingNode(node)) return;
-
-        const level = getHeadingLevel(node);
-        const collapsed = folded.has(offset);
-        const range = foldRanges.get(offset) ?? null;
-        const foldable = Boolean(range);
+        const collapsed = folded.has(entry.pos);
+        const foldable = entry.foldRange !== null;
 
         decorations.push(
-            Decoration.node(offset, offset + node.nodeSize, {
+            Decoration.node(entry.pos, entry.pos + entry.size, {
                 class: `heading-fold-heading${foldable ? " heading-fold-heading--foldable" : ""}${collapsed ? " heading-fold-heading--collapsed" : ""}`,
             }),
         );
         if (foldable) {
             decorations.push(
                 Decoration.widget(
-                    offset + 1,
-                    (view) => createFoldGutter(view, offset, collapsed),
+                    entry.pos + 1,
+                    (view) => createFoldGutter(view, entry.pos, collapsed),
                     {
                         // key 含折叠状态：状态翻转时强制重建 widget（chevron 图标切换）
-                        key: `epytor-heading-fold-gutter-${offset}-${collapsed ? "closed" : "open"}`,
+                        key: `epytor-heading-fold-gutter-${entry.pos}-${collapsed ? "closed" : "open"}`,
                     },
                 ),
             );
         }
 
-        if (collapsed && range) {
-            hiddenRanges.push(range);
+        if (collapsed && entry.foldRange) {
+            hiddenRanges.push(entry.foldRange);
         }
-    });
+    }
 
     if (hiddenRanges.length > 0) {
         // 排序 + 合并重叠区间（外层折叠包含内层折叠），块遍历用双指针单遍判定——

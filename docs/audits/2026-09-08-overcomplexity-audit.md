@@ -195,17 +195,22 @@ serializeCleanMarkdown 全是 split/map/replace 纯字符串操作，无 throw �
 
 ## 三、插件与组件（7 条：high 2 / medium 3 / low 2）
 
-### 🔴 P1 · 标题子系统四套枚举 + 两次签名计算 + 三套身份口径，口径不一致且历史已因此出过回归
+### 🔴 P1 · 标题子系统四套枚举 + 两次签名计算 + 三套身份口径 ✅ 2026-09-08 已修（并修出两个真 bug）
 
-**位置**：`webview/headingFoldPlugin.ts`、`webview/utils/headingFold.ts`、`webview/headingStickyPlugin.ts`、`webview/components/toc/index.ts`、`webview/index.ts`
+**位置**：`webview/utils/headingFold.ts`（`buildHeadingIndex` / `computeAllHeadingSignature`）；`webview/headingFoldPlugin.ts`；`webview/headingStickyPlugin.ts`；`webview/components/toc/index.ts`；`webview/index.ts`
 
-**当前机制**：同一份标题信息被四个模块各自构建：① headingFold 用 `doc.forEach` 只遍历顶层块（utils/headingFold.ts:80），每事务现算 computeHeadingSignature 并缓存装饰；② index.ts 为 TOC 刷新**独立再算一遍同一签名**存 `_lastTocSignature`（index.ts:323）；③ headingSticky 用 DOM `querySelectorAll` + posAtDOM 反查 + 自建 cachedHeadings 矩形缓存；④ TOC 用 `doc.nodesBetween` 枚举**全部深度**标题（toc/index.ts:24），点击时再 `findHeadingPosByText` 全树重查。**已逐一 grep 实证：三处枚举口径确实不一致。**
+**实际修复**：
+* 新增 `buildHeadingIndex(doc)`：一趟遍历产出全部标题（含嵌套）的 pos / level / text / size / topLevel / foldRange，作为折叠、吸顶、TOC 的**唯一枚举与身份口径**。顶层判定用 `resolve(pos + 1).depth === 1`（与吸顶原来的 `posAtDOM` 语义一致，规避历史上两次 ±1 回归）。
+* 折叠插件：`buildFoldDecorations` 改消费索引（顶层项），删除 `computeAllHeadingFoldRanges` 的重复调用与 `doc.forEach` 枚举。
+* 吸顶插件：`getVisibleHeadings`（`querySelectorAll` + 逐标题 `posAtDOM` 反查 + CSS class 嗅探 `.heading-fold-heading--foldable`）整体删除，改由索引经 `nodeDOM(pos)` 取元素；`findHeadingPos`、`getHeadingText`（clone 节点去 gutter）删除——pos / level / text / foldable 全部来自索引。跨插件契约不再是 CSS class 字符串。
+* TOC：`getHeadings` 改消费同一索引（仍列出全部深度，行为不变——导航面板列全量是刻意的，折叠/吸顶只处理顶层；此处口径差异已在代码注释写明）。
+* 身份口径收敛为「节点起始 pos」一套（折叠状态键、装饰区间、TOC 跳转、吸顶 dataset 全部同一来源）。
 
-**为何过度**（④重复路径 + ①补偿）：fold/sticky 只认顶层标题，TOC 却无 depth 过滤 → TOC 里可点击跳转的嵌套标题永不出现折叠箭头、也永不吸顶；签名有两份独立缓存；sticky 与 fold 之间以 **CSS class 字符串**（`.heading-fold-hidden`/`.heading-fold-heading--foldable`）为跨插件契约——类名是样式细节，改样式即可静默打断吸顶；身份键三套并存（pos / level:text / DOM class）。D7 回归与 TOC pos 漂移回归都源于各口径各自演化。
+**顺带修掉的两个真 bug（复核时实证）**：
+1. **状态栏字数不更新**：`index.ts` 的 TOC 刷新块里 `if (sig === _lastTocSignature) return;` 把 `updateWordCount()` 一起早退了（注释却写着「字数统计轻量照常」）——输入正文（标题结构不变）时字数永远停在旧值。已改为只守卫 `toc.refresh()`。
+2. **嵌套标题改动不刷新 TOC**：TOC 刷新判据复用了只枚举**顶层**标题的 `computeHeadingSignature`——只改引用/列表内标题时签名不变，TOC 静默不更新。新增 `computeAllHeadingSignature`（覆盖全部深度）并补回归用例（同一次改动下顶层签名不变、全量签名变化）。
 
-**简化方案**：在 utils/headingFold 增加导出的 `buildHeadingIndex(doc)`（一趟遍历产出 level/text/pos/foldRange）；fold 插件导出签名/隐藏判定；sticky 的 getVisibleHeadings 改由索引过滤（删 class 嗅探与 posAtDOM 反查——补跑审计指出 sticky 已 import 却未使用 `findHeadingFoldRange`（headingStickyPlugin.ts:13），foldable 判定本可直接用它从 doc+pos 算出，绕道 DOM class 纯属多余）；TOC 消费同一索引并统一口径（建议与 fold 一致只收顶层）；index.ts 删 `_lastTocSignature` 与签名重算，改问插件暴露的签名。CSS class 回归纯样式职责。
-
-**风险**：中。涉及 4 文件与三个用户可见功能；「TOC 不再显示嵌套标题」是行为变更需入 CHANGELOG。分两步落地（先共享索引、再统一口径），每步独立 commit。
+**回归测试**：`headingFold.test.ts` 10 例（新增 3 例：索引口径、嵌套标题 topLevel、两种签名的差异）；`headingStickyPlugin.test.ts` 端到端（滚动后吸顶条显示）、`headingStickyUtils.test.ts`、`nestedHeadingProbe.test.ts` 全通过。
 
 ### 🔴 P2 · tableSoftBreakPlugin 对抗平台：上游 7.22.1 已自带可配置 hardbreakFilterNodes（已查上游源码实证）
 
@@ -387,11 +392,6 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 **第三批（结构性收敛）部分完成 2026-09-08**：E3/C2（双生机制整套删除，净删 ~110 行）、E5 部分（1s 复查定时器 + directOnly 语义）、F2（重试计划统一）、C3（生命周期 payload 工厂）、C6/F5（visibilitychange 删除）、E9（状态栏统一刷新）、E10（配置广播表驱动）、P7（聚焦层数）、P9（TOC 改存 DOM 引用）、B4（.markdown 对齐）、B6（CI Job Summary + 文档修正）、B3（debugMode 单命令）、B5（onStartupFinished）、P11（tech-debt 登记）
 
-**剩余（下轮继续，本轮有意未做）**：
-
-* **P1 标题子系统统一索引**——需要拆两步（先共享 `buildHeadingIndex`、再统一 TOC 的深度口径），而第二步是**用户可见行为变更**（TOC 不再列出嵌套标题，按审计要求须进 CHANGELOG）。放在同一轮手测里会与另外 9 项改动混在一起、回归无法归因，故留到独立一轮，先与用户确认口径。
-* **B1 katex 双版本对齐**——需要在真实浏览器里验证 mermaid 数学标签的渲染结果，当前环境无法验证，不凭猜测改动。
-
 **第四批（用户实测反馈的两项严重问题 + 复核中新发现）**：
 
 * ✅ **F3** CodeMirror 主题补配观察器无限回环（2026-09-08）——观察器抽到 `webview/utils/cmThemeObserver.ts` 并加数量守卫；回归测试 `webview/__tests__/cmThemeObserver.test.ts`（含真实 CodeMirror + 语法高亮的回环复现）。用户反馈「开着 md 页面时整个 VS Code 输入卡顿、切换别的 webview 时整窗口闪动，关闭 md 页面后消失」的根因：观察器对任何 childList 变更都排重配，而 reconfigure 自身产生 childList 变更 → 10ms 一次无限回环。
@@ -403,6 +403,8 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 * ✅ **F4** 用户交互跟踪统一为 `utils/userInteraction.ts` 的 epoch（2026-09-08）。
 * ✅ **P5** 表格换行后处理 handler 化，删除 cleanTableBreaks/splitTableCells（2026-09-08）。
 * ✅ **P4/C4** 补全请求生命周期统一到单一注册表 + 单派发（2026-09-08）。
+* ✅ **P1** 标题子系统共享索引 + 修出两个真 bug（2026-09-08）。
+* ✅ **B1** katex 收敛为单一版本（2026-09-08）——`pnpm-workspace.yaml` overrides 把 mermaid 的 katex@0.16.47 收敛到根依赖 0.18.1：产物里两个 261KB 的 katex chunk 变一个（VSIX -261KB），且 mermaid 数学标签不再用 0.16 的 class 名配 0.18 的样式表。新增 `webview/__tests__/katexCompat.test.ts` 锁住 mermaid 用到的 `renderToString({ output })` API。**待手测**：mermaid 图内 `$$...$$` 数学标签渲染。
 
 ***
 

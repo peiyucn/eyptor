@@ -17,7 +17,7 @@ import { resolveTableWrapVars } from "../shared/tableWrap";
 import type { ToWebviewMessage } from "../shared/messages";
 import { PendingRequestRegistry } from "./utils/pendingRequest";
 import { applyTableWrapVars } from "./utils/tableWrap";
-import { computeHeadingSignature } from "./utils/headingFold";
+import { computeAllHeadingSignature } from "./utils/headingFold";
 import {
     createEditor,
     destroyEditor,
@@ -318,12 +318,17 @@ async function initEditor(
                 requestAnimationFrame(() => {
                     const view = getEditorView();
                     if (view) {
-                        const sig = computeHeadingSignature(view.state.doc);
-                        if (sig === _lastTocSignature) return;
-                        _lastTocSignature = sig;
+                        // 全部标题（含嵌套）签名：只改嵌套标题时也要刷新
+                        // （回归 P1：此前复用只覆盖顶层标题的签名，TOC 静默不刷新）
+                        const sig = computeAllHeadingSignature(view.state.doc);
+                        if (sig !== _lastTocSignature) {
+                            _lastTocSignature = sig;
+                            toc.refresh(); // 标题结构变化才重建目录（面板关闭时是 no-op）
+                        }
                     }
-                    toc.refresh(); // 内容变化时刷新目录（面板关闭时是 no-op）
-                    updateWordCount(); // 更新字数统计
+                    // 字数统计与标题结构无关，必须在签名早退之外
+                    // （回归：此前与 toc.refresh 一起被早退跳过，输入正文时状态栏字数不更新）
+                    updateWordCount();
                 });
             }, TOC_REFRESH_DEBOUNCE_MS);
         },

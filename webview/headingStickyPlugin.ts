@@ -10,56 +10,27 @@ import { IconChevronDown, IconChevronRight } from "./ui/icons";
 import { applyTooltip, hideTooltip } from "./ui/tooltip";
 import { t } from "./i18n";
 import { headingFoldPluginKey, type HeadingFoldMeta } from "./headingFoldPlugin";
-import { findHeadingFoldRange, getHeadingLevel } from "./utils/headingFold";
+import { buildHeadingIndex, type HeadingIndexEntry } from "./utils/headingFold";
 import { computeStickyActiveIndex } from "./utils/headingSticky";
-
-const HEADING_SELECTOR = "h1,h2,h3,h4,h5,h6";
 
 function getTopbarBottom(): number {
     const topBar = document.querySelector(".milkdown-top-bar");
     return topBar?.getBoundingClientRect().bottom ?? DEFAULT_TOPBAR_HEIGHT;
 }
 
-function getVisibleHeadings(view: EditorView): HTMLElement[] {
-    // 仅顶层标题（与折叠能力口径一致）：嵌套在引用/列表内的标题 DOM 也会被
-    // querySelectorAll 命中，吸顶条可见却永无折叠按钮（回归 D7）。
-    // 顶层判定用 resolve 后「父节点是 doc（depth 1）」的语义口径——
-    // 回归：posAtDOM(元素, 0) 返回元素起始 + 1（offset 是子节点索引语义），
-    // 与 doc.forEach 的 offset（节点起始）直接比对恒差 1，全部标题被过滤、
-    // 吸顶条永远隐藏（探针实证 [0,17,34] vs [1,18,35]）。
-    return Array.from(view.dom.querySelectorAll<HTMLElement>(HEADING_SELECTOR)).filter((heading) => {
-        const rect = heading.getBoundingClientRect();
-        if (!(rect.width > 0 && rect.height > 0)) return false;
-        if (heading.classList.contains("heading-fold-hidden")) return false;
-        try {
-            const pos = view.posAtDOM(heading, 0);
-            const $pos = view.state.doc.resolve(pos);
-            return $pos.depth === 1 && $pos.node(1).type.name === "heading";
-        } catch {
-            return false;
-        }
-    });
-}
-
-function getHeadingText(heading: HTMLElement): string {
-    const clone = heading.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll(".heading-fold-gutter").forEach((node) => node.remove());
-    return clone.textContent?.trim() ?? "";
-}
-
-function findHeadingPos(view: EditorView, heading: HTMLElement): number | null {
-    // DOM 反查（O(depth)）：回归——此前用 doc.descendants 全树遍历且命中后无提前退出，
-    // 缓存失效后每个标题一次全文档扫描（含文本节点），滚动路径退化 O(H×N）。
-    // 返回节点起始位置（posAtDOM(元素, 0) 的语义是「元素起始 + 1」，直接使用会让
-    // nodeDOM(pos) 取不到标题元素、折叠状态键与折叠插件的 doc.forEach 口径差 1；
-    // 用 resolve + before(depth) 归一化为节点起始，两种语义下都正确）
-    try {
-        const pos = view.posAtDOM(heading, 0);
-        const $pos = view.state.doc.resolve(pos);
-        return $pos.depth > 0 ? $pos.before($pos.depth) : null;
-    } catch {
-        return null;
+/**
+ * 顶层标题元素 + 索引项（P1：由共享索引经 nodeDOM 取得，删掉 querySelectorAll +
+ * 逐标题 posAtDOM 反查与 CSS class 嗅探）。
+ * 口径：索引的 topLevel 已按 `resolve(pos + 1).depth === 1` 判定，与折叠插件一致。
+ */
+function getTopLevelHeadings(view: EditorView): Array<{ el: HTMLElement; entry: HeadingIndexEntry }> {
+    const out: Array<{ el: HTMLElement; entry: HeadingIndexEntry }> = [];
+    for (const entry of buildHeadingIndex(view.state.doc)) {
+        if (!entry.topLevel) continue;
+        const el = view.nodeDOM(entry.pos);
+        if (el instanceof HTMLElement) out.push({ el, entry });
     }
+    return out;
 }
 
 export const headingStickyPlugin = $prose(() =>
@@ -120,9 +91,9 @@ export const headingStickyPlugin = $prose(() =>
                 headingPos: number,
                 collapsed: boolean,
                 foldable: boolean,
+                level: number,
+                text: string,
             ): void => {
-                const level = getHeadingLevel(view.state.doc.nodeAt(headingPos) ?? { attrs: {} });
-                const text = getHeadingText(heading);
                 sticky.innerHTML = "";
 
                 if (foldable) {
@@ -189,7 +160,12 @@ export const headingStickyPlugin = $prose(() =>
             // 现改为文档变更后防抖重建缓存，滚动时仅纯数字比较
             interface CachedHeading {
                 el: HTMLElement;
-                pos: number | null;
+                /** 节点起始位置（共享索引口径，不再靠 posAtDOM 反查） */
+                pos: number;
+                level: number;
+                text: string;
+                /** 可折叠（索引的 foldRange 非空；不再嗅探 CSS class） */
+                foldable: boolean;
                 docTop: number;
                 docBottom: number;
             }
@@ -200,15 +176,22 @@ export const headingStickyPlugin = $prose(() =>
             const rebuildCache = () => {
                 rebuildTimer = null;
                 const scrollOffset = window.scrollY;
-                cachedHeadings = getVisibleHeadings(view).map((el) => {
+                cachedHeadings = [];
+                for (const { el, entry } of getTopLevelHeadings(view)) {
                     const rect = el.getBoundingClientRect();
-                    return {
+                    // 未渲染 / 被折叠隐藏（display:none 时 rect 为 0）
+                    if (!(rect.width > 0 && rect.height > 0)) continue;
+                    if (el.classList.contains("heading-fold-hidden")) continue;
+                    cachedHeadings.push({
                         el,
-                        pos: null,
+                        pos: entry.pos,
+                        level: entry.level,
+                        text: entry.text,
+                        foldable: entry.foldRange !== null,
                         docTop: rect.top + scrollOffset,
                         docBottom: rect.bottom + scrollOffset,
-                    };
-                });
+                    });
+                }
                 cacheDirty = false;
             };
 
@@ -250,24 +233,15 @@ export const headingStickyPlugin = $prose(() =>
 
                 const cached = cachedHeadings[activeIndex];
                 const heading = cached.el;
-                const text = getHeadingText(heading);
+                const text = cached.text;
                 if (!text) {
                     hideSticky();
                     return;
                 }
 
-                let headingPos = cached.pos;
-                if (headingPos === null) {
-                    headingPos = findHeadingPos(view, heading);
-                    if (headingPos === null) {
-                        hideSticky();
-                        return;
-                    }
-                    cached.pos = headingPos;
-                }
-
+                const headingPos = cached.pos;
                 activeHeadingPos = headingPos;
-                const foldable = heading.classList.contains("heading-fold-heading--foldable");
+                const foldable = cached.foldable;
                 const collapsed = headingFoldPluginKey.getState(view.state)?.has(headingPos) ?? false;
                 const rect = heading.getBoundingClientRect();
                 sticky.hidden = false;
@@ -286,7 +260,7 @@ export const headingStickyPlugin = $prose(() =>
                     sticky.dataset["headingText"] = text;
                     sticky.dataset["collapsed"] = String(collapsed);
                     syncTypography(heading);
-                    setStickyContent(heading, headingPos, collapsed, foldable);
+                    setStickyContent(heading, headingPos, collapsed, foldable, cached.level, text);
                 }
 
                 // 无推挤过渡：下一标题顶到时直接切换（推挤曾导致吸顶条被顶栏遮挡）

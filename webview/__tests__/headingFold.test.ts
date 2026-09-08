@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CrepeBuilder } from "@milkdown/crepe";
 import { editorViewCtx } from "@milkdown/kit/core";
 import type { EditorView } from "@milkdown/kit/prose/view";
-import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, computeAllHeadingFoldRanges } from "../utils/headingFold";
+import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, computeAllHeadingFoldRanges, buildHeadingIndex, computeAllHeadingSignature, computeHeadingSignature } from "../utils/headingFold";
 
 if (typeof (window as unknown as Record<string, unknown>).ResizeObserver === "undefined") {
     (window as unknown as Record<string, unknown>).ResizeObserver = class {
@@ -119,5 +119,42 @@ describe("computeAllHeadingFoldRanges（单遍 O(n)，与 findHeadingFoldRange �
         const all = computeAllHeadingFoldRanges(view.state.doc);
         const headings = headingPositions(view);
         expect(all.get(headings[0].pos)).toBeNull();
+    });
+});
+
+describe("buildHeadingIndex（折叠 / 吸顶 / TOC 共享索引，回归 P1）", () => {
+    it("顶层标题 应该 标记 topLevel 并附带折叠范围", async () => {
+        const editor = await makeEditor("## A\ncontent A\n## B\n");
+        const view = getView(editor);
+        const index = buildHeadingIndex(view.state.doc);
+
+        expect(index).toHaveLength(2);
+        expect(index.every((e) => e.topLevel)).toBe(true);
+        expect(index[0]).toMatchObject({ level: 2, text: "A" });
+        expect(index[0].foldRange).not.toBeNull();
+        expect(index[1].foldRange).toBeNull(); // 末尾标题无后续内容
+        // pos 与 doc.forEach 的 offset 同口径（顶层判定不得引入 ±1 偏移）
+        expect(index.map((e) => e.pos)).toEqual(headingPositions(view).map((h) => h.pos));
+    });
+
+    it("嵌套标题（引用内） 应该 标记为非顶层且无折叠范围", async () => {
+        const editor = await makeEditor("> ## 引用内标题\n>\n> 内容\n");
+        const view = getView(editor);
+        const index = buildHeadingIndex(view.state.doc);
+
+        const nested = index.filter((e) => !e.topLevel);
+        expect(nested).toHaveLength(1);
+        expect(nested[0].text).toBe("引用内标题");
+        expect(nested[0].foldRange).toBeNull();
+    });
+
+    it("签名：嵌套标题变化 应该 改变全部标题签名，但不影响顶层签名", async () => {
+        const before = await makeEditor("## A\n\n> ### 引用内\n");
+        const after = await makeEditor("## A\n\n> ### 引用内改\n");
+        const beforeDoc = getView(before).state.doc;
+        const afterDoc = getView(after).state.doc;
+
+        expect(computeAllHeadingSignature(beforeDoc)).not.toBe(computeAllHeadingSignature(afterDoc));
+        expect(computeHeadingSignature(beforeDoc)).toBe(computeHeadingSignature(afterDoc));
     });
 });

@@ -5,6 +5,7 @@ import { applyTooltip } from "@/ui/tooltip";
 import { t } from "@/i18n";
 import { IconPin, IconChevronRight, IconChevronDown, IconChevronsUp, IconChevronsDown } from "@/ui/icons";
 import { getWebviewState, setWebviewState } from "@/messaging";
+import { buildHeadingIndex } from "../../utils/headingFold";
 
 interface HeadingEntry {
     level: number;
@@ -35,19 +36,15 @@ const TOC_WIDTH = 200;
 const TOC_MIN_WIDTH = 200;
 const TOC_MAX_WIDTH = 500;
 
-/** 从 EditorView 提取所有 heading 节点 */
+/** 从 EditorView 提取所有 heading 节点（共享索引，口径与折叠/吸顶一致；TOC 列出全部深度） */
 function getHeadings(view: EditorView): HeadingEntry[] {
-    const headings: Omit<HeadingEntry, "key">[] = [];
-    view.state.doc.nodesBetween(0, view.state.doc.content.size, (node, pos) => {
-        if (node.type.name === "heading") {
-            headings.push({
-                level: node.attrs["level"] as number,
-                text: node.textContent,
-                pos,
-            });
-        }
-    });
-    return assignFoldKeys(headings);
+    return assignFoldKeys(
+        buildHeadingIndex(view.state.doc).map((entry) => ({
+            level: entry.level,
+            text: entry.text,
+            pos: entry.pos,
+        })),
+    );
 }
 
 /** 根据 heading 在文档中的位置找到对应的标题 DOM 元素 */
