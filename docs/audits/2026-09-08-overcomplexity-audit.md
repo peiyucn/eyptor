@@ -61,17 +61,15 @@
 
 **风险**：低。残留收益为零（source 模式下无面板可消费；switchToPreview 显式读行号）。手测：source/wysiwyg 切换往返、全局搜索、多文档切换后行号定位。
 
-### 🟠 E4 · 保存链路三条路径口径不一（saveCustomDocument 无 catch / _saveWithFeedback 有 catch / frontmatterUpdate 自建路径且注释理由已不成立）
+### 🟠 E4 · 保存链路三条路径口径不一 ✅ 2026-09-08 已修
 
-**位置**：`src/MarkdownEditorProvider.ts:539-566,710-732,748-763`
+**位置**：`src/MarkdownEditorProvider.ts`（`_saveNow` / `saveCustomDocument` / `frontmatterUpdate`）
 
-**当前机制**：① saveCustomDocument 无 catch，失败原样抛给 VS Code；② _saveWithFeedback 有 catch + 提示 + 重标 dirty，返回 boolean；③ frontmatterUpdate 自建序列（requestContent → buildContentWithFrontmatter → update → _saveWithFeedback → lineMapUpdate），注释声明「不经过 saveCustomDocument（其内部会再次拉取 webview 正文并覆盖 frontmatter）」。`_lastSaveTimes/_lastDiskContents` 在两处重复记账。
+**原机制**：① saveCustomDocument 无 catch，失败原样抛给 VS Code；② `_saveWithFeedback` 有 catch + 提示 + 重标 dirty；③ frontmatterUpdate 自建序列（requestContent → buildContentWithFrontmatter → update → `_saveWithFeedback` → lineMapUpdate），注释声明「不经过 saveCustomDocument（其内部会再次拉取 webview 正文并覆盖 frontmatter）」。`_lastSaveTimes/_lastDiskContents` 在两处重复记账。
 
-**为何过度**（④重复路径 + ①注释与实现矛盾）：contentResponse 处理器已在 resolve 前执行 `_prepareContentForSave`，而 `_frontmatterMap` 在 frontmatterUpdate 一开始就已更新——经 saveCustomDocument 的拉取回包**自带新 frontmatter**，那条注释理由不成立（旧认知残留）。三条路径失败语义分裂：Cmd+S 是 VS Code 泛化提示、frontmatter 是定制提示+重标 dirty、切文本还要中止切换——同一关注点三套行为。
+**实际修复**：`_saveWithFeedback` 提升为唯一保存原语 `_saveNow(document, uriKey, token)`——写盘 + 记账 + 行号广播一处完成，失败统一「markDirty + 用户可见错误 + 返回 false」；saveCustomDocument 与 frontmatterUpdate 都改为「拉取最新内容 → update → `_saveNow`」，两条路径不再各自记账/广播。
 
-**简化方案**：把 `_saveWithFeedback` 提升为唯一内部保存原语 `_saveNow(document, uriKey, token)`（含记账、catch→markDirty→提示→rethrow/返回）；saveCustomDocument 改调用它并向 VS Code 传播异常；frontmatterUpdate 改为「更新 _frontmatterMap → _markDirty → await _saveNow」（不再单独 requestContent）；lineMapUpdate 统一由 _saveNow 成功路径发出。净删 \~20 行 + 修正误导注释。
-
-**风险**：低-中。需补「frontmatter 更新经统一保存路径」回归用例；手测 Cmd+S 失败提示与关窗脏状态。
+**未采纳原方案的一点**：frontmatterUpdate 仍保留 `_requestContent` 拉取——原注释给的理由（saveCustomDocument 会覆盖 frontmatter）确实不成立，但**拉取本身是必要的**：拉取式架构下内存正文可能落后于 webview 未落盘编辑，直接重组会覆盖掉正文编辑。注释已按真实原因改写。
 
 ### 🟠 E5 · 导航消费侧六机制双层 TTL（pending 表 + 全局兜底 + 直接发送 + viewState 立即消费 + 1s 延迟复查 + ready 消费）
 
@@ -85,15 +83,17 @@
 
 **风险**：中。需验证时序矩阵：搜索点击（已开/未开/未初始化）×（revealLine 先于/后于激活）× 多 group。
 
-### 🟠 E6 · switchToTextEditor/switchToPreview 双向命令镜像重复 + 死分支 + 与已根治教训相反的「先关后开」
+### 🟠 E6 · switchToTextEditor/switchToPreview 兜底不可达 + 「先关后开」反模式 ✅ 2026-09-08 已修（C5 判定为必要复杂度）
 
-**位置**：`src/extension.ts:185-260`；`src/MarkdownEditorProvider.ts:579-625`
+**位置**：`src/extension.ts`（两个命令）；`src/MarkdownEditorProvider.ts`（`hasPanel`）
 
-**当前机制**：两个命令各自写一份 tab groups 扫描（取 isPreview/viewColumn）；switchToTextEditor 命令侧 `if (provider)` 兜底——provider 激活后恒非 null，兜底不可达、面板不存在时命令**静默空转**；switchToPreview 仍「先关文本 tab 再 openWith」——恰是 `ec5a887` 刚根治过的反模式；switchToPreview 快捷键 when 只匹配 `.md`（package.json:84），`.markdown` 文件无法用（与 selector 的 `*.markdown` 不一致）。
+**实际修复**：
+* switchToTextEditor 的 `if (provider)` 判据恒真（provider 注册后即非 null）→ 该文档无面板时命令静默空转；改为 `provider?.hasPanel(target)` 真实检查，无面板走「直接 openWith default」兜底。
+* switchToPreview 仍「先关文本 tab 再 openWith」——与 `ec5a887` 根治「资源管理器点 md 狂闪」的反模式同源（先关会让 VS Code 先激活上一个文档、再被 openWith 激活新文档，两者互抢）；改为先开后关。
 
-**简化方案**：提取共享 `findMdTab(uri, kind)`/`captureTabState(uri)` 合并两份扫描；统一「先开后关」顺序；命令侧兜底改为 `provider.hasPanel(uri)` 真实命中检查；统一 when 为 `.md`/`.markdown`。
+**复核更正**：原文「switchToPreview 快捷键 when 只匹配 .md」不成立——`package.json` 的 keybinding 与菜单 when 均为 `(resourceExtname == '.md' || resourceExtname == '.markdown')`。
 
-**风险**：低。手测：预览↔文本双向切换、preview（斜体）tab 状态保持、同一文件双 group。
+**C5 判定为必要复杂度（不简化）**：Cmd+Shift+M 的两条入口服务的焦点场景不同——webview 内焦点走 `webview/index.ts` 的 window keydown（iframe 内按键不会到达 VS Code 键位服务），webview 外焦点（点过标签页/标题栏）走 keybinding → `requestSwitchToTextEditor` 往返；两者最终调用同一个 `notifySwitchToTextEditor`，无重复逻辑。删除任一条都会让另一场景失效，而两者都只值一个入口的量级。
 
 ### 🟠 E7 · 图片往返口径不对称：显示侧语法范围替换 vs 保存侧全文 split/join 全局替换 ✅ 2026-09-08 已修
 
@@ -386,7 +386,7 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 **第三批（结构性收敛）部分完成 2026-09-08**：E3/C2（双生机制整套删除，净删 ~110 行）、E5 部分（1s 复查定时器 + directOnly 语义）、F2（重试计划统一）、C3（生命周期 payload 工厂）、C6/F5（visibilitychange 删除）、E9（状态栏统一刷新）、E10（配置广播表驱动）、P7（聚焦层数）、P9（TOC 改存 DOM 引用）、B4（.markdown 对齐）、B6（CI Job Summary + 文档修正）、B3（debugMode 单命令）、B5（onStartupFinished）、P11（tech-debt 登记）
 
-**剩余（下轮继续）**：E4 保存路径统一、E6/C5 双向命令与快捷键合并、F4 交互跟踪合一、P4/C4 补全生命周期与注册表统一、P5 表格换行 handler 化、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
+**剩余（下轮继续）**：F4 交互跟踪合一、P4/C4 补全生命周期与注册表统一、P5 表格换行 handler 化、P1 标题子系统统一索引、B1 katex 双版本对齐（需验证 mermaid 数学标签）
 
 **第四批（用户实测反馈的两项严重问题 + 复核中新发现）**：
 
@@ -394,6 +394,8 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 * ✅ **P6** TOC 折叠键同名同级共享（2026-09-08）——键加出现序号 `level:text#nth`。
 * ✅ **P8** 图片 uriMap 反向镜像删除（2026-09-08）——确认路径统一走 Extension 解析。
 * ✅ **E7** 图片往返替换域统一（2026-09-08）——并修掉「括号/空格路径的 webviewUri 泄漏进磁盘」真 bug。
+* ✅ **E4** 保存链路统一为唯一原语 `_saveNow`（2026-09-08）。
+* ✅ **E6** switchToTextEditor 兜底改真实面板检查 + switchToPreview 改先开后关（2026-09-08）；**C5** 复核后判定为必要复杂度。
 
 ***
 

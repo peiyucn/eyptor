@@ -193,7 +193,9 @@ export function activate(context: vscode.ExtensionContext) {
                 // 向 WebView 请求当前滚动行号：WebView 上报位置后回发 switchToTextEditor 消息，
                 // 由 Provider 落盘最新内容、关闭 WYSIWYG tab、再以文本编辑器打开并定位到该行
                 // （携带行号 + 拉取式架构下必须先落盘；与 Cmd+Shift+M 快捷键行为一致）
-                if (provider) {
+                // 回归 E6：此前判据是 `if (provider)`（激活后恒真）——该文档没有打开的面板时
+                // 命令静默空转；改为真实面板检查，无面板时走下面的兜底
+                if (provider?.hasPanel(target)) {
                     provider.postToPanel(target, { type: "requestSwitchToTextEditor" });
                     return;
                 }
@@ -236,16 +238,18 @@ export function activate(context: vscode.ExtensionContext) {
                         }
                     }
                 }
-                // 先关文本编辑器 tab，再开 WYSIWYG，避免两个 tab 并存的闪烁
-                if (textTab) {
-                    await vscode.window.tabGroups.close(textTab);
-                }
+                // 先开 WYSIWYG 再关文本 tab（回归 E6：与 ec5a887 根治「资源管理器点 md 狂闪」
+                // 同一反模式——先关会让 VS Code 先激活上一个文档、再被 openWith 激活新文档，
+                // 两者互抢；先开只有一次激活转移，文本 tab 短暂共存后关闭）
                 await vscode.commands.executeCommand(
                     "vscode.openWith",
                     target,
                     MarkdownEditorProvider.viewType,
                     { viewColumn: viewCol, preview: isPreview },
                 );
+                if (textTab) {
+                    await vscode.window.tabGroups.close(textTab);
+                }
             },
         ),
     );

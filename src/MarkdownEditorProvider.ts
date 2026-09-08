@@ -112,6 +112,11 @@ export class MarkdownEditorProvider
         if (panel) { panel.webview.postMessage(msg); }
     }
 
+    /** 该文档当前是否有打开的 WYSIWYG 面板（命令兜底判据，回归 E6：此前靠 provider 非空判定，恒真） */
+    public hasPanel(uri: vscode.Uri): boolean {
+        return this._webviewPanels.has(uri.toString());
+    }
+
     private _consumePendingNavigation(fsPath: string): number | undefined {
         const pending = this._pendingNavigations.get(fsPath);
         if (!pending) { return undefined; }
