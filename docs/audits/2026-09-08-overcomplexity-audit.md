@@ -17,7 +17,7 @@
 5. **往返放大**：为一个小目标设计多次消息往返/多次落盘/多级兜底
 6. **死重机制**：触发它的功能已删/已改，机制残留或只在边角触发
 
----
+***
 
 ## 一、Extension 侧（10 条：high 3 / medium 4 / low 3）
 
@@ -28,9 +28,10 @@
 **当前机制**：拦截 VS Code 内置 `revealLine` 命令：先存全局兜底行号，再取所有已注册面板 `getAllMdFsPaths()`——只要任意 md 面板存在（注册即计入，不要求可见/激活），就把行号 `setPendingNavigation` 广播给**每一个** md 面板并提前 `return`。文本编辑器的 `revealRange` 兜底被门禁挡死（仅 md 面板数为 0 时可达）。
 
 **为何过度**（③对抗平台 + ②层层状态机）：
-- **真实功能 bug**：全局搜索点击 `.ts/.js` 等非 md 结果同样走 revealLine；只要开着任一 md 面板，拦截器就 return → 文本编辑器收不到 revealRange → **非 md 文件搜索跳转落到文件头**
-- 广播把「搜 A 文档第 N 行」写进**所有** md 文档的 pending 表——B 文档面板 5 秒内激活即被错误滚动到 A 的行号
-- 注释自曝其因（「避免仅靠 tab.isActive 判断（时序不确定）」）——用广播绕时序，而 viewState 立即消费 + 全局兜底本就覆盖该时序，广播是第三层冗余
+
+* **真实功能 bug**：全局搜索点击 `.ts/.js` 等非 md 结果同样走 revealLine；只要开着任一 md 面板，拦截器就 return → 文本编辑器收不到 revealRange → **非 md 文件搜索跳转落到文件头**
+* 广播把「搜 A 文档第 N 行」写进**所有** md 文档的 pending 表——B 文档面板 5 秒内激活即被错误滚动到 A 的行号
+* 注释自曝其因（「避免仅靠 tab.isActive 判断（时序不确定）」）——用广播绕时序，而 viewState 立即消费 + 全局兜底本就覆盖该时序，广播是第三层冗余
 
 **简化方案**：删广播循环与 tab-group 扫描兜底（后者只在 `_webviewPanels` 为空时可达，而那时唯一可能的 md tab 是空页——死分支）；**把 revealRange 兜底改为无条件执行**（custom md tab 激活时 `activeTextEditor` 为 undefined，天然 no-op，无需 mdPaths 门禁）→ 非 md 搜索跳转恢复工作。
 
@@ -56,7 +57,7 @@
 
 **为何过度**（①补偿性 + ⑥死重）：监听器的存在理由是「捕获全局搜索时短暂出现的 .md 文本编辑器光标位置」——那是 priority:option 时代「文本 tab 先开再转换」的中间态；`1f6c8fa` 根治后该中间态已不存在。监听器唯一会触发的真实流程是 switchToTextEditor，而该流程又被自己配套的抑制窗口屏蔽掉——**互为对方存在的理由**。switchToPreview 已显式读取 activeTextEditor 行号，监听器数据在所有路径上都是死存储。删除后 ExpiryWindowMap 失去唯一生产使用方，可整体删除。
 
-**简化方案**：删监听器 + 删抑制标记/方法 + 删 `src/utils/expiryWindowMap.ts` 及其测试。净删 ~60 行 + 一个 49 行 util。
+**简化方案**：删监听器 + 删抑制标记/方法 + 删 `src/utils/expiryWindowMap.ts` 及其测试。净删 \~60 行 + 一个 49 行 util。
 
 **风险**：低。残留收益为零（source 模式下无面板可消费；switchToPreview 显式读行号）。手测：source/wysiwyg 切换往返、全局搜索、多文档切换后行号定位。
 
@@ -68,7 +69,7 @@
 
 **为何过度**（④重复路径 + ①注释与实现矛盾）：contentResponse 处理器已在 resolve 前执行 `_prepareContentForSave`，而 `_frontmatterMap` 在 frontmatterUpdate 一开始就已更新——经 saveCustomDocument 的拉取回包**自带新 frontmatter**，那条注释理由不成立（旧认知残留）。三条路径失败语义分裂：Cmd+S 是 VS Code 泛化提示、frontmatter 是定制提示+重标 dirty、切文本还要中止切换——同一关注点三套行为。
 
-**简化方案**：把 `_saveWithFeedback` 提升为唯一内部保存原语 `_saveNow(document, uriKey, token)`（含记账、catch→markDirty→提示→rethrow/返回）；saveCustomDocument 改调用它并向 VS Code 传播异常；frontmatterUpdate 改为「更新 _frontmatterMap → _markDirty → await _saveNow」（不再单独 requestContent）；lineMapUpdate 统一由 _saveNow 成功路径发出。净删 ~20 行 + 修正误导注释。
+**简化方案**：把 `_saveWithFeedback` 提升为唯一内部保存原语 `_saveNow(document, uriKey, token)`（含记账、catch→markDirty→提示→rethrow/返回）；saveCustomDocument 改调用它并向 VS Code 传播异常；frontmatterUpdate 改为「更新 _frontmatterMap → _markDirty → await _saveNow」（不再单独 requestContent）；lineMapUpdate 统一由 _saveNow 成功路径发出。净删 \~20 行 + 修正误导注释。
 
 **风险**：低-中。需补「frontmatter 更新经统一保存路径」回归用例；手测 Cmd+S 失败提示与关窗脏状态。
 
@@ -126,7 +127,7 @@ scrollPanelToLine 零调用（被 setPendingNavigation 直接发送分支取代�
 
 **简化方案**：用一张表驱动单监听（defaultMode/debugMode/serializationMode/tableWrapMode 四段同构分支合一）；debugMode 的 setContext 与 postToAll 统一走同一 `_applyDebugMode(next)` 函数。**风险**：低。
 
----
+***
 
 ## 二、WebView 核心（8 条：high 1 / medium 3 / low 4）
 
@@ -188,7 +189,7 @@ serializeCleanMarkdown 全是 split/map/replace 纯字符串操作，无 throw �
 
 **简化方案**：纯删除。**风险**：零。
 
----
+***
 
 ## 三、插件与组件（7 条：high 2 / medium 3 / low 2）
 
@@ -244,11 +245,12 @@ serializeCleanMarkdown 全是 split/map/replace 纯字符串操作，无 throw �
 
 **位置**：`src/utils/contentTransform.ts:43-61`；`webview/utils/markdownSerializer.ts:122-207,219-258`；`webview/editor.ts:340-355`
 
-**当前机制**：① 加载 convertTableBrForDisplay 全文件替换 <br>→&#10;；② 序列化 withTableBreakHandler 覆盖 break+text handler；③ 保存后处理 cleanTableBreaks 用**自带 splitTableCells（手写 GFM 单元格切分，含转义追踪）**扫掉「展示性尾部 <br>」；④ preserveTableBreakStyle 再全文件正则统一 <br> 拼写。clean 保存链 = 序列化 → ④ → ③ → applyMinimalChanges。
+**当前机制**：① 加载 convertTableBrForDisplay 全文件替换 →
+；② 序列化 withTableBreakHandler 覆盖 break+text handler；③ 保存后处理 cleanTableBreaks 用**自带 splitTableCells（手写 GFM 单元格切分，含转义追踪）**扫掉「展示性尾部 」；④ preserveTableBreakStyle 再全文件正则统一  拼写。clean 保存链 = 序列化 → ④ → ③ → applyMinimalChanges。
 
-**为何过度**（⑤往返放大 + ③对抗平台）：①与②是上游 #2463 的真实边界，应保留；但③④是「空单元格被序列化成尾部 <br>」的事后擦除——mdast-util-to-markdown 的 handler 机制本可在 tableCell 层一次性输出正确形态，却选择序列化完成后再用自造解析器反向清洗；④还会把源文件任意一处的 <br> 拼写风格套到全部新 break 上。
+**为何过度**（⑤往返放大 + ③对抗平台）：①与②是上游 #2463 的真实边界，应保留；但③④是「空单元格被序列化成尾部 」的事后擦除——mdast-util-to-markdown 的 handler 机制本可在 tableCell 层一次性输出正确形态，却选择序列化完成后再用自造解析器反向清洗；④还会把源文件任意一处的  拼写风格套到全部新 break 上。
 
-**简化方案**：保留①②；将③移入 tableCell/empty-cell handler（删 splitTableCells 与 cleanTableBreaks 全文件扫描）；评估删除④（统一输出规范 <br> 并写入 README）。先写复现用例锁定现有往返行为（tableBrRoundtrip.test.ts 已在）。
+**简化方案**：保留①②；将③移入 tableCell/empty-cell handler（删 splitTableCells 与 cleanTableBreaks 全文件扫描）；评估删除④（统一输出规范  并写入 README）。先写复现用例锁定现有往返行为（tableBrRoundtrip.test.ts 已在）。
 
 **风险**：中。表格序列化是历史 bug 高发区，必须逐项过 tableBrRoundtrip/tableSoftBreak 测试并手测空表/转义管道/多行单元格；分两步：先 handler 化③，观察稳定后再议④。
 
@@ -310,11 +312,11 @@ mousedown 已 preventDefault+stopPropagation 防夺焦，click 里仍叠三层�
 
 本域逐文件复核结论：**无独立高优先级发现**。已知问题归入 E2（syncEditorAssociation）/ E6（命令与 when 口径）/ E10（配置广播与调试开关双状态面），不重复报告。其余判定为必要复杂度：
 
-- **esbuild.mjs**（splitting + katex stub 插件 + katex-styles 独立 CSS 入口 + dist 清理）：每一层都有实测依据（6.2MB→1.0MB 入口、1.5MB CSS→75KB、动态 CSS 复制实证、陈旧 chunk 混入 VSIX 实证），已是最简表达；替代方案（pnpm patch）反而更绕
-- **l10n 三件套**（package.nls 双份 + webviewTranslations + i18n 词典）：三处消费者不同（Extension 命令/配置文案、webview 运行时词典），词典已有静态一致性测试防漂移——各司其职
-- **.github/workflows**：ci.yml 四 job（typecheck→test→build→package）与 publish.yml（marketplace-publish 环境 + 双份 CHANGELOG 拼接 Release 说明）与 AGENTS 管线定义逐项一致，无冗余 job
-- **vitest 配置**：extension/webview 双 project + 分模块覆盖率底线（AGENTS 已编码）+ bench 独立配置——与测试规范一致
-- **package.json**：customEditors 已在 `1f6c8fa` 简化为 priority:default；命令/快捷键结构问题归 E6/E10
+* **esbuild.mjs**（splitting + katex stub 插件 + katex-styles 独立 CSS 入口 + dist 清理）：每一层都有实测依据（6.2MB→1.0MB 入口、1.5MB CSS→75KB、动态 CSS 复制实证、陈旧 chunk 混入 VSIX 实证），已是最简表达；替代方案（pnpm patch）反而更绕
+* **l10n 三件套**（package.nls 双份 + webviewTranslations + i18n 词典）：三处消费者不同（Extension 命令/配置文案、webview 运行时词典），词典已有静态一致性测试防漂移——各司其职
+* **.github/workflows**：ci.yml 四 job（typecheck→test→build→package）与 publish.yml（marketplace-publish 环境 + 双份 CHANGELOG 拼接 Release 说明）与 AGENTS 管线定义逐项一致，无冗余 job
+* **vitest 配置**：extension/webview 双 project + 分模块覆盖率底线（AGENTS 已编码）+ bench 独立配置——与测试规范一致
+* **package.json**：customEditors 已在 `1f6c8fa` 简化为 priority:default；命令/快捷键结构问题归 E6/E10
 
 ## 五、跨切面状态与消息（后台审计域已返回，并入本报告）
 
@@ -366,11 +368,11 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 ### 判定为必要复杂度（跨切面视角）
 
-- **消息驱动 + 事件驱动并存**（焦点三路：window 事件 / panelActiveState / init.active）：panelActiveState 是多 webview 焦点互抢的根治（VS Code #61489 同类），window 事件是 64d5064 实证的激活信号，init.active 是首帧初值——三层各覆盖一个真实时序，非冗余（F5 已指出唯一可删的 visibilitychange 分支）
-- **定时器/防抖全景**（14 个 *_MS 常量 + 各处 setTimeout）：逐个对过用途，300ms 脏标记与 800ms TOC 双防抖各自服务不同延迟目标（autoSave 延迟 vs UI 重建），不合并；冗余的仅 F2（两套重试数组）与 E5（导航多层），已单列
-- **webviewState 持久化**（scrollY + toc 状态合并写）：单一 setWebviewState 合并写有注释依据，正当
+* **消息驱动 + 事件驱动并存**（焦点三路：window 事件 / panelActiveState / init.active）：panelActiveState 是多 webview 焦点互抢的根治（VS Code #61489 同类），window 事件是 64d5064 实证的激活信号，init.active 是首帧初值——三层各覆盖一个真实时序，非冗余（F5 已指出唯一可删的 visibilitychange 分支）
+* **定时器/防抖全景**（14 个 *_MS 常量 + 各处 setTimeout）：逐个对过用途，300ms 脏标记与 800ms TOC 双防抖各自服务不同延迟目标（autoSave 延迟 vs UI 重建），不合并；冗余的仅 F2（两套重试数组）与 E5（导航多层），已单列
+* **webviewState 持久化**（scrollY + toc 状态合并写）：单一 setWebviewState 合并写有注释依据，正当
 
----
+***
 
 ## 执行顺序建议（草案，待全部域返回后定稿）
 
@@ -384,18 +386,19 @@ PendingRequestRegistry 已是成熟样板（settled 双保险 + 超时结算，i
 
 **第四批（大重构，单独排期）**：P1 标题子系统统一索引、F3 cmObserver 走正路、P6 TOC 折叠键定方案、E9/E10 状态栏与配置广播收敛
 
----
+***
 
 ## 判定为必要复杂度、不报告（已复核）
 
-- **ContentRequestCoordinator 单飞队列**：有「保存 Promise 悬挂、零提示」的真实回归依据
-- **fs.watch → 防抖 → SAVE_COOLDOWN → _lastDiskContents 快照 → decideExternalChange 链条**：每层均有数据丢失/外部写盘不采纳的真实回归背书
-- **webviewConfigSanitize 与路径边界校验**：安全依据
-- **vendor 惰性加载（mermaid/KaTeX）**：首帧性能实测依据（7.7MB→1.5MB）
-- **_editorLifecycleChain / releaseDocTimers / 防抖 timer 释放 / themeBus 退订**：均有文档化回归依据（双 createEditor 孤儿化、旧回调污染新文档、监听器泄漏）
-- **字数/TOC 双 rAF 延迟 + 签名缓存**：firstRender.bench 首帧依据
-- **PendingRequestRegistry**：已完成的样板统一（替代三处手写不一致）
-- **cellClickFixPlugin**：已登记 tech-debt「上游修复后移除」类 workaround，不重复报告
-- **topBarOverflow MutationObserver 自愈 / setupTopBarTooltips / codeBlockEnhance**：已登记 tech-debt；补跑审计实证上游 7.22.1 确无 per-item hidden/overflow 能力（crepe top-bar 硬编码 class、groupInfo computed 重建），观察器为必需补偿
-- **headingFold 签名缓存 + 折叠区间双指针 / headingSticky 缓存与抑制兜底**：均有万行文档实测回归依据
-- **findBar MAX_MATCHES 封顶与防抖本身**：必要（仅 close 清理缺失见 P3）
+* **ContentRequestCoordinator 单飞队列**：有「保存 Promise 悬挂、零提示」的真实回归依据
+* **fs.watch → 防抖 → SAVE_COOLDOWN → _lastDiskContents 快照 → decideExternalChange 链条**：每层均有数据丢失/外部写盘不采纳的真实回归背书
+* **webviewConfigSanitize 与路径边界校验**：安全依据
+* **vendor 惰性加载（mermaid/KaTeX）**：首帧性能实测依据（7.7MB→1.5MB）
+* **_editorLifecycleChain / releaseDocTimers / 防抖 timer 释放 / themeBus 退订**：均有文档化回归依据（双 createEditor 孤儿化、旧回调污染新文档、监听器泄漏）
+* **字数/TOC 双 rAF 延迟 + 签名缓存**：firstRender.bench 首帧依据
+* **PendingRequestRegistry**：已完成的样板统一（替代三处手写不一致）
+* **cellClickFixPlugin**：已登记 tech-debt「上游修复后移除」类 workaround，不重复报告
+* **topBarOverflow MutationObserver 自愈 / setupTopBarTooltips / codeBlockEnhance**：已登记 tech-debt；补跑审计实证上游 7.22.1 确无 per-item hidden/overflow 能力（crepe top-bar 硬编码 class、groupInfo computed 重建），观察器为必需补偿
+* **headingFold 签名缓存 + 折叠区间双指针 / headingSticky 缓存与抑制兜底**：均有万行文档实测回归依据
+* **findBar MAX_MATCHES 封顶与防抖本身**：必要（仅 close 清理缺失见 P3）
+
