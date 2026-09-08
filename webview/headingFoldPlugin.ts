@@ -113,8 +113,25 @@ export function buildFoldDecorations(doc: ProseNode, folded: ReadonlySet<number>
     });
 
     if (hiddenRanges.length > 0) {
+        // 排序 + 合并重叠区间（外层折叠包含内层折叠），块遍历用双指针单遍判定——
+        // 回归：每块 hiddenRanges.some 线性扫描，O(顶层块数 × 折叠数)
+        const sorted = [...hiddenRanges].sort((a, b) => a.from - b.from);
+        const merged: HeadingFoldRange[] = [];
+        for (const range of sorted) {
+            const last = merged[merged.length - 1];
+            if (last && range.from <= last.to) {
+                last.to = Math.max(last.to, range.to);
+            } else {
+                merged.push({ from: range.from, to: range.to });
+            }
+        }
+        let rangeIdx = 0;
         doc.forEach((node, offset) => {
-            if (hiddenRanges.some((range) => offset >= range.from && offset < range.to)) {
+            while (rangeIdx < merged.length && offset >= merged[rangeIdx].to) {
+                rangeIdx++;
+            }
+            const range = merged[rangeIdx];
+            if (range && offset >= range.from && offset < range.to) {
                 decorations.push(
                     Decoration.node(offset, offset + node.nodeSize, {
                         class: "heading-fold-hidden",
