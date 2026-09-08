@@ -482,16 +482,10 @@ export class MarkdownEditorProvider
                 );
                 if (newContent === null) { break; }
                 document.update(newContent);
-                // 立即写盘：面板编辑后用户往往立刻切到文本编辑器核对源码。
-                // 不经过 saveCustomDocument（其内部会再次拉取 webview 正文并覆盖 frontmatter）
+                // 立即写盘：面板编辑后用户往往立刻切到文本编辑器核对源码
                 const cts = new vscode.CancellationTokenSource();
                 try {
-                    const saved = await this._saveWithFeedback(document, uriKey, cts.token);
-                    if (!saved) break;
-                    const panel = this._webviewPanels.get(uriKey);
-                    if (panel) {
-                        panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeLineMap(document.getText()) });
-                    }
+                    await this._saveNow(document, uriKey, cts.token);
                 } finally {
                     cts.dispose();
                 }
@@ -515,7 +509,7 @@ export class MarkdownEditorProvider
                 document.update(latest);
                 const flushCts = new vscode.CancellationTokenSource();
                 try {
-                    const saved = await this._saveWithFeedback(document, uriKey, flushCts.token);
+                    const saved = await this._saveNow(document, uriKey, flushCts.token);
                     // 写盘失败：中止切换并保留面板（回归：此前静默继续，交互失效无提示）
                     if (!saved) break;
                 } finally {
@@ -647,22 +641,20 @@ export class MarkdownEditorProvider
     }
 
     /**
-     * 统一保存出口（自建保存路径：frontmatterUpdate / switchToTextEditor）：
-     * 写盘 + 时间戳/盘快照记录；失败时标记 dirty（VS Code 才会提示保存，关窗不丢编辑）
-     * 并弹出用户可见错误。返回是否成功，调用方据此中止后续动作。
-     * 回归：此前这两条路径只有 try/finally 无 catch——磁盘只读/锁定/满时静默失败，
-     * VS Code 还认为文档干净，frontmatter 编辑在用户无感知下丢失、切文本编辑器静默失效。
+     * 唯一保存原语（三条路径共用：saveCustomDocument / frontmatterUpdate /
+     * 切文本编辑器前的 flush）：写盘 + 时间戳/盘快照记账 + 行号广播。
+     * 失败时标记 dirty（VS Code 才会提示保存，关窗不丢编辑）并弹出用户可见错误，
+     * 返回 false 由调用方决定是否中止后续动作。
+     * 回归 E4：此前 saveCustomDocument 无 catch、_saveWithFeedback 有 catch + 提示、
+     * frontmatterUpdate 自建一串记账——同一关注点三套行为，记账重复两份。
      */
-    private async _saveWithFeedback(
+    private async _saveNow(
         document: MarkdownDocument,
         uriKey: string,
         token: vscode.CancellationToken,
     ): Promise<boolean> {
         try {
             await document.save(token);
-            this._lastSaveTimes.set(uriKey, Date.now());
-            this._lastDiskContents.set(uriKey, document.getText());
-            return true;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) {
@@ -675,6 +667,13 @@ export class MarkdownEditorProvider
             );
             return false;
         }
+        this._lastSaveTimes.set(uriKey, Date.now());
+        this._lastDiskContents.set(uriKey, document.getText());
+        const panel = this._webviewPanels.get(uriKey);
+        if (panel) {
+            panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeLineMap(document.getText()) });
+        }
+        return true;
     }
 
     /**
@@ -699,13 +698,7 @@ export class MarkdownEditorProvider
         // 拉取 webview 最新内容（无未落盘变更时与内存一致，更新为幂等）
         const content = await this._requestContent(document, uriKey);
         document.update(content);
-        await document.save(cancellation);
-        this._lastSaveTimes.set(uriKey, Date.now());
-        this._lastDiskContents.set(uriKey, document.getText());
-        const panel = this._webviewPanels.get(uriKey);
-        if (panel) {
-            panel.webview.postMessage({ type: "lineMapUpdate", lineMap: computeLineMap(document.getText()) });
-        }
+        await this._saveNow(document, uriKey, cancellation);
     }
 
     async saveCustomDocumentAs(
