@@ -7,6 +7,7 @@ import { t } from "@/i18n";
 import { IconPin, IconChevronRight, IconChevronDown, IconChevronsUp, IconChevronsDown } from "@/ui/icons";
 import { getWebviewState, setWebviewState } from "@/messaging";
 import { buildHeadingIndex } from "../../utils/headingFold";
+import { shouldSkipViewportWork } from "../../utils/viewportFreeze";
 
 interface HeadingEntry {
     level: number;
@@ -393,6 +394,9 @@ export function initToc(getEditorView: () => EditorView | null): {
 
     function checkAutoShow(): void {
         if (isPinned) return; // 钉住时不因窗口尺寸变化自动关闭
+        // 宿主折叠态（切到非 webview 标签）视口是假的 300×150：此刻的空间判定
+        // 会把目录误判为「放不下」而收起，切回来再展开——用户看到左侧闪动
+        if (shouldSkipViewportWork()) return;
         if (hasEnoughSpace() && !isOpen) {
             openPanel(true);
         } else if (!hasEnoughSpace() && isAutoShown) {

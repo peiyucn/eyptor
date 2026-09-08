@@ -3,6 +3,13 @@
     box-sizing: border-box;
 }
 
+/* 视口单位统一走变量：宿主折叠态（切到非 webview 标签）可整体冻结，见
+   utils/viewportFreeze.ts——直接写 92vw/100vh 会在折叠时按 300×150 重排一次 */
+:root {
+    --epytor-vw: 100vw;
+    --epytor-vh: 100vh;
+}
+
 html,
 body {
     height: 100%;
@@ -27,7 +34,7 @@ body {
 /* 编辑器容器 */
 /* ─── Frontmatter 面板 ─── */
 .frontmatter-panel {
-    max-width: var(--editor-max-width, min(1400px, 92vw));
+    max-width: var(--editor-max-width, min(1400px, calc(var(--epytor-vw) * 0.92)));
     margin: 0 auto;
     /* 顶部 36px 让位 fixed 顶栏（否则面板首行被顶栏遮挡） */
     padding: 44px 48px 0;
@@ -145,11 +152,30 @@ body {
        - 小屏：92vw 先收窄，永不超出
        - 大屏（2K/4K）：1400px 封顶，保持舒适阅读列宽
        用户在设置中显式设定宽度时，--editor-max-width 生效，覆盖默认 */
-    max-width: var(--editor-max-width, min(1400px, 92vw));
+    max-width: var(--editor-max-width, min(1400px, calc(var(--epytor-vw) * 0.92)));
     margin: 0 auto;
     padding: 52px 48px 80px;
-    min-height: 100vh;
+    min-height: var(--epytor-vh);
     outline: none;
+}
+
+/* ─── 宿主折叠态：排版冻结（见 utils/viewportFreeze.ts） ─────────────────
+   切到非 webview 标签时宿主把 webview 摘出布局，iframe 回落到默认 300×150；
+   把视口单位与正文宽度钉在折叠前的实测值 → 排版逐像素不变（只是被裁切），
+   宿主放回真实尺寸时零重排，用户不再看到「页面闪一下」。 */
+html.epytor-viewport-frozen {
+    --epytor-vw: var(--epytor-frozen-vw);
+    --epytor-vh: var(--epytor-frozen-vh);
+    /* 冻结期正文宽于视口，抑制横向滚动条（否则会挤掉 15px 高度再触发一次重排） */
+    overflow-x: hidden;
+}
+html.epytor-viewport-frozen body {
+    width: var(--epytor-frozen-body-width);
+}
+html.epytor-viewport-frozen .milkdown-top-bar {
+    /* 顶栏 fixed + left/right:0，宽度跟随视口（= clientWidth，已扣滚动条）；
+       冻结期钉住同一宽度，避免按钮在 300px 里收进溢出菜单再展开 */
+    width: var(--epytor-frozen-body-width);
 }
 
 /* Milkdown 根容器 */
@@ -1041,7 +1067,7 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     display: none;
     /* 视口兜底：超长文本不超出屏幕边界（含 8px 边距），超宽省略号 */
     box-sizing: border-box;
-    max-width: calc(100vw - 8px);
+    max-width: calc(var(--epytor-vw) - 8px);
     overflow: hidden;
     text-overflow: ellipsis;
     padding: 4px 8px;

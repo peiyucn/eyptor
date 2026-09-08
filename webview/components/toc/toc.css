@@ -11,7 +11,7 @@
     left: 0;
     /* width: 由 JS 动态设置，默认 200px */
     width: 200px;
-    height: calc(100vh - 36px);
+    height: calc(var(--epytor-vh) - 36px);
     box-sizing: border-box;
     background: var(--toc-bg);
     backdrop-filter: var(--toc-blur);
@@ -169,7 +169,7 @@
     position: fixed;
     top: 36px;
     width: 14px;
-    height: calc(100vh - 36px);
+    height: calc(var(--epytor-vh) - 36px);
     background: var(--toc-bg);
     backdrop-filter: var(--toc-blur);
     -webkit-backdrop-filter: var(--toc-blur);

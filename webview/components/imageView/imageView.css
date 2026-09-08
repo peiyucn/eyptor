@@ -204,8 +204,8 @@
 }
 
 .img-editor-lightbox-img {
-    max-width: 90vw;
-    max-height: 90vh;
+    max-width: calc(var(--epytor-vw) * 0.9);
+    max-height: calc(var(--epytor-vh) * 0.9);
     object-fit: contain;
     cursor: default;
 }

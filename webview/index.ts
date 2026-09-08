@@ -52,6 +52,7 @@ import { dispatchImagePathResolved } from "./components/imageView/imgPathComplet
 import { resolvePathSuggestionRequest } from "./utils/pathSuggestionRequests";
 import { setImageUriMap, remapImageUri, showGlobalLightbox } from "./components/imageView";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
+import { initViewportFreeze } from "./utils/viewportFreeze";
 import { initFindBar } from "./components/findBar";
 import { initToc } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
@@ -77,6 +78,9 @@ const SCROLL_RETRY_DELAYS_MS = [0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000];
 const INITIAL_SCROLL_TOP_DELAYS_MS = [0, 50, 150, 400];
 
 let _topBarOverflowCtl: { dispose(): void } | null = null;
+
+// 宿主折叠态排版冻结（切到非 webview 标签时 iframe 回落 300×150 会引发整页重排）
+initViewportFreeze();
 
 let currentEditor: Editor | null = null;
 let currentLineMap: number[] = [];

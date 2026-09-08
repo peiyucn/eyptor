@@ -8,6 +8,7 @@ import type { Ctx } from "@milkdown/kit/ctx";
 import { computeOverflow, type TopBarMeasuredItem } from "@/utils/topBarOverflow";
 import { applyTooltip } from "@/ui/tooltip";
 import { t } from "@/i18n";
+import { shouldSkipViewportWork } from "@/utils/viewportFreeze";
 
 export interface TopBarButtonMeta {
     key: string;
@@ -288,10 +289,17 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
         rafId = requestAnimationFrame(measure);
     };
 
+    /** 宿主折叠态（切到非 webview 标签）视口是假的 300×150：此刻测量会把按钮
+     *  收进「⋯」，切回来再展开——顶栏可见闪动。折叠/冻结期跳过，解冻的 resize 会重测 */
+    const scheduleUnlessFrozen = (): void => {
+        if (shouldSkipViewportWork()) return;
+        schedule();
+    };
+
     // 窗口尺寸变化（body 尺寸随之变化）；topBar 内部变化由 mutation observer 捕获
-    const resizeObserver = new ResizeObserver(schedule);
+    const resizeObserver = new ResizeObserver(scheduleUnlessFrozen);
     resizeObserver.observe(document.body);
-    window.addEventListener("resize", schedule);
+    window.addEventListener("resize", scheduleUnlessFrozen);
 
     moreBtn.addEventListener("mousedown", (e) => {
         // 防止「⋯」按钮夺走编辑器焦点（光标还在但输入失效）
