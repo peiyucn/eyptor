@@ -10,6 +10,8 @@ interface HeadingEntry {
     level: number;
     text: string;
     pos: number;
+    /** 折叠状态的稳定键（level:text，与文档位置无关——pos 会随编辑漂移且跨文档复用） */
+    key: string;
 }
 
 const TOC_WIDTH = 200;
@@ -21,7 +23,8 @@ function getHeadings(view: EditorView): HeadingEntry[] {
     const headings: HeadingEntry[] = [];
     view.state.doc.nodesBetween(0, view.state.doc.content.size, (node, pos) => {
         if (node.type.name === "heading") {
-            headings.push({ level: node.attrs["level"] as number, text: node.textContent, pos });
+            const level = node.attrs["level"] as number;
+            headings.push({ level, text: node.textContent, pos, key: `${level}:${node.textContent}` });
         }
     });
     return headings;
@@ -38,16 +41,31 @@ function findHeadingElement(view: EditorView, pos: number): HTMLElement | null {
     return el;
 }
 
+/** 按标题文本+层级在实时文档中反查 pos（点击时重查）——
+ * 回归：TOC 列表 DOM 里的 pos 会随编辑漂移，直接使用会跳到错误位置或静默失败 */
+function findHeadingPosByText(view: EditorView, level: number, text: string): number | null {
+    let result: number | null = null;
+    view.state.doc.descendants((node, pos) => {
+        if (result !== null) return false;
+        if (node.type.name === "heading" && node.attrs["level"] === level && node.textContent === text) {
+            result = pos;
+            return false;
+        }
+        return true;
+    });
+    return result;
+}
+
 function hasChildren(headings: HeadingEntry[], index: number): boolean {
     if (index >= headings.length - 1) return false;
     return headings[index + 1].level > headings[index].level;
 }
 
-function isHeadingVisible(headings: HeadingEntry[], index: number, collapsed: Set<number>): boolean {
+function isHeadingVisible(headings: HeadingEntry[], index: number, collapsed: Set<string>): boolean {
     let ancestorLevel = headings[index].level;
     for (let i = index - 1; i >= 0; i--) {
         if (headings[i].level < ancestorLevel) {
-            if (collapsed.has(headings[i].pos)) return false;
+            if (collapsed.has(headings[i].key)) return false;
             ancestorLevel = headings[i].level;
         }
     }
@@ -81,7 +99,7 @@ export function initToc(getEditorView: () => EditorView | null): {
         const view = getEditorView();
         const headings = view ? getHeadings(view) : [];
         const anyExpanded = headings.some(
-            (h, i) => hasChildren(headings, i) && !collapsedHeadings.has(h.pos),
+            (h, i) => hasChildren(headings, i) && !collapsedHeadings.has(h.key),
         );
         collapseAllBtn.innerHTML = anyExpanded ? IconChevronsUp : IconChevronsDown;
         collapseAllTip.setText(anyExpanded ? t("Collapse all") : t("Expand all"));
@@ -126,11 +144,13 @@ export function initToc(getEditorView: () => EditorView | null): {
     }
     panel.style.width = `${panelWidth}px`;
 
-    // ── 折叠状态 ──────────────────────────────────────────────
-    const collapsedHeadings = new Set<number>();
+    // ── 折叠状态（稳定键：level:text；回归——曾以文档 pos 为键，跨文档恢复时
+    // 新文档标题被旧 pos 集合错误折叠，且编辑漂移后折叠指示错位） ──────────────
+    const collapsedHeadings = new Set<string>();
     if (Array.isArray(savedState?.tocCollapsed)) {
-        for (const pos of savedState.tocCollapsed) {
-            if (typeof pos === "number") collapsedHeadings.add(pos);
+        for (const key of savedState.tocCollapsed) {
+            // 仅接受字符串键；旧版本持久化的数字 pos 数据一律丢弃（一次性迁移）
+            if (typeof key === "string") collapsedHeadings.add(key);
         }
     }
     updateCollapseBtn();
@@ -156,11 +176,11 @@ export function initToc(getEditorView: () => EditorView | null): {
         const view = getEditorView();
         const headings = view ? getHeadings(view) : [];
         const anyExpanded = headings.some(
-            (h, i) => hasChildren(headings, i) && !collapsedHeadings.has(h.pos),
+            (h, i) => hasChildren(headings, i) && !collapsedHeadings.has(h.key),
         );
         if (anyExpanded) {
             headings.forEach((h, i) => {
-                if (hasChildren(headings, i)) collapsedHeadings.add(h.pos);
+                if (hasChildren(headings, i)) collapsedHeadings.add(h.key);
             });
             collapseAllBtn.title = t("Expand all");
         } else {
@@ -195,26 +215,26 @@ export function initToc(getEditorView: () => EditorView | null): {
             updateCollapseBtn();
             return;
         }
-        headings.forEach(({ level, text, pos }, idx) => {
+        headings.forEach((h, idx) => {
             if (!isHeadingVisible(headings, idx, collapsedHeadings)) return;
 
             const item = document.createElement("div");
-            item.className = `toc-item toc-item--h${level}`;
-            item.style.paddingLeft = `${(level - 1) * 12 + 8}px`;
+            item.className = `toc-item toc-item--h${h.level}`;
+            item.style.paddingLeft = `${(h.level - 1) * 12 + 8}px`;
 
             const hasKids = hasChildren(headings, idx);
             const toggle = document.createElement("span");
             toggle.className = "toc-collapse-toggle";
             if (hasKids) {
-                const isCollapsed = collapsedHeadings.has(pos);
+                const isCollapsed = collapsedHeadings.has(h.key);
                 toggle.innerHTML = isCollapsed ? IconChevronRight : IconChevronDown;
                 toggle.addEventListener("mousedown", (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     if (isCollapsed) {
-                        collapsedHeadings.delete(pos);
+                        collapsedHeadings.delete(h.key);
                     } else {
-                        collapsedHeadings.add(pos);
+                        collapsedHeadings.add(h.key);
                     }
                     saveCollapsedState();
                     refresh();
@@ -227,8 +247,8 @@ export function initToc(getEditorView: () => EditorView | null): {
 
             const label = document.createElement("span");
             label.className = "toc-item-label";
-            label.textContent = text || `${t("Heading")} ${level}`;
-            applyTooltip(label, text, { placement: "above", truncatedOnly: true });
+            label.textContent = h.text || `${t("Heading")} ${h.level}`;
+            applyTooltip(label, h.text, { placement: "above", truncatedOnly: true });
 
             label.addEventListener("mousedown", (e) => {
                 e.preventDefault();
@@ -236,7 +256,10 @@ export function initToc(getEditorView: () => EditorView | null): {
                 const v = getEditorView();
                 if (!v) return;
                 try {
-                    const el = findHeadingElement(v, pos);
+                    // 点击时按文本+层级实时重查 pos（回归：列表 DOM 里的 pos 会随
+                    // 编辑漂移，直接使用会跳到错误位置或静默失败）
+                    const livePos = findHeadingPosByText(v, h.level, h.text);
+                    const el = livePos !== null ? findHeadingElement(v, livePos) : null;
                     if (el) {
                         const topbar = document.querySelector(".milkdown-top-bar") as HTMLElement | null;
                         const topbarH = topbar?.getBoundingClientRect().height ?? DEFAULT_TOPBAR_HEIGHT;
