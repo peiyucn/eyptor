@@ -76,8 +76,10 @@ export function showImagePicker(
     urlInput.addEventListener("keydown", (e) => { if (e.key === "Enter") urlInsertBtn.click(); });
     panelUrl.appendChild(urlInput);
     panelUrl.appendChild(urlInsertBtn);
-    // 路径自动补全
-    attachImgPathComplete(urlInput);
+    // 路径自动补全：保存 detach，关闭对话框时必须移除 document 级监听——
+    // 回归：detach 被丢弃时每开一次选择器泄漏一个 document mousedown 监听，
+    // 且关闭后防抖回调可让下拉游离复活到页面左上角
+    const detachComplete = attachImgPathComplete(urlInput);
 
     // Project images panel
     const panelProject = document.createElement("div");
@@ -97,8 +99,11 @@ export function showImagePicker(
     dialog.appendChild(panelProject);
     overlay.appendChild(dialog);
 
-    // Close
-    const close = () => overlay.remove();
+    // Close（先 detach 补全监听再移除 overlay）
+    const close = () => {
+        detachComplete();
+        overlay.remove();
+    };
     overlay.addEventListener("mousedown", (e) => { if (e.target === overlay) close(); });
 
     // Upload events

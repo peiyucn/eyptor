@@ -75,6 +75,8 @@ export function attachImgPathComplete(
     let suppressMouseover = false;
     let isDestroyed = false;
     let skipDatasetClear = false;
+    /** 最近一次发出的补全请求 id（过期守卫：晚到的旧响应不得覆盖当前下拉） */
+    let latestSuggestionId = "";
 
     function closeDropdown(): void { closeDropdownState(state); lastItems = []; }
 
@@ -99,6 +101,8 @@ export function attachImgPathComplete(
 
     function showDropdown(items: PathSuggestionItem[]): void {
         closeDropdown();
+        // 双保险：输入框已脱离文档（宿主关闭对话框）时拒绝渲染，防游离下拉复活
+        if (!input.isConnected) { return; }
         const filtered = items.filter(item => item.isDir || item.webviewUri !== undefined);
         if (filtered.length === 0) { return; }
         lastItems = filtered;
@@ -160,13 +164,17 @@ export function attachImgPathComplete(
     function triggerSuggest(): void {
         const query = input.value.trim();
         if (!query || !PATH_PREFIX_REGEX.test(query)) {
+            // 使 in-flight 旧响应失效（查询已不匹配），防下拉复活
+            latestSuggestionId = "";
             closeDropdown();
             return;
         }
 
         const id = `ips_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+        latestSuggestionId = id;
         _pendingImgSuggestions.set(id, (items) => {
-            if (!isDestroyed) {
+            // 过期守卫：目录大时请求 A 后发 B，A 晚回会覆盖 B 的下拉（回归）
+            if (!isDestroyed && id === latestSuggestionId) {
                 showDropdown(items);
             }
         });
