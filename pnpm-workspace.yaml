@@ -1,6 +1,10 @@
 packages:
   - .
 overrides:
+  # 单副本：@milkdown/components（Crepe 代码块 NodeView）原本解析到 @codemirror/state@6.7.1，
+  # 而 @codemirror/view 与 epytor 自己用 6.6.0 —— Compartment/StateEffect 跨副本不被识别，
+  # Crepe 的 languageConf.reconfigure 静默失效（代码块无语法高亮，用户实测反馈）
+  "@codemirror/state": ^6.7.1
   katex: ^0.18.0
   prosemirror-changeset: ^2.3.1
   prosemirror-commands: ^1.7.1
