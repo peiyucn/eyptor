@@ -735,6 +735,14 @@ async function handleEditorLifecycleMessage(
             scheduleDelayedScroll(() => {
                 window.scrollTo({ top: targetY });
             });
+        } else {
+            // 新打开文档：无定位请求时确保从顶部开始（回归：首次渲染后页面被滚动到
+            // 第一个标题，frontmatter 面板被顶出视口，需上滑才能看到）
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    window.scrollTo({ top: 0 });
+                });
+            });
         }
     }
 }
