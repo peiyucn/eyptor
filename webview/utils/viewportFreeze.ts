@@ -85,6 +85,32 @@ export const TINY_REAL_SETTLE_MS = 600;
 let state: ViewportFreezeState = INITIAL_VIEWPORT_FREEZE_STATE;
 let tinyRealTimer: ReturnType<typeof setTimeout> | null = null;
 
+type ViewportRestoredListener = () => void;
+const restoredListeners = new Set<ViewportRestoredListener>();
+
+/**
+ * 订阅「宿主折叠态结束」（视口回到真实尺寸）。
+ *
+ * 视口驱动的 UI（吸顶条、目录自动显隐、顶栏溢出测量）在折叠期靠 shouldSkipViewportWork
+ * 跳过测量——但触发它们的 resize / ResizeObserver 事件往往**在折叠期就被消耗掉了**，
+ * 解冻后不会再来一次。实测（60fps 录屏）：切回 md 后吸顶条要 ~180ms 才从上一章节换成
+ * 正确章节，用户看到的就是「内容出来了又变一次」。订阅本事件即可在解冻的同一帧重算。
+ */
+export function onViewportRestored(listener: ViewportRestoredListener): () => void {
+    restoredListeners.add(listener);
+    return () => { restoredListeners.delete(listener); };
+}
+
+function notifyViewportRestored(): void {
+    for (const listener of restoredListeners) {
+        try {
+            listener();
+        } catch {
+            // 单个订阅者出错不影响其他订阅者
+        }
+    }
+}
+
 /** 清除「真尺寸」标记（尺寸变化 / 焦点变化时调用，保证下一次折叠仍按折叠处理） */
 function clearTinyReal(root: HTMLElement): void {
     if (tinyRealTimer !== null) {
@@ -124,6 +150,7 @@ export function isViewportShrunk(
 }
 
 function apply(next: ViewportFreezeState, root: HTMLElement): void {
+    const skippingBefore = shouldSkipViewportWork();
     // 过渡帧标记：独立于冻结状态本身，所以放在早退之前
     root.classList.toggle(
         "epytor-viewport-shrunk",
@@ -131,6 +158,7 @@ function apply(next: ViewportFreezeState, root: HTMLElement): void {
     );
     if (next.frozen === state.frozen && next.frozenVw === state.frozenVw
         && next.frozenVh === state.frozenVh && next.frozenBodyWidth === state.frozenBodyWidth) {
+        if (skippingBefore && !shouldSkipViewportWork()) { notifyViewportRestored(); }
         return;
     }
     state = next;
@@ -150,6 +178,7 @@ function apply(next: ViewportFreezeState, root: HTMLElement): void {
         root.style.setProperty("--epytor-last-vh", `${next.frozenVh}px`);
         root.style.setProperty("--epytor-last-body-width", `${next.frozenBodyWidth}px`);
     }
+    if (skippingBefore && !shouldSkipViewportWork()) { notifyViewportRestored(); }
 }
 
 function readViewport(): { width: number; height: number; bodyWidth: number } {

@@ -15,7 +15,7 @@ import { IconChevronDown, IconChevronRight } from "./ui/icons";
 import { applyTooltip, hideTooltip } from "./ui/tooltip";
 import { t } from "./i18n";
 import { headingFoldPluginKey, type HeadingFoldMeta } from "./headingFoldPlugin";
-import { shouldSkipViewportWork } from "./utils/viewportFreeze";
+import { onViewportRestored, shouldSkipViewportWork } from "./utils/viewportFreeze";
 import { buildHeadingIndex, type HeadingIndexEntry } from "./utils/headingFold";
 import { computeStickyRows, STICKY_MAX_ROWS, STICKY_ROW_HEIGHT_PX } from "./utils/headingSticky";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
@@ -320,6 +320,13 @@ export const headingStickyPlugin = $prose(() =>
             const resizeObserver = new ResizeObserver(markCacheDirty);
             resizeObserver.observe(view.dom);
 
+            // 宿主折叠态结束：折叠期 scheduleUpdate 被跳过、触发它的 resize 也已消耗掉，
+            // 这里立刻重算一次（否则吸顶条会停在折叠前那一章节约 180ms）
+            const unsubscribeRestored = onViewportRestored(() => {
+                rebuildCache();
+                scheduleUpdate();
+            });
+
             window.addEventListener("scroll", scheduleUpdate, { passive: true });
             // resize 只刷新显示位置（docTop 与视口无关，无需重建缓存）
             window.addEventListener("resize", scheduleUpdate);
@@ -342,6 +349,7 @@ export const headingStickyPlugin = $prose(() =>
                     }
                 },
                 destroy() {
+                    unsubscribeRestored();
                     if (rafId !== null) cancelAnimationFrame(rafId);
                     if (rebuildTimer !== null) clearTimeout(rebuildTimer);
                     if (_hideStickyUntilNextInteraction === suppressUntilNextInteraction) {

@@ -7,7 +7,7 @@ import { t } from "@/i18n";
 import { IconPin, IconChevronRight, IconChevronDown, IconChevronsUp, IconChevronsDown } from "@/ui/icons";
 import { getWebviewState, setWebviewState } from "@/messaging";
 import { buildHeadingIndex } from "../../utils/headingFold";
-import { shouldSkipViewportWork } from "../../utils/viewportFreeze";
+import { onViewportRestored, shouldSkipViewportWork } from "../../utils/viewportFreeze";
 
 interface HeadingEntry {
     level: number;
@@ -417,6 +417,8 @@ export function initToc(getEditorView: () => EditorView | null): {
     });
 
     window.addEventListener("resize", checkAutoShow);
+    // 折叠态结束：折叠期的 resize 已被 checkAutoShow 跳过，这里补一次空间判定
+    onViewportRestored(checkAutoShow);
 
     function show(): void {
         panel.style.visibility = 'visible';

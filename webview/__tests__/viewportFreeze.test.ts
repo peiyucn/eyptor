@@ -5,6 +5,7 @@ import {
     IFRAME_DEFAULT_WIDTH,
     TINY_REAL_SETTLE_MS,
     initViewportFreeze,
+    onViewportRestored,
     isCollapsedViewport,
     isViewportShrunk,
     nextViewportFreezeState,
@@ -167,6 +168,20 @@ describe("真尺寸确认（TINY_REAL_SETTLE_MS）", () => {
         setViewport(846, 677);
         window.dispatchEvent(new Event("resize"));
         expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(false);
+    });
+
+    it("折叠 → 恢复真实尺寸 应该 触发 onViewportRestored（视口驱动的 UI 补算一次）", () => {
+        let calls = 0;
+        const off = onViewportRestored(() => { calls += 1; });
+        setViewport(846, 677);
+        initViewportFreeze();
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        window.dispatchEvent(new Event("resize"));
+        expect(calls).toBe(0);
+        setViewport(846, 677);
+        window.dispatchEvent(new Event("resize"));
+        expect(calls).toBe(1);
+        off();
     });
 
     it("阈值内恢复真实尺寸 应该 不标记（宿主摘挂只有几十毫秒）", () => {
