@@ -488,3 +488,29 @@ switchToTextEditor-done  sel=57 visTop=0     ← 光标设对了，视口没滚
 → 请复测：
 1. 切源码：视口是否停在你刚才看的那一段（不再回文件开头），再切回预览是否也在同一段；
 2. 非 md 标签 ↔ md 标签来回切：是否还有整屏空白（预期没有；若仍觉得闪，麻烦说一句是「整块变空」还是「内容位置跳一下」，两者根因完全不同）。
+
+## 20. 开发者回复（2026-09-08 第十一轮，提交 `fdbd4d4`）
+
+> 你问得对——上一版**不是**官方的做法，是绕路。我去把内置 `markdown-language-features` 的定位实现完整读了一遍，按官方口径重写了（`fdbd4d4`），定时重试已删除。
+
+### 20.1 官方怎么做的
+
+* **记住位置**：预览侧把它当前的行号按 URI 存起来（`setPreviousStaticEditorLine`）；文本侧用 `onDidChangeTextEditorVisibleRanges` 记录**视口顶部行**（还带行内字符比例，做到亚行精度）。
+* **切回文本时定位**：在 **`onDidChangeActiveTextEditor`** 里取出刚才存的行号，执行 `revealRange(range, AtTop)`。
+* 关键点：**没有定时器、没有重试**——因为事件触发时编辑器已经建好、可以正常滚动。
+
+### 20.2 上一版为什么是绕路
+
+我们当时是在 `reopenActiveEditorWith` 命令**返回后立刻** reveal，那时文本编辑器首帧还没布局，reveal 被丢弃（所以视口停在文件开头），于是我用「50/150/350ms 重试」去补——能用，但属于拿定时器兜住时序问题，不是官方路径。
+
+### 20.3 现在改成官方口径（`fdbd4d4`）
+
+* 新增 `_pendingEditorReveal`（URI + 行号），在构造函数里注册 `onDidChangeActiveTextEditor`，**文本编辑器真正 active 时**才 `revealRange(..., AtTop)`（与官方 `vv()` / `Jle()` 同口径）。
+* `switchToTextEditor` 只登记待恢复行；命令返回后若事件没触发（旧版 VS Code / 已经是同一个文本编辑器）补一次。
+* 删除 `TEXT_EDITOR_REVEAL_RETRY_MS` 与重试循环。
+
+**实测（真实 VS Code 探针）**：webview 滚到 line 60（`sy=1396`、视口顶部行 58）→ 切源码 → `settled line=58 sel=57 visTop=52 visBottom=86`（目标行可见）。纯事件触发与「事件 + 重试」结果完全一致，所以重试确实多余，已删。
+
+> 预览方向仍是官方口径：切回预览时把文本编辑器的**视口顶部行**作为 pending navigation 下发，webview 用锚点插值滚动到该行（`data-line`/`endLine` 那套，第六轮已对齐）。
+
+**验证**：`pnpm run verify` 全绿（47 文件 / 376 测试）。
