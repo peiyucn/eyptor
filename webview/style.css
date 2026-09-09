@@ -15,10 +15,6 @@ body {
     height: 100%;
     margin: 0;
     padding: 0;
-    /* 折叠过渡用：宿主把 webview 压成 300×150 期间把正文压暗（此时 webview 不可见，
-       压暗过程用户看不到）；尺寸恢复后透明度再平滑回到 1 → 用户看到的是「内容淡入」，
-       既没有「一排字」的碎片，也没有生硬的「消失→出现」两次闪。 */
-    transition: opacity 90ms linear;
     background-color: var(--vscode-editor-background);
     color: var(--vscode-editor-foreground);
     font-family: var(
@@ -222,18 +218,10 @@ html.epytor-viewport-frozen .toc-toggle-tab {
         width: 0;
         height: 0;
     }
-    body {
-        width: var(--epytor-last-body-width, 100%);
-        /* 折叠期不画正文（见文件上方折叠说明）：这一帧画任何内容都会被 300×150 的
-           视口压成左上角一小块（用户实测「闪出一排字」）；同时把透明度压到 0.1，
-           尺寸恢复后由 html/body 上的 transition 平滑淡入，避免生硬的「突然出现」。
-           data-epytor-tiny-real：用户真把编辑区缩到 300×150 并稳定停留时不压暗。 */
+    /* 折叠期不画正文——这就是内置预览的行为（见文件上方折叠说明）。
+       data-epytor-tiny-real：用户真把编辑区缩到 300×150 并稳定停留时不隐藏。 */
+    html:not([data-epytor-tiny-real]) body {
         visibility: hidden;
-        opacity: 0.1;
-    }
-    html[data-epytor-tiny-real] body {
-        visibility: visible;
-        opacity: 1;
     }
     .milkdown-top-bar {
         width: var(--epytor-last-body-width, 100%);
