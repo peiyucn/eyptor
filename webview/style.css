@@ -177,10 +177,9 @@ html.epytor-viewport-frozen .milkdown-top-bar {
 }
 
 /* 过渡帧（宿主重新挂载 webview、iframe 短暂回落 300×150 的那几十毫秒）：
-   此时 iframe 只有 300px 宽，编辑区右侧 2/3 必然是宿主底色——正文无论怎么摆都只能
-   出现在左边一条里。实测对比：显示正文 → 用户看到「闪出一排被截断的字」；
-   隐藏正文 → 整块是编辑器底色（最小视觉差）。这里选后者，并把模糊一并关掉
-   （backdrop-filter 要求合成器重建图层后重新捕获背景，会推迟首帧）。 */
+   排版保持折叠前的正确版式（零重排、正文不跳），只抑制此刻会出现在编辑区中间的
+   滚动条，并关掉模糊——backdrop-filter 要求合成器重建图层后重新捕获并模糊背景，
+   会推迟首帧。实测：隐藏正文反而更明显（整块变空），保留正文时至少内容连续。 */
 html.epytor-viewport-shrunk,
 html.epytor-viewport-frozen {
     scrollbar-width: none;
@@ -189,10 +188,6 @@ html.epytor-viewport-shrunk::-webkit-scrollbar,
 html.epytor-viewport-frozen::-webkit-scrollbar {
     width: 0;
     height: 0;
-}
-html:not([data-epytor-tiny-real]).epytor-viewport-shrunk body,
-html:not([data-epytor-tiny-real]).epytor-viewport-frozen body {
-    opacity: 0;
 }
 html.epytor-viewport-shrunk .milkdown-top-bar,
 html.epytor-viewport-frozen .milkdown-top-bar,
@@ -221,9 +216,6 @@ html.epytor-viewport-frozen .toc-toggle-tab {
     }
     body {
         width: var(--epytor-last-body-width, 100%);
-    }
-    html:not([data-epytor-tiny-real]) body {
-        opacity: 0;
     }
     .milkdown-top-bar {
         width: var(--epytor-last-body-width, 100%);

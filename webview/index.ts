@@ -816,16 +816,20 @@ async function handleEditorLifecycleMessage(
     if (isInit && msg.scrollToLine) {
         _lastNavLine = msg.scrollToLine; // 供切回文本时保持精确行（见 getSwitchTargetLine）
         _pendingScrollLine = msg.scrollToLine;
-    } else if (isInit) {
+    } else if (isInit && _pendingScrollLine === null) {
         // 新打开文档：确保视口在顶部（frontmatter 可见）。
         // 回归：焦点获取（window.focus → ProseMirror 把光标滚入视口）、布局稳定与
         // 浏览器滚动锚定都会在首帧之后把视口推向第一个标题，单次 scrollTo 会被覆盖，
         // 因此在前几帧内复位若干次；用户一旦交互立即停止干预。
         // 不再恢复上次滚动位置（用户反馈：打开文档应看到 frontmatter，而不是跳到第一个标题）
+        // 回归（本轮）：运行期 scrollToLine 可能先于 init 到达并存入 _pendingScrollLine，
+        // 此时若仍执行顶部复位，复位定时器（0–400ms）会把刚定位好的视口推回顶部——
+        // 是否复位必须看「有没有待定位行」。
         const epochAtStart = getUserInteractionEpoch();
         for (const delay of INITIAL_SCROLL_TOP_DELAYS_MS) {
             setTimeout(() => {
                 if (getUserInteractionEpoch() !== epochAtStart) return;
+                if (_pendingScrollLine !== null) return;
                 window.scrollTo({ top: 0 });
             }, delay);
         }
