@@ -178,6 +178,49 @@ html.epytor-viewport-frozen .milkdown-top-bar {
     width: var(--epytor-frozen-body-width);
 }
 
+/* 过渡帧（宿主已显示面板、尚未把 iframe 放回真实尺寸的那 1–3 帧，实测 2 帧）：
+   排版是冻结后的正确版式，但被裁在左上角一小块里。此时整体隐藏正文、只留编辑器
+   底色（html 背景），切回时用户看到的就是「底色 → 内容」，不再看到裁切闪动。 */
+html.epytor-viewport-shrunk body {
+    opacity: 0;
+}
+/* 同步隐藏过渡帧里的滚动条（否则它会在编辑区中间出现 2 帧） */
+html.epytor-viewport-shrunk {
+    scrollbar-width: none;
+}
+html.epytor-viewport-shrunk::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
+
+/* ─── 折叠第一帧的纯 CSS 兜底 ─────────────────────────────────────────────
+   实测：宿主把面板显示出来后，iframe 先以默认 300×150 绘制一帧，resize 事件
+   要 60ms 后才到——那一帧用 JS 来不及（正文会按 300px 重排，用户看到闪动）。
+   媒体查询在样式/布局/绘制之前求值，所以这里用「上一次真实尺寸」变量把排版
+   钉住并隐藏正文，第一帧就是对的；JS 的 resize 兜底只负责其他折叠尺寸。 */
+@media (width: 300px) and (height: 150px) {
+    html {
+        --epytor-vw: var(--epytor-last-vw, 100vw);
+        --epytor-vh: var(--epytor-last-vh, 100vh);
+        overflow-x: hidden;
+        scrollbar-width: none;
+    }
+    html::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+    }
+    body {
+        width: var(--epytor-last-body-width, 100%);
+    }
+    .milkdown-top-bar {
+        width: var(--epytor-last-body-width, 100%);
+    }
+    /* 用户真把编辑区拖到 300×150 时（JS 置位该属性）不隐藏 */
+    html:not([data-epytor-tiny-real]) body {
+        opacity: 0;
+    }
+}
+
 /* Milkdown 根容器 */
 .milkdown {
     position: relative;

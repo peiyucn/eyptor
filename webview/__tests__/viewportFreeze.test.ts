@@ -4,6 +4,7 @@ import {
     IFRAME_DEFAULT_HEIGHT,
     IFRAME_DEFAULT_WIDTH,
     isCollapsedViewport,
+    isViewportShrunk,
     nextViewportFreezeState,
     recordBodyWidth,
     type ViewportFreezeState,
@@ -102,5 +103,29 @@ describe("recordBodyWidth", () => {
     it("非正数读数 应该 忽略", () => {
         expect(recordBodyWidth(base, 0)).toBe(base);
         expect(recordBodyWidth(base, -5)).toBe(base);
+    });
+});
+
+describe("isViewportShrunk", () => {
+    const base = nextViewportFreezeState(INITIAL_VIEWPORT_FREEZE_STATE, { width: 846, height: 677, bodyWidth: 831 });
+
+    it("冻结 + 视口比冻结尺寸小 应该 判定为过渡帧（隐藏正文）", () => {
+        const frozen = nextViewportFreezeState(base, { width: 300, height: 150, bodyWidth: 285 });
+        expect(isViewportShrunk(frozen, { width: 300, height: 150 })).toBe(true);
+    });
+
+    it("冻结 + 视口已回到真实尺寸 应该 不隐藏", () => {
+        const frozen = nextViewportFreezeState(base, { width: 300, height: 150, bodyWidth: 285 });
+        expect(isViewportShrunk(frozen, { width: 846, height: 677 })).toBe(false);
+    });
+
+    it("未冻结 应该 永不隐藏", () => {
+        expect(isViewportShrunk(base, { width: 300, height: 150 })).toBe(false);
+    });
+
+    it("用户真实视口恰为 300×150 应该 不隐藏（画面本来就是对的）", () => {
+        const small = nextViewportFreezeState(INITIAL_VIEWPORT_FREEZE_STATE, { width: 300, height: 150, bodyWidth: 285 });
+        const frozen = nextViewportFreezeState(small, { width: 300, height: 150, bodyWidth: 285 });
+        expect(isViewportShrunk(frozen, { width: 300, height: 150 })).toBe(false);
     });
 });
