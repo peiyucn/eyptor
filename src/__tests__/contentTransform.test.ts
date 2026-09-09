@@ -196,12 +196,75 @@ describe("computeLineRanges", () => {
         expect(computeLineRanges("\n\n# Heading")).toEqual([{ start: 3, end: 3 }]);
     });
 
-    it("大文件（1000 行）计算耗时 应该 低于 100ms", () => {
+    // 回归（用户实测「源码在 3. 保存链路，切回预览跑到 6」「预览切源码完全无法定位」）：
+    // 旧实现按空行分段，空行分隔的列表项各成一段，而 CommonMark 把它们解析成**一个**
+    // list 块——块数与块序都和渲染结果对不上，滚动同步整体偏移。
+    it("空行分隔的列表项 应该 合并为一个列表块（与渲染块结构一致）", () => {
+        const content = [
+            "## 章节",
+            "",
+            "* [x] 第一项",
+            "",
+            "* [ ] 第二项",
+            "",
+            "* [x] 第三项",
+            "",
+            "## 下一节",
+        ].join("\n");
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 1 },
+            { start: 3, end: 7 },
+            { start: 9, end: 9 },
+        ]);
+    });
+
+    it("嵌套列表 应该 与父列表同属一个块", () => {
+        const content = ["* 父项", "", "  * 子项", "", "* 第二个父项"].join("\n");
+        expect(computeLineRanges(content)).toEqual([{ start: 1, end: 5 }]);
+    });
+
+    it("GFM 表格 应该 整体成块（含分隔行）", () => {
+        const content = "| a | b |\n| - | - |\n| 1 | 2 |\n\n段落";
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 3 },
+            { start: 5, end: 5 },
+        ]);
+    });
+
+    it("多行引用块 应该 整体成块", () => {
+        const content = "> 第一行\n> 第二行\n\n段落";
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 2 },
+            { start: 4, end: 4 },
+        ]);
+    });
+
+    it("链接引用定义 应该 不产生块（渲染端不生成块）", () => {
+        const content = "[ref]: https://example.com\n\n段落";
+        expect(computeLineRanges(content)).toEqual([{ start: 3, end: 3 }]);
+    });
+
+    it("块数与「块之间空行数」无关 应该 只取决于块结构", () => {
+        const tight = ["* a", "* b", "* c"].join("\n");
+        const loose = ["* a", "", "* b", "", "* c"].join("\n");
+        expect(computeLineRanges(tight).length).toBe(1);
+        expect(computeLineRanges(loose).length).toBe(1);
+    });
+
+    it("大文件（400 块）解析耗时 应该 低于 100ms", () => {
         const content = Array.from({ length: 200 }, (_, i) => `## Heading ${i}\n\nContent ${i}`).join("\n\n");
+        computeLineRanges(content); // 预热（首次调用含解析器 JIT）
         const start = performance.now();
-        computeLineRanges(content);
+        computeLineRanges(content + "\n");
         const elapsed = performance.now() - start;
         expect(elapsed).toBeLessThan(100);
+    });
+
+    it("同一内容重复调用 应该 命中缓存（返回同一结果、不重解析）", () => {
+        const content = "# A\n\n正文\n\n* 一\n\n* 二";
+        const first = computeLineRanges(content);
+        const second = computeLineRanges(content);
+        expect(second).toBe(first);
     });
 });
 
