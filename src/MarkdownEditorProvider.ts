@@ -33,8 +33,13 @@ const FS_WATCH_DEBOUNCE_MS = 200;
 const CONTENT_REQUEST_TIMEOUT_MS = 3000;
 /** 单张图片上传载荷大小上限（20MB） */
 const MAX_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024;
-/** 「切到源码」后重试定位的延迟（reopen 后文本编辑器首帧未布局，首次 reveal 会丢） */
-const TEXT_EDITOR_REVEAL_RETRY_MS = [50, 150, 350];
+/** 把指定行（1-indexed）滚到文本编辑器视口顶部（官方 revealRange + AtTop 同口径） */
+function revealLineAtTop(editor: vscode.TextEditor, line: number): void {
+    const target = Math.max(0, Math.min(line - 1, editor.document.lineCount - 1));
+    const pos = new vscode.Position(target, 0);
+    editor.selection = new vscode.Selection(pos, pos);
+    editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.AtTop);
+}
 
 export class MarkdownEditorProvider
     implements vscode.CustomEditorProvider<MarkdownDocument> {
@@ -157,6 +162,15 @@ export class MarkdownEditorProvider
     private readonly _statusBarItem: vscode.StatusBarItem;
     private readonly _wordCounts = new Map<string, { lines: number; words: number; charsNoSpace: number; charsWithSpace: number }>();
 
+    /**
+     * 「切到源码」后待恢复的视口行（1-indexed）。
+     * 官方 markdown-language-features 的做法就是这条路：把行号暂存，等
+     * `onDidChangeActiveTextEditor` 触发（此刻编辑器已完成创建与布局）再
+     * `revealRange(..., AtTop)`——而不是在 reopen 命令返回后立刻 reveal
+     * （那时首帧还没布局，reveal 会被丢弃，视口停在文件开头）。
+     */
+    private _pendingEditorReveal: { uriKey: string; line: number } | undefined;
+
     constructor(
         private readonly context: vscode.ExtensionContext,
     ) {
@@ -171,6 +185,16 @@ export class MarkdownEditorProvider
             },
             CONTENT_REQUEST_TIMEOUT_MS,
             (uriKey) => this._warnContentFallback(uriKey),
+        );
+        // 官方同款触发点：文本编辑器真正成为 active 时才定位（见 _pendingEditorReveal）
+        this.context.subscriptions.push(
+            vscode.window.onDidChangeActiveTextEditor((editor) => {
+                const pending = this._pendingEditorReveal;
+                if (!pending || !editor) { return; }
+                if (editor.document.uri.toString() !== pending.uriKey) { return; }
+                this._pendingEditorReveal = undefined;
+                revealLineAtTop(editor, pending.line);
+            }),
         );
     }
 
@@ -536,33 +560,24 @@ export class MarkdownEditorProvider
                 // `reopenActiveEditorWith`）——标签不重建、不新增，切换零闪动。
                 // 回归：此前 dispose 面板再 showTextDocument = 销毁整个 webview 再重建
                 // 文本标签，用户实测「切回预览会闪、还会闪出同名标签再消失、标签跳到末尾」。
+                //
+                // 定位：官方在 `onDidChangeActiveTextEditor` 里做（此刻编辑器已完成创建与
+                // 布局），而 reopen 命令返回时首帧尚未布局、立刻 reveal 会被丢弃（用户实测
+                // 「切源码后视口停在文件开头」）。所以这里只登记待恢复行，由构造函数里注册的
+                // activeTextEditor 监听执行。
+                if (message.line && message.line > 0) {
+                    this._pendingEditorReveal = { uriKey: document.uri.toString(), line: message.line };
+                }
                 try {
                     await vscode.commands.executeCommand('reopenActiveEditorWith', 'default');
-                    // 内置命令不接受定位参数：替换完成后把光标放到视口顶部行。
-                    // 回归（用户实测：切到源码后视口停在文件开头、再切回预览也跟着丢位置）：
-                    // reopen 之后文本编辑器首帧尚未布局，紧接着的 revealRange 会被丢掉
-                    // （第二次切换之所以正常，是因为编辑器已存在）。因此立即定位一次，
-                    // 再补几次延迟重试；用户自己移动过光标/目标行已可见就不再干预。
-                    if (message.line && message.line > 0) {
-                        const targetLine = message.line - 1;
-                        const revealTarget = (): void => {
-                            const active = vscode.window.activeTextEditor;
-                            if (!active || active.document.uri.toString() !== document.uri.toString()) { return; }
-                            const pos = new vscode.Position(targetLine, 0);
-                            active.selection = new vscode.Selection(pos, pos);
-                            active.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.AtTop);
-                        };
-                        revealTarget();
-                        for (const delay of TEXT_EDITOR_REVEAL_RETRY_MS) {
-                            setTimeout(() => {
-                                const active = vscode.window.activeTextEditor;
-                                if (!active || active.document.uri.toString() !== document.uri.toString()) { return; }
-                                if (active.selection.active.line !== targetLine) { return; }
-                                const visible = active.visibleRanges.some(
-                                    (range) => range.start.line <= targetLine && targetLine <= range.end.line,
-                                );
-                                if (!visible) { revealTarget(); }
-                            }, delay);
+                    // 事件未触发时的兜底（旧版 VS Code / 已经是同一个文本编辑器）：命令返回后
+                    // 补一次；已由事件定位过则 pending 已被清空，不会重复干预。
+                    if (this._pendingEditorReveal) {
+                        const active = vscode.window.activeTextEditor;
+                        if (active && active.document.uri.toString() === this._pendingEditorReveal.uriKey) {
+                            const line = this._pendingEditorReveal.line;
+                            this._pendingEditorReveal = undefined;
+                            revealLineAtTop(active, line);
                         }
                     }
                 } catch {
