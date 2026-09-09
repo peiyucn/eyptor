@@ -179,10 +179,22 @@ html.epytor-viewport-frozen .milkdown-top-bar {
 /* 过渡帧（宿主重新挂载 webview、iframe 短暂回落 300×150 的那几十毫秒）：
    排版保持折叠前的正确版式（零重排、正文不跳），只抑制此刻会出现在编辑区中间的
    滚动条，并关掉模糊——backdrop-filter 要求合成器重建图层后重新捕获并模糊背景，
-   会推迟首帧。实测：隐藏正文反而更明显（整块变空），保留正文时至少内容连续。 */
+   会推迟首帧。 */
 html.epytor-viewport-shrunk,
 html.epytor-viewport-frozen {
     scrollbar-width: none;
+}
+
+/* 过渡帧只画底色、不画正文（真实窗口对照实测）。
+   VS Code 内置预览折叠时 iframe 被整个摘出 DOM（isConnected=0、尺寸归零），重新
+   挂载时容器已是正确尺寸——**它从来没有以 300×150 画过一帧**；而我们的 webview
+   因 retainContextWhenHidden 保持挂载，被压成 300×150 后仍会绘制，于是用户看到
+   「正文挤在左上角一小块」。等尺寸的这几十毫秒里画任何内容都是错的，只画底色
+   （与宿主编辑区底色同色）视觉上等同于「还没画出来」，与内置预览的表现一致。
+   data-epytor-tiny-real：用户真把编辑区缩到 300×150 并稳定停留时不隐藏。 */
+html.epytor-viewport-shrunk:not([data-epytor-tiny-real]) body,
+html.epytor-viewport-frozen:not([data-epytor-tiny-real]) body {
+    visibility: hidden;
 }
 html.epytor-viewport-shrunk::-webkit-scrollbar,
 html.epytor-viewport-frozen::-webkit-scrollbar {
@@ -219,6 +231,12 @@ html.epytor-viewport-frozen .toc-toggle-tab {
     }
     body {
         width: var(--epytor-last-body-width, 100%);
+        /* 折叠第一帧（resize 事件还没到）就只画底色——第一帧画任何内容都会被
+           300×150 的视口压成左上角一小块（同上方 .epytor-viewport-shrunk 说明） */
+        visibility: hidden;
+    }
+    html[data-epytor-tiny-real] body {
+        visibility: visible;
     }
     .milkdown-top-bar {
         width: var(--epytor-last-body-width, 100%);

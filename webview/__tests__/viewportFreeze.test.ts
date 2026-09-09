@@ -1,14 +1,22 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
     INITIAL_VIEWPORT_FREEZE_STATE,
     IFRAME_DEFAULT_HEIGHT,
     IFRAME_DEFAULT_WIDTH,
+    TINY_REAL_SETTLE_MS,
+    initViewportFreeze,
     isCollapsedViewport,
     isViewportShrunk,
     nextViewportFreezeState,
     recordBodyWidth,
     type ViewportFreezeState,
 } from "../utils/viewportFreeze";
+
+/** 改写 jsdom 视口尺寸（只读属性需 defineProperty） */
+function setViewport(width: number, height: number): void {
+    Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: height, configurable: true });
+}
 
 /**
  * 宿主折叠态判定（回归：切到非 webview 标签时宿主把 webview 摘出布局，iframe 回落
@@ -127,5 +135,47 @@ describe("isViewportShrunk", () => {
         const small = nextViewportFreezeState(INITIAL_VIEWPORT_FREEZE_STATE, { width: 300, height: 150, bodyWidth: 285 });
         const frozen = nextViewportFreezeState(small, { width: 300, height: 150, bodyWidth: 285 });
         expect(isViewportShrunk(frozen, { width: 300, height: 150 })).toBe(false);
+    });
+});
+
+/**
+ * 过渡帧「只画底色」的例外：用户真把编辑区缩到 300×150 并稳定停留时不能一直隐藏正文
+ * （回归：没有这个例外，小窗口下编辑区会永久空白）。
+ */
+describe("真尺寸确认（TINY_REAL_SETTLE_MS）", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+        document.documentElement.removeAttribute("data-epytor-tiny-real");
+        setViewport(1024, 768);
+    });
+
+    it("折叠尺寸持续超过阈值 应该 标记 data-epytor-tiny-real", () => {
+        vi.useFakeTimers();
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        initViewportFreeze();
+        expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(false);
+        vi.advanceTimersByTime(TINY_REAL_SETTLE_MS + 20);
+        expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(true);
+    });
+
+    it("标记后尺寸变化 应该 立即清除标记（下一次折叠仍按折叠处理）", () => {
+        vi.useFakeTimers();
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        initViewportFreeze();
+        vi.advanceTimersByTime(TINY_REAL_SETTLE_MS + 20);
+        expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(true);
+        setViewport(846, 677);
+        window.dispatchEvent(new Event("resize"));
+        expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(false);
+    });
+
+    it("阈值内恢复真实尺寸 应该 不标记（宿主摘挂只有几十毫秒）", () => {
+        vi.useFakeTimers();
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        initViewportFreeze();
+        setViewport(846, 677);
+        window.dispatchEvent(new Event("resize"));
+        vi.advanceTimersByTime(TINY_REAL_SETTLE_MS + 20);
+        expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(false);
     });
 });

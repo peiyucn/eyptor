@@ -76,7 +76,23 @@ export function recordBodyWidth(prev: ViewportFreezeState, bodyWidth: number): V
     return { ...prev, frozenBodyWidth: bodyWidth };
 }
 
+/**
+ * 折叠尺寸持续多久后认定「用户真的把编辑区缩到了 300×150」。
+ * 宿主摘挂 webview 时该尺寸只持续 15–72ms，远小于这个阈值；用户手动拖到那么小则一直停留。
+ */
+export const TINY_REAL_SETTLE_MS = 600;
+
 let state: ViewportFreezeState = INITIAL_VIEWPORT_FREEZE_STATE;
+let tinyRealTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 清除「真尺寸」标记（尺寸变化 / 焦点变化时调用，保证下一次折叠仍按折叠处理） */
+function clearTinyReal(root: HTMLElement): void {
+    if (tinyRealTimer !== null) {
+        clearTimeout(tinyRealTimer);
+        tinyRealTimer = null;
+    }
+    root.removeAttribute("data-epytor-tiny-real");
+}
 
 /** 当前是否处于宿主折叠（排版已冻结）态——视口驱动的 UI 逻辑应跳过 */
 export function isViewportFrozen(): boolean {
@@ -136,18 +152,43 @@ function apply(next: ViewportFreezeState, root: HTMLElement): void {
     }
 }
 
-function sync(): void {
-    apply(nextViewportFreezeState(state, {
+function readViewport(): { width: number; height: number; bodyWidth: number } {
+    return {
         width: window.innerWidth,
         height: window.innerHeight,
         bodyWidth: document.body?.getBoundingClientRect().width ?? 0,
-    }), document.documentElement);
+    };
+}
+
+function sync(): void {
+    const root = document.documentElement;
+    const viewport = readViewport();
+    if (isCollapsedViewport(viewport.width, viewport.height)) {
+        // 停留在折叠尺寸：先按折叠处理（隐藏正文），持续到阈值再认定是真实尺寸
+        if (tinyRealTimer === null && !root.hasAttribute("data-epytor-tiny-real")) {
+            tinyRealTimer = setTimeout(() => {
+                tinyRealTimer = null;
+                const now = readViewport();
+                if (!isCollapsedViewport(now.width, now.height)) { return; }
+                root.setAttribute("data-epytor-tiny-real", "");
+                // 真实尺寸即 300×150：解除冻结、按当前尺寸重新建立基准（否则排版被钉在旧宽度）
+                apply(nextViewportFreezeState(INITIAL_VIEWPORT_FREEZE_STATE, now), root);
+            }, TINY_REAL_SETTLE_MS);
+        }
+    } else {
+        clearTinyReal(root);
+    }
+    apply(nextViewportFreezeState(state, viewport), root);
 }
 
 /** 初始化（在 webview 入口调用一次）：建立基准 → 监听 resize → 跟踪 body 宽度 */
 export function initViewportFreeze(): void {
     sync();
     window.addEventListener("resize", sync);
+    // 焦点变化 = 面板激活态变化：清掉「真尺寸」标记，避免长时间折叠后切回来时
+    // 仍带着标记 → 第一帧不隐藏 → 又看到「内容压在左上角」的闪动
+    window.addEventListener("focus", () => clearTinyReal(document.documentElement));
+    window.addEventListener("blur", () => clearTinyReal(document.documentElement));
     if (typeof ResizeObserver !== "undefined" && document.body) {
         const observer = new ResizeObserver(() => {
             apply(recordBodyWidth(state, document.body.getBoundingClientRect().width), document.documentElement);
