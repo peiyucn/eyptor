@@ -33,6 +33,8 @@ const FS_WATCH_DEBOUNCE_MS = 200;
 const CONTENT_REQUEST_TIMEOUT_MS = 3000;
 /** 单张图片上传载荷大小上限（20MB） */
 const MAX_IMAGE_UPLOAD_BYTES = 20 * 1024 * 1024;
+/** 「切到源码」后重试定位的延迟（reopen 后文本编辑器首帧未布局，首次 reveal 会丢） */
+const TEXT_EDITOR_REVEAL_RETRY_MS = [50, 150, 350];
 
 export class MarkdownEditorProvider
     implements vscode.CustomEditorProvider<MarkdownDocument> {
@@ -536,13 +538,31 @@ export class MarkdownEditorProvider
                 // 文本标签，用户实测「切回预览会闪、还会闪出同名标签再消失、标签跳到末尾」。
                 try {
                     await vscode.commands.executeCommand('reopenActiveEditorWith', 'default');
-                    // 内置命令不接受定位参数：替换完成后把光标放到视口顶部行
+                    // 内置命令不接受定位参数：替换完成后把光标放到视口顶部行。
+                    // 回归（用户实测：切到源码后视口停在文件开头、再切回预览也跟着丢位置）：
+                    // reopen 之后文本编辑器首帧尚未布局，紧接着的 revealRange 会被丢掉
+                    // （第二次切换之所以正常，是因为编辑器已存在）。因此立即定位一次，
+                    // 再补几次延迟重试；用户自己移动过光标/目标行已可见就不再干预。
                     if (message.line && message.line > 0) {
-                        const active = vscode.window.activeTextEditor;
-                        if (active && active.document.uri.toString() === document.uri.toString()) {
-                            const pos = new vscode.Position(message.line - 1, 0);
+                        const targetLine = message.line - 1;
+                        const revealTarget = (): void => {
+                            const active = vscode.window.activeTextEditor;
+                            if (!active || active.document.uri.toString() !== document.uri.toString()) { return; }
+                            const pos = new vscode.Position(targetLine, 0);
                             active.selection = new vscode.Selection(pos, pos);
                             active.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.AtTop);
+                        };
+                        revealTarget();
+                        for (const delay of TEXT_EDITOR_REVEAL_RETRY_MS) {
+                            setTimeout(() => {
+                                const active = vscode.window.activeTextEditor;
+                                if (!active || active.document.uri.toString() !== document.uri.toString()) { return; }
+                                if (active.selection.active.line !== targetLine) { return; }
+                                const visible = active.visibleRanges.some(
+                                    (range) => range.start.line <= targetLine && targetLine <= range.end.line,
+                                );
+                                if (!visible) { revealTarget(); }
+                            }, delay);
                         }
                     }
                 } catch {
