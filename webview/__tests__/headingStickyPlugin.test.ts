@@ -36,6 +36,7 @@ class FakeResizeObserver {
     /** 全部实例：测试用 fireResize 精确触发某个 target 的回调 */
     static instances: FakeResizeObserver[] = [];
     private cb: ResizeObserverCallback;
+    private pending = new Set<ReturnType<typeof setTimeout>>();
     targets: Element[] = [];
     constructor(cb: ResizeObserverCallback) {
         this.cb = cb;
@@ -44,10 +45,19 @@ class FakeResizeObserver {
     observe(target: Element): void {
         this.targets.push(target);
         // 模拟真实 RO 的初始回调（布局完成后触发）
-        setTimeout(() => this.cb([{ target } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver), 0);
+        const timer = setTimeout(() => {
+            this.pending.delete(timer);
+            this.cb([{ target } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+        }, 0);
+        this.pending.add(timer);
     }
     unobserve(): void { /* noop */ }
-    disconnect(): void { this.targets = []; }
+    disconnect(): void {
+        this.targets = [];
+        // 与真实 RO 一致：断开后不再回调（否则编辑器销毁后仍有回调重建缓存 → 偶发未捕获异常）
+        for (const timer of this.pending) clearTimeout(timer);
+        this.pending.clear();
+    }
     fire(target: Element): void {
         this.cb([{ target } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
     }
