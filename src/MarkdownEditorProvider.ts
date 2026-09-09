@@ -162,10 +162,16 @@ export class MarkdownEditorProvider
             provider,
             {
                 webviewOptions: {
-                    // 实验：学官方内置预览——折叠（切到别的标签）时销毁 webview，切回来
-                    // 重建。好处是它从来不会以 iframe 默认 300×150 画一帧（那 130ms 里
-                    // 无论画什么都是错的）；代价是每次切回都要重建 Milkdown（长文档 1s+）
-                    // 并丢失撤销历史，滚动位置改由 webview state 恢复。
+                    // 与官方内置预览同架构：切到别的标签时销毁 webview，切回来重建。
+                    //
+                    // 根因（实测）：保留上下文时，宿主重新显示 webview 会先把容器设为
+                    // visible、再测量尺寸——中间约 130ms iframe 只有 Chromium 默认的
+                    // 300×150，这期间无论画什么（空白 / 正文被裁切）都与最终画面不同，
+                    // 用户看到的就是「闪」。销毁重建则不同：新 iframe 出生时容器已是
+                    // 正确尺寸，它从来不会以 300×150 画过一帧。
+                    //
+                    // 代价（已知并接受）：切回时重建 Milkdown（长文档 1s+）、撤销历史与
+                    // 标题折叠状态丢失；滚动位置由 webview state 恢复（见 webview/index.ts）。
                     retainContextWhenHidden: false,
                 },
                 supportsMultipleEditorsPerDocument: false,
