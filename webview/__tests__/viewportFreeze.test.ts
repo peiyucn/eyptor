@@ -3,9 +3,10 @@ import {
     INITIAL_VIEWPORT_FREEZE_STATE,
     IFRAME_DEFAULT_HEIGHT,
     IFRAME_DEFAULT_WIDTH,
-    TINY_REAL_SETTLE_MS,
+    TINY_REAL_ATTRIBUTE,
     initViewportFreeze,
     isCollapsedViewport,
+    isViewportFrozen,
     isViewportShrunk,
     nextViewportFreezeState,
     recordBodyWidth,
@@ -139,43 +140,51 @@ describe("isViewportShrunk", () => {
 });
 
 /**
- * 过渡帧「只画底色」的例外：用户真把编辑区缩到 300×150 并稳定停留时不能一直隐藏正文
- * （回归：没有这个例外，小窗口下编辑区会永久空白）。
+ * 「真实小窗口」的认定：不看时间，看用户输入。
+ * 例外本身是必要的——用户真把编辑区缩到 300×150 时不能一直隐藏正文（否则永久空白）；
+ * 但**计时阈值是错的**（回归：宿主折叠态一直持续到用户切回来，远超阈值，标记在折叠期
+ * 就被打上 → 切回来「出现-消失-再出现」）。
  */
-describe("真尺寸确认（TINY_REAL_SETTLE_MS）", () => {
+describe("真尺寸认定（折叠尺寸下的用户输入）", () => {
     afterEach(() => {
-        vi.useRealTimers();
-        document.documentElement.removeAttribute("data-epytor-tiny-real");
+        document.documentElement.removeAttribute(TINY_REAL_ATTRIBUTE);
         setViewport(1024, 768);
     });
 
-    it("折叠尺寸持续超过阈值 应该 标记 data-epytor-tiny-real", () => {
-        vi.useFakeTimers();
-        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+    it("折叠尺寸下停留但没有用户输入 应该 不打标记（宿主折叠态不会误判）", () => {
+        // 真实顺序：先在真实尺寸下加载（建立基准），再被宿主折叠
+        setViewport(846, 677);
         initViewportFreeze();
-        expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(false);
-        vi.advanceTimersByTime(TINY_REAL_SETTLE_MS + 20);
-        expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(true);
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        window.dispatchEvent(new Event("resize"));
+        expect(isViewportFrozen()).toBe(true);
+        window.dispatchEvent(new Event("focus"));
+        window.dispatchEvent(new Event("blur"));
+        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(false);
     });
 
-    it("标记后尺寸变化 应该 立即清除标记（下一次折叠仍按折叠处理）", () => {
-        vi.useFakeTimers();
+    it("折叠尺寸下用户操作 应该 打标记并解除冻结（真实小窗口）", () => {
         setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
         initViewportFreeze();
-        vi.advanceTimersByTime(TINY_REAL_SETTLE_MS + 20);
-        expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(true);
-        setViewport(846, 677);
-        window.dispatchEvent(new Event("resize"));
-        expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(false);
+        window.dispatchEvent(new Event("pointerdown"));
+        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(true);
+        expect(isViewportFrozen()).toBe(false);
     });
 
-    it("阈值内恢复真实尺寸 应该 不标记（宿主摘挂只有几十毫秒）", () => {
-        vi.useFakeTimers();
+    it("真实尺寸下用户操作 应该 不打标记", () => {
+        setViewport(846, 677);
+        initViewportFreeze();
+        window.dispatchEvent(new Event("wheel"));
+        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(false);
+    });
+
+    it("标记后尺寸变回真实值 应该 清除标记（下一次折叠仍按折叠处理）", () => {
         setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
         initViewportFreeze();
+        window.dispatchEvent(new Event("keydown"));
+        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(true);
         setViewport(846, 677);
         window.dispatchEvent(new Event("resize"));
-        vi.advanceTimersByTime(TINY_REAL_SETTLE_MS + 20);
-        expect(document.documentElement.hasAttribute("data-epytor-tiny-real")).toBe(false);
+        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(false);
     });
 });

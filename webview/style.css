@@ -223,7 +223,8 @@ html.epytor-viewport-frozen .toc-toggle-tab {
         height: 0;
     }
     /* 折叠期不画正文——这就是内置预览的行为（见文件上方折叠说明）。
-       data-epytor-tiny-real：用户真把编辑区缩到 300×150 并稳定停留时不隐藏。 */
+       data-epytor-tiny-real：用户真把编辑区缩到 300×150 **并在这个尺寸下操作过**
+       才解除隐藏（由 utils/viewportFreeze.ts 依据用户输入打标记，不用计时）。 */
     html:not([data-epytor-tiny-real]) body {
         visibility: hidden;
     }
