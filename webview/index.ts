@@ -855,6 +855,13 @@ async function handleEditorLifecycleMessage(
     if (isInit && msg.scrollToLine) {
         _lastNavLine = msg.scrollToLine; // 供切回文本时保持精确行（见 getSwitchTargetLine）
         _pendingScrollLine = msg.scrollToLine;
+    } else if (isInit && _pendingScrollLine === null
+        && Number((getWebviewState() as { scrollY?: number } | null)?.scrollY ?? 0) > 0) {
+        // 折叠重建（retainContextWhenHidden:false：切到别的标签时 webview 被销毁，切回来
+        // 是全新实例）→ 恢复上次滚动位置，否则每次切回都从文档顶部开始。
+        // 首次打开（无存档）走下面的顶部复位，保证 frontmatter 可见。
+        const savedScrollY = Number((getWebviewState() as { scrollY?: number } | null)?.scrollY ?? 0);
+        scheduleDelayedScroll(() => { window.scrollTo({ top: savedScrollY }); });
     } else if (isInit && _pendingScrollLine === null) {
         // 新打开文档：确保视口在顶部（frontmatter 可见）。
         // 回归：焦点获取（window.focus → ProseMirror 把光标滚入视口）、布局稳定与

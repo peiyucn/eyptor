@@ -162,7 +162,11 @@ export class MarkdownEditorProvider
             provider,
             {
                 webviewOptions: {
-                    retainContextWhenHidden: true,
+                    // 实验：学官方内置预览——折叠（切到别的标签）时销毁 webview，切回来
+                    // 重建。好处是它从来不会以 iframe 默认 300×150 画一帧（那 130ms 里
+                    // 无论画什么都是错的）；代价是每次切回都要重建 Milkdown（长文档 1s+）
+                    // 并丢失撤销历史，滚动位置改由 webview state 恢复。
+                    retainContextWhenHidden: false,
                 },
                 supportsMultipleEditorsPerDocument: false,
             },
