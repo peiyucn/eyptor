@@ -112,9 +112,40 @@ window.addEventListener('blur', () => document.body.classList.remove('epytor-mod
  *   没有下一块：块顶
  * 这样长代码块/长段落也能精确落到行，而不是只能落到块首。
  */
+/**
+ * 顶层**内容块** DOM 元素（按文档顺序），与行号表逐项对齐。
+ *
+ * 不能用 `view.dom.children`：ProseMirror 会把 widget 装饰（contenteditable=false 的
+ * 占位元素）也塞进编辑区 DOM，实测本项目的文档首个子元素就是一个空 widget——
+ * 于是「DOM 第 i 个」与「行号表第 i 项」整体错位一格，且块数不一致（143 vs 142）。
+ * 用 `doc.forEach` + `nodeDOM` 取真实块，天然与行号表同序同长。
+ */
+function getContentBlockElements(view: EditorView): HTMLElement[] {
+    const elements: HTMLElement[] = [];
+    view.state.doc.forEach((_node, offset) => {
+        const dom = view.nodeDOM(offset);
+        if (dom instanceof HTMLElement) { elements.push(dom); }
+    });
+    if (_debugLog && elements.length !== view.state.doc.childCount) {
+        console.log('[blocks] DOM 块数', elements.length, '≠ 文档块数', view.state.doc.childCount);
+    }
+    return elements;
+}
+
+/**
+ * 吸顶标题条当前占用的高度（未吸顶时为 0）。
+ * 视口顶部「可用区」= 顶栏 + 吸顶条之下——定位与反算都必须扣掉它，否则正文会被
+ * 吸顶条盖住一到两行（回归：源码→预览定位总是偏后一两个列表项）。
+ */
+function stickyBarHeight(): number {
+    const sticky = document.querySelector<HTMLElement>(".heading-sticky-title");
+    if (!sticky || sticky.hidden) { return 0; }
+    return sticky.getBoundingClientRect().height;
+}
+
 function scrollToSourceLine(view: EditorView, lineMap: number[], lineEndMap: number[], targetLine: number): void {
     if (!lineMap.length) { return; }
-    const children = view.dom.children;
+    const children = getContentBlockElements(view);
     const topbarH = document.querySelector(".milkdown-top-bar")?.getBoundingClientRect().height ?? DEFAULT_TOPBAR_HEIGHT;
     const docTop = (el: HTMLElement) => el.getBoundingClientRect().top + window.scrollY;
 
@@ -124,7 +155,7 @@ function scrollToSourceLine(view: EditorView, lineMap: number[], lineEndMap: num
         if (lineMap[i] <= targetLine) { prevIdx = i; } else { break; }
     }
     if (prevIdx < 0) { window.scrollTo({ top: 0 }); return; }
-    const prevEl = children[prevIdx] as HTMLElement | undefined;
+    const prevEl = children[prevIdx];
     if (!prevEl) { return; }
     const prevTop = docTop(prevEl);
     const prevEnd = lineEndMap[prevIdx] ?? lineMap[prevIdx];
@@ -138,7 +169,7 @@ function scrollToSourceLine(view: EditorView, lineMap: number[], lineEndMap: num
         target = prevTop + prevEl.getBoundingClientRect().height * frac;
     } else if (nextIdx < lineMap.length && nextIdx < children.length) {
         // 块间空白：在上一块底与下一块顶之间插值
-        const nextEl = children[nextIdx] as HTMLElement;
+        const nextEl = children[nextIdx];
         const prevBottom = prevTop + prevEl.getBoundingClientRect().height;
         const nextTop = docTop(nextEl);
         const span = Math.max(1, lineMap[nextIdx] - prevEnd);
@@ -149,7 +180,13 @@ function scrollToSourceLine(view: EditorView, lineMap: number[], lineEndMap: num
     }
 
     if (_debugLog) console.log('[scrollToLine] targetLine:', targetLine, 'blockIdx:', prevIdx, 'start:', lineMap[prevIdx], 'end:', prevEnd, 'target:', target.toFixed(0));
-    window.scrollTo({ top: target - topbarH - VIEWPORT_PADDING });
+    const place = () => window.scrollTo({ top: target - topbarH - stickyBarHeight() - VIEWPORT_PADDING });
+    place();
+    // 吸顶条的高度取决于滚动后的位置（滚动前多半还没吸顶，实测差一整行 ~45px）：
+    // 下一帧吸顶插件更新完再校正一次，把目标行真正放到吸顶条之下。
+    requestAnimationFrame(() => {
+        if (stickyBarHeight() > 0) { place(); }
+    });
 }
 
 /**
@@ -159,10 +196,10 @@ function scrollToSourceLine(view: EditorView, lineMap: number[], lineEndMap: num
 function getFirstVisibleSourceLine(view: EditorView, lineMap: number[], lineEndMap: number[]): number {
     if (!lineMap.length) { return 1; }
     const topbarH = document.querySelector(".milkdown-top-bar")?.getBoundingClientRect().height ?? DEFAULT_TOPBAR_HEIGHT;
-    const children = view.dom.children;
-    const anchorY = topbarH + VIEWPORT_PADDING;
+    const children = getContentBlockElements(view);
+    const anchorY = topbarH + stickyBarHeight() + VIEWPORT_PADDING;
     for (let i = 0; i < children.length && i < lineMap.length; i++) {
-        const rect = (children[i] as HTMLElement).getBoundingClientRect();
+        const rect = children[i].getBoundingClientRect();
         if (rect.bottom > anchorY) {
             const start = lineMap[i] ?? 1;
             const end = lineEndMap[i] ?? start;
@@ -746,9 +783,11 @@ function scheduleDelayedScroll(
         if (getUserInteractionEpoch() !== epochAtStart) { done = true; return; }
         const view = getEditorView();
         if (!view) return;
-        // 检查第一个块的 DOM 高度：若为 0 说明布局尚未完成
-        const firstChild = view.dom.children[0] as HTMLElement | undefined;
-        if (!firstChild || firstChild.getBoundingClientRect().height === 0) { return; }
+        // 检查第一个**内容块**的 DOM 高度：若为 0 说明布局尚未完成。
+        // 不能用 view.dom.children[0]——它是虚拟光标 widget（空 div，高度 0），
+        // 会让这个守卫永远不通过、滚动动作一次都不执行（回归：切回预览完全不定位）。
+        const firstBlock = getContentBlockElements(view)[0];
+        if (!firstBlock || firstBlock.getBoundingClientRect().height === 0) { return; }
         action(view);
         done = true;
     };
