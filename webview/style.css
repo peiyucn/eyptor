@@ -205,7 +205,10 @@ html.epytor-viewport-frozen .toc-toggle-tab {
    媒体查询在样式/布局/绘制之前求值，所以这里用「上一次真实尺寸」变量把排版
    钉住，第一帧就是折叠前的正确版式；JS 的 resize 兜底负责其他折叠尺寸。 */
 @media (width: 300px) and (height: 150px) {
-    html {
+    /* 必须用 :root 而不是 html——基础规则写的是 :root（伪类，特异性 0,1,0），
+       html（类型选择器，0,0,1）会被它压过，变量根本不会生效（回归：这条规则
+       此前一直是无效的，折叠第一帧仍按 300px 重排，用户看到「闪出一排字」）。 */
+    :root {
         --epytor-vw: var(--epytor-last-vw, 100vw);
         --epytor-vh: var(--epytor-last-vh, 100vh);
         scrollbar-width: none;
