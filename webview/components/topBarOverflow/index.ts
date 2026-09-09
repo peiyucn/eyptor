@@ -272,8 +272,11 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
 
         // Vue patch 可能覆盖隐藏 class：测量完成后恢复监听（目标可能被重建）；
         // 同时确保 topBar 进入 RO 观察（幂等）——fixed left:0 right:0 尺寸随视口，
-        // 直接观察避免 resize 触发缺失导致「⋯」重排滞后（回归：按钮收起时机晚）
-        resizeObserver.observe(topBar);
+        // 直接观察避免 resize 触发缺失导致「⋯」重排滞后（回归：按钮收起时机晚）。
+        // 观测 content-box：目录钉住/拖宽度只改 topBar 的 padding-left（border-box 不变），
+        // 预算宽度（clientWidth - 左右内边距）却变了——默认 border-box 观测收不到，
+        // 「⋯」要等下一次窗口 resize 才重排。
+        resizeObserver.observe(topBar, { box: "content-box" });
         mutObs = new MutationObserver(schedule);
         mutObs.observe(topBar, {
             subtree: true,
