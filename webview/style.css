@@ -166,8 +166,6 @@ body {
 html.epytor-viewport-frozen {
     --epytor-vw: var(--epytor-frozen-vw);
     --epytor-vh: var(--epytor-frozen-vh);
-    /* 冻结期正文宽于视口，抑制横向滚动条（否则会挤掉 15px 高度再触发一次重排） */
-    overflow-x: hidden;
 }
 html.epytor-viewport-frozen body {
     width: var(--epytor-frozen-body-width);
@@ -178,15 +176,29 @@ html.epytor-viewport-frozen .milkdown-top-bar {
     width: var(--epytor-frozen-body-width);
 }
 
-/* 过渡帧（宿主显示面板后、把 iframe 放回真实尺寸前的那 ~100ms）：排版已由
-   JS/CSS 冻结成折叠前的正确版式，只是视口还小——正文照常显示（内容连续，不闪空白），
-   仅抑制此刻会出现在编辑区中间的滚动条。 */
-html.epytor-viewport-shrunk {
+/* 过渡帧（宿主重新挂载 webview、iframe 短暂回落 300×150 的那 ~60ms）：排版已由
+   JS/CSS 冻结成折叠前的正确版式，正文照常显示（内容连续，不闪空白），只需抑制
+   此刻会出现在编辑区中间的滚动条，并关掉模糊。 */
+html.epytor-viewport-shrunk,
+html.epytor-viewport-frozen {
     scrollbar-width: none;
 }
-html.epytor-viewport-shrunk::-webkit-scrollbar {
+html.epytor-viewport-shrunk::-webkit-scrollbar,
+html.epytor-viewport-frozen::-webkit-scrollbar {
     width: 0;
     height: 0;
+}
+/* 模糊（backdrop-filter）在合成器重建图层后必须重新捕获并模糊背景，首帧因此被推迟——
+   实测过渡期编辑区会空白 2 帧。过渡期先关掉：此刻顶栏/目录后面就是正文与底色，
+   有无模糊的视觉差异可以忽略，但首帧能立刻画出来。 */
+html.epytor-viewport-shrunk .milkdown-top-bar,
+html.epytor-viewport-frozen .milkdown-top-bar,
+html.epytor-viewport-shrunk .toc-panel,
+html.epytor-viewport-frozen .toc-panel,
+html.epytor-viewport-shrunk .toc-toggle-tab,
+html.epytor-viewport-frozen .toc-toggle-tab {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 /* ─── 折叠第一帧的纯 CSS 兜底 ─────────────────────────────────────────────
@@ -198,7 +210,6 @@ html.epytor-viewport-shrunk::-webkit-scrollbar {
     html {
         --epytor-vw: var(--epytor-last-vw, 100vw);
         --epytor-vh: var(--epytor-last-vh, 100vh);
-        overflow-x: hidden;
         scrollbar-width: none;
     }
     html::-webkit-scrollbar {
@@ -210,6 +221,12 @@ html.epytor-viewport-shrunk::-webkit-scrollbar {
     }
     .milkdown-top-bar {
         width: var(--epytor-last-body-width, 100%);
+    }
+    .milkdown-top-bar,
+    .toc-panel,
+    .toc-toggle-tab {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
     }
 }
 
