@@ -12,9 +12,42 @@ import type { Node as ProseNode } from "@milkdown/kit/prose/model";
 import { IconChevronDown, IconChevronRight } from "./ui/icons";
 import { applyTooltip, hideTooltip } from "./ui/tooltip";
 import { t } from "./i18n";
-import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, buildHeadingIndex, computeHeadingSignature } from "./utils/headingFold";
+import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, buildHeadingIndex, computeAllHeadingSignature, computeHeadingSignature } from "./utils/headingFold";
+import { getWebviewState, setWebviewState } from "./messaging";
 
-export type HeadingFoldMeta = { type: "toggle"; pos: number };
+/**
+ * 折叠状态持久化（webview 重建后恢复）。
+ * 根因：`retainContextWhenHidden: false` 下切走会销毁 webview，插件 state 随之丢失，
+ * 切回来所有标题都展开。存进 webview state，并用「标题结构签名」校验——文档变了就
+ * 不恢复（位置会错位）。
+ */
+function persistFoldState(doc: ProseNode, folded: ReadonlySet<number>): void {
+    const cur = getWebviewState() ?? {};
+    setWebviewState({
+        ...cur,
+        foldState: { sig: computeAllHeadingSignature(doc), folded: [...folded] },
+    });
+}
+
+/**
+ * 过滤恢复的折叠位置：只保留仍然指向标题的位置（文档可能已变，过期位置会折叠错标题）。
+ * 纯函数，便于单测。
+ */
+export function normalizeFoldPositions(doc: ProseNode, folded: number[]): number[] {
+    return folded.filter((pos) => {
+        if (!Number.isInteger(pos) || pos < 0 || pos > doc.content.size) { return false; }
+        try {
+            return isHeadingNode(doc.nodeAt(pos));
+        } catch {
+            return false;
+        }
+    });
+}
+
+export type HeadingFoldMeta =
+    | { type: "toggle"; pos: number }
+    /** 折叠集合整体恢复（webview 重建后从 state 还原，见 index.ts restoreFoldState） */
+    | { type: "set"; folded: number[] };
 type HeadingFoldRange = { from: number; to: number };
 
 export const headingFoldPluginKey = new PluginKey<Set<number>>("epytor-heading-fold");
@@ -163,6 +196,10 @@ export const headingFoldPlugin = $prose(() => {
                 }
 
                 const meta = tr.getMeta(headingFoldPluginKey) as HeadingFoldMeta | undefined;
+                if (meta?.type === "set") {
+                    next = new Set<number>(normalizeFoldPositions(newState.doc, meta.folded));
+                }
+
                 if (meta?.type === "toggle") {
                     next = new Set<number>(next);
                     if (next.has(meta.pos)) {
@@ -251,9 +288,15 @@ export const headingFoldPlugin = $prose(() => {
             view.dom.addEventListener("mouseleave", handleMouseLeave);
 
             return {
-                update() {
+                update(_view, prevState) {
                     if (hoveredGutter && !view.dom.contains(hoveredGutter)) {
                         setHoveredGutter(null);
+                    }
+                    // 折叠状态变化 → 持久化（webview 重建后恢复）。
+                    // Set 引用不变即没变，每次事务走这里的比较是 O(1)。
+                    const folded = headingFoldPluginKey.getState(view.state);
+                    if (folded !== headingFoldPluginKey.getState(prevState)) {
+                        persistFoldState(view.state.doc, folded ?? new Set<number>());
                     }
                 },
                 destroy() {

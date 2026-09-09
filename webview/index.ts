@@ -18,6 +18,7 @@ import type { ToWebviewMessage } from "../shared/messages";
 import { PendingRequestRegistry } from "./utils/pendingRequest";
 import { applyTableWrapVars } from "./utils/tableWrap";
 import { computeAllHeadingSignature } from "./utils/headingFold";
+import { headingFoldPluginKey } from "./headingFoldPlugin";
 import {
     createEditor,
     destroyEditor,
@@ -804,6 +805,45 @@ function scheduleDelayedScroll(
  */
 let _pendingScrollLine: number | null = null;
 
+/**
+ * 还原折叠状态（webview 重建后）。
+ * 只有「标题结构签名」一致才恢复——文档变了，保存的位置会错位到别的标题上。
+ */
+function restoreFoldState(): void {
+    const saved = (getWebviewState() as
+        { foldState?: { sig?: string; folded?: number[] } } | null)?.foldState;
+    if (!saved?.sig || !saved.folded?.length) { return; }
+    const view = getEditorView();
+    if (!view || computeAllHeadingSignature(view.state.doc) !== saved.sig) { return; }
+    view.dispatch(
+        view.state.tr
+            .setMeta(headingFoldPluginKey, { type: "set", folded: saved.folded })
+            .setMeta("addToHistory", false),
+    );
+}
+
+/**
+ * 收起重建期的加载指示（HTML 里 #epytor-loading）。
+ * 必须等首屏内容真的上屏再移除，否则会先露出一帧空白。
+ * 该指示由 CSS 动画延迟 150ms 才显形：加载快时用户根本看不到它（不会闪）。
+ */
+function hideLoadingOverlay(): void {
+    const overlay = document.getElementById("epytor-loading");
+    if (!overlay) { return; }
+    let frames = 0;
+    const tick = () => {
+        const view = getEditorView();
+        const firstBlock = view ? getContentBlockElements(view)[0] : null;
+        if ((firstBlock && firstBlock.getBoundingClientRect().height > 0) || frames >= 120) {
+            overlay.remove();
+            return;
+        }
+        frames += 1;
+        requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+}
+
 /** 应用待定位行（编辑器就绪时调用；未就绪时按计划重试） */
 function applyPendingScrollLine(): void {
     if (_pendingScrollLine === null) { return; }
@@ -836,6 +876,10 @@ async function handleEditorLifecycleMessage(
         }
     }
     await initEditor(container, msg.content);
+    // webview 重建（retainContextWhenHidden:false）：还原折叠状态并收起加载指示。
+    // 折叠会改变布局，必须在定位滚动之前恢复。
+    restoreFoldState();
+    hideLoadingOverlay();
     // 新 WebView 打开时主动获取 DOM 焦点。
     // 若不调用：旧 WebView（path-link-test.md）在 Cmd+Click 后 blur() 释放了焦点，
     // 但新 WebView（README.md）的 iframe 未必自动获得焦点；

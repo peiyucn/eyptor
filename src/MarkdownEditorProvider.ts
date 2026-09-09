@@ -923,6 +923,7 @@ export class MarkdownEditorProvider
   <style>:root { --code-block-max-height: ${maxHeight}px; --editor-max-width: ${editorMaxWidth}px;${fontFamily ? ` --custom-font-family: ${fontFamily};` : ''} --image-selection-color: ${imageSelectionColor}; --epytor-table-word-break: ${tableWordBreak}; --epytor-table-white-space: ${tableWhiteSpace}; --epytor-table-overflow-x: ${tableOverflowX}; --epytor-table-width: ${tableWidth}; }</style>
 </head>
 <body style="margin: 0; background-color: var(--vscode-editor-background);">
+  <div id="epytor-loading"><div class="epytor-loading-spinner"></div></div>
   <div class="editor-topbar"></div>
   <div id="editor"></div>
   <script nonce="${nonce}">${i18nScript}</script>

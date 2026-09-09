@@ -3,6 +3,7 @@ import { CrepeBuilder } from "@milkdown/crepe";
 import { editorViewCtx } from "@milkdown/kit/core";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, computeAllHeadingFoldRanges, buildHeadingIndex, computeAllHeadingSignature, computeHeadingSignature } from "../utils/headingFold";
+import { normalizeFoldPositions } from "../headingFoldPlugin";
 
 if (typeof (window as unknown as Record<string, unknown>).ResizeObserver === "undefined") {
     (window as unknown as Record<string, unknown>).ResizeObserver = class {
@@ -156,5 +157,22 @@ describe("buildHeadingIndex（折叠 / 吸顶 / TOC 共享索引，回归 P1）"
 
         expect(computeAllHeadingSignature(beforeDoc)).not.toBe(computeAllHeadingSignature(afterDoc));
         expect(computeHeadingSignature(beforeDoc)).toBe(computeHeadingSignature(afterDoc));
+    });
+});
+
+describe("normalizeFoldPositions（webview 重建后恢复折叠状态）", () => {
+    it("有效标题位置 应该 保留，指向正文/越界的位置 应该 丢弃", async () => {
+        const editor = await makeEditor("# 一级\n\n正文\n\n## 二级\n\n正文\n");
+        const doc = getView(editor).state.doc;
+        const headingPos = headingPositions(getView(editor))[0].pos;
+
+        expect(normalizeFoldPositions(doc, [headingPos])).toEqual([headingPos]);
+        expect(normalizeFoldPositions(doc, [headingPos + 1])).toEqual([]);
+        expect(normalizeFoldPositions(doc, [999999])).toEqual([]);
+    });
+
+    it("空数组 应该 返回空数组", async () => {
+        const editor = await makeEditor("# 一级\n\n正文\n");
+        expect(normalizeFoldPositions(getView(editor).state.doc, [])).toEqual([]);
     });
 });
