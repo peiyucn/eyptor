@@ -97,7 +97,9 @@ export const headingStickyPlugin = $prose(() =>
                 if (target?.closest(".heading-sticky-toggle")) return;
                 const row = target?.closest<HTMLElement>(".heading-sticky-row");
                 const pos = Number(row?.dataset["headingPos"]);
-                if (Number.isFinite(pos) && pos > 0) {
+                // pos 是节点起始位置，**文档第一个标题就是 0**（回归：旧代码用 pos > 0
+                // 判定，第一级吸顶行点了没反应，二三级正常）
+                if (Number.isFinite(pos) && pos >= 0) {
                     suppressUntilNextInteraction();
                     scrollHeadingIntoStickyPosition(pos);
                 }

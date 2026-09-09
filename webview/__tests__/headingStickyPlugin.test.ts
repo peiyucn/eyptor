@@ -6,7 +6,7 @@
  * 回归（本轮）：切换时机改为「标题顶边碰到吸顶行即固定」（对齐 VS Code 内置编辑器），
  * 旧实现要等标题整体滚出顶栏，晚一个标题高度。
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createEditor, destroyEditor } from "../editor";
 
 if (typeof (window as unknown as Record<string, unknown>).IntersectionObserver === "undefined") {
@@ -130,6 +130,36 @@ describe("标题吸顶完整链路", () => {
         expect(sticky!.hidden).toBe(false);
         expect(sticky!.textContent).toContain("标题 0");
         expect(sticky!.textContent).not.toContain("标题 1");
+
+        destroyEditor();
+        root.remove();
+    }, 60000);
+
+    it("点击第一级吸顶行 应该 跳回文档第一个标题（回归：pos=0 被 pos>0 挡掉，点了没反应）", async () => {
+        // scrollY=100：第一个标题已越过吸顶行，第二个标题尚未碰到 → 只显示第一级
+        scrollY = 100;
+        const root = await mountWithStubLayout(
+            Array.from({ length: 10 }, (_, i) => `## 标题 ${i}\n正文一行\n正文两行`).flatMap((s) => s.split("\n")),
+            (i) => 60 + i * 120,
+        );
+        await settle();
+
+        const rows = Array.from(stickyEl()!.querySelectorAll<HTMLElement>(".heading-sticky-row"));
+        expect(rows).toHaveLength(1);
+        expect(rows[0].dataset["headingPos"]).toBe("0");
+
+        const scrollTo = vi.fn();
+        const original = window.scrollTo;
+        window.scrollTo = scrollTo as unknown as typeof window.scrollTo;
+        try {
+            rows[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            await new Promise((r) => requestAnimationFrame(() => r(null)));
+            expect(scrollTo).toHaveBeenCalledTimes(1);
+            const arg = scrollTo.mock.calls[0][0] as { top: number };
+            expect(Number.isFinite(arg.top)).toBe(true);
+        } finally {
+            window.scrollTo = original;
+        }
 
         destroyEditor();
         root.remove();
