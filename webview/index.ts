@@ -748,13 +748,31 @@ function scheduleDelayedScroll(
         if (!view) return;
         // 检查第一个块的 DOM 高度：若为 0 说明布局尚未完成
         const firstChild = view.dom.children[0] as HTMLElement | undefined;
-        if (!firstChild || firstChild.getBoundingClientRect().height === 0) return;
+        if (!firstChild || firstChild.getBoundingClientRect().height === 0) { return; }
         action(view);
         done = true;
     };
     for (const delay of delays) {
         setTimeout(tryOnce, delay);
     }
+}
+
+/**
+ * 待定位行（1-indexed）。回归（用户实测「切回预览定位不准」）：切到预览时扩展会发
+ * `scrollToLine`，但那条消息可能在 webview 重建、编辑器尚未渲染时到达——旧实现只在
+ * 一份 2 秒的重试计划里尝试，大文件渲染超过 2 秒就静默丢弃，预览停在原处/顶部。
+ * 现在目标行会一直保留到真正滚动成功；编辑器重建完成后再应用一次。
+ */
+let _pendingScrollLine: number | null = null;
+
+/** 应用待定位行（编辑器就绪时调用；未就绪时按计划重试） */
+function applyPendingScrollLine(): void {
+    if (_pendingScrollLine === null) { return; }
+    const line = _pendingScrollLine;
+    scheduleDelayedScroll((view) => {
+        scrollToSourceLine(view, currentLineMap, currentLineEndMap, line);
+        if (_pendingScrollLine === line) { _pendingScrollLine = null; }
+    });
 }
 
 /** init/revert：编辑器重建（串行执行，见 _editorLifecycleChain） */
@@ -796,11 +814,8 @@ async function handleEditorLifecycleMessage(
     // 全局搜索导航或切换回预览时，滚动到指定源码行
     // Milkdown 渲染 + 浏览器布局需要时间，统一走 scheduleDelayedScroll 重试
     if (isInit && msg.scrollToLine) {
-        const targetLine = msg.scrollToLine;
-        _lastNavLine = targetLine; // 供切回文本时保持精确行（见 getSwitchTargetLine）
-        scheduleDelayedScroll((view) => {
-            scrollToSourceLine(view, currentLineMap, currentLineEndMap, targetLine);
-        });
+        _lastNavLine = msg.scrollToLine; // 供切回文本时保持精确行（见 getSwitchTargetLine）
+        _pendingScrollLine = msg.scrollToLine;
     } else if (isInit) {
         // 新打开文档：确保视口在顶部（frontmatter 可见）。
         // 回归：焦点获取（window.focus → ProseMirror 把光标滚入视口）、布局稳定与
@@ -815,6 +830,8 @@ async function handleEditorLifecycleMessage(
             }, delay);
         }
     }
+    // 编辑器已创建：应用待定位行（大文件渲染慢时，这条路径保证定位不会丢）
+    applyPendingScrollLine();
     // 首屏稳定后上报一次视口顶部行（未滚动过也有值，供切回文本编辑器时定位）
     setTimeout(reportViewportLine, INITIAL_VIEWPORT_LINE_REPORT_DELAY_MS);
 }
@@ -842,11 +859,9 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         // 口径不一致且无注释依据——已统一为同一常量（细粒度版对 init 也安全：
         // 视图未就绪的早期尝试是空操作，等下一次重试）
         const scrollLine = msg.line;
-        scheduleDelayedScroll(
-            (view) => {
-                scrollToSourceLine(view, currentLineMap, currentLineEndMap, scrollLine);
-            },
-        );
+        // 目标行保留到真正滚动成功（编辑器重建期间到达也不丢，见 _pendingScrollLine）
+        _pendingScrollLine = scrollLine;
+        applyPendingScrollLine();
     } else if (msg.type === "lineMapUpdate") {
         currentLineMap = msg.lineMap;
         currentLineEndMap = msg.lineEndMap ?? [];
