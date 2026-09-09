@@ -213,6 +213,10 @@ html.epytor-viewport-frozen .toc-toggle-tab {
         --epytor-vw: var(--epytor-last-vw, 100vw);
         --epytor-vh: var(--epytor-last-vh, 100vh);
         scrollbar-width: none;
+        /* 折叠期禁用浏览器滚动锚定：视口从 846×677 缩到 300×150 时，锚定会把滚动
+           位置「就地修正」——实测同一位置从 scrollY 1500 跳到 1773（+273px）。宿主
+           放回真实尺寸后内容就停在错位处，用户看到的正是「内容出来了又变一次」。 */
+        overflow-anchor: none;
     }
     html::-webkit-scrollbar {
         width: 0;
