@@ -41,6 +41,12 @@ function revealLineAtTop(editor: vscode.TextEditor, line: number): void {
     editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.AtTop);
 }
 
+/** 是否是本扩展接管的 markdown 文档（与 package.json 的 selector 同口径） */
+function isMarkdownDocument(document: vscode.TextDocument): boolean {
+    const name = document.uri.path.toLowerCase();
+    return name.endsWith(".md") || name.endsWith(".markdown");
+}
+
 export class MarkdownEditorProvider
     implements vscode.CustomEditorProvider<MarkdownDocument> {
     public static readonly viewType = "epytor.editor";
@@ -89,6 +95,13 @@ export class MarkdownEditorProvider
         this._pendingRevealLine = undefined;
         if (Date.now() - p.ts > GLOBAL_REVEAL_LINE_TTL_MS) { return undefined; }
         return p.line;
+    }
+
+    /** 消费文本编辑器视口顶部行（从源码切回预览时定位；读后即清） */
+    private _consumeLastTextLine(uriKey: string): number | undefined {
+        const line = this._lastTextLines.get(uriKey);
+        this._lastTextLines.delete(uriKey);
+        return line;
     }
 
     /**
@@ -171,6 +184,16 @@ export class MarkdownEditorProvider
      */
     private _pendingEditorReveal: { uriKey: string; line: number } | undefined;
 
+    /**
+     * 两侧「上次看到的位置」持续记录（对照官方 Tv 类）：
+     * - `_lastPreviewLines`：webview 滚动时上报的视口顶部源码行（key = uriKey）
+     * - `_lastTextLines`：文本编辑器视口顶部行（onDidChangeTextEditorVisibleRanges）
+     * 这样**任何**切换路径（我们的命令、内置「重新打开方式」、标签右键）都能保位置，
+     * 而不是只在我们的命令里临时算一次。
+     */
+    private readonly _lastPreviewLines = new Map<string, number>();
+    private readonly _lastTextLines = new Map<string, number>();
+
     constructor(
         private readonly context: vscode.ExtensionContext,
     ) {
@@ -189,11 +212,29 @@ export class MarkdownEditorProvider
         // 官方同款触发点：文本编辑器真正成为 active 时才定位（见 _pendingEditorReveal）
         this.context.subscriptions.push(
             vscode.window.onDidChangeActiveTextEditor((editor) => {
+                if (!editor) { return; }
+                const uriKey = editor.document.uri.toString();
+                // 1) 显式「切到源码」登记的精确行优先（含视口顶部行/导航行口径）
                 const pending = this._pendingEditorReveal;
-                if (!pending || !editor) { return; }
-                if (editor.document.uri.toString() !== pending.uriKey) { return; }
-                this._pendingEditorReveal = undefined;
-                revealLineAtTop(editor, pending.line);
+                if (pending && pending.uriKey === uriKey) {
+                    this._pendingEditorReveal = undefined;
+                    revealLineAtTop(editor, pending.line);
+                    return;
+                }
+                // 2) 官方口径：用 webview 持续上报的视口顶部行——覆盖内置「重新打开方式」、
+                //    标签右键等不经过我们命令的切换路径
+                const previewLine = this._lastPreviewLines.get(uriKey);
+                if (previewLine !== undefined) { revealLineAtTop(editor, previewLine); }
+            }),
+        );
+        // 文本编辑器视口顶部行持续记录（对照官方 Tv 类；切到预览时按它定位）
+        this.context.subscriptions.push(
+            vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
+                const document = event.textEditor.document;
+                if (!isMarkdownDocument(document)) { return; }
+                const range = event.textEditor.visibleRanges[0];
+                if (!range) { return; }
+                this._lastTextLines.set(document.uri.toString(), range.start.line + 1);
             }),
         );
     }
@@ -310,8 +351,12 @@ export class MarkdownEditorProvider
             }
             this._refreshStatusBar();
             if (!this._initializedPanels.has(uriKey)) { return; }
+            // 定位优先级：显式导航（搜索/大纲/切换命令）> 全局兜底 > 文本编辑器视口顶部行
+            // （最后一条是官方口径：从源码切回预览时落在文本编辑器当前所在行；读后即清，
+            //   避免之后每次激活预览都强制回到那一行）
             const line = this._consumePendingNavigation(document.uri.fsPath)
-                ?? this._consumeGlobalRevealLine();
+                ?? this._consumeGlobalRevealLine()
+                ?? this._consumeLastTextLine(uriKey);
             if (line !== undefined) {
                 if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[viewState] immediate scrollToLine:', line);
                 p.webview.postMessage({ type: "scrollToLine", line });
@@ -647,6 +692,9 @@ export class MarkdownEditorProvider
                 });
                 this._refreshStatusBar();
                 break;
+            case "viewportLine":
+                // webview 视口顶部行（滚动后上报）：切回文本编辑器时按它定位
+                this._lastPreviewLines.set(uriKey, message.line);
         }
     }
 

@@ -30,6 +30,7 @@ export type ToExtensionMessage =
     | { type: "openUrl"; url: string }
     | { type: "openFile"; path: string }
     | { type: "switchToTextEditor"; line?: number }
+    | { type: "viewportLine"; line: number }
     | { type: "openSettings" }
     | { type: "uploadImage"; id: string; data: Uint8Array; mimeType: string; altText: string }
     | { type: "getProjectImages"; id: string }

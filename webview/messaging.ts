@@ -42,6 +42,11 @@ export function notifySwitchToTextEditor(line?: number): void {
     vscode.postMessage({ type: "switchToTextEditor", ...(line !== undefined ? { line } : {}) });
 }
 
+/** 视口顶部源码行上报（滚动防抖后调用；切回文本编辑器时按它定位） */
+export function notifyViewportLine(line: number): void {
+    vscode.postMessage({ type: "viewportLine", line });
+}
+
 export function notifyOpenSettings(): void {
     vscode.postMessage({ type: "openSettings" });
 }

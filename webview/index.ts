@@ -35,6 +35,7 @@ import {
     notifyFrontmatterUpdate,
     onMessage,
     notifySwitchToTextEditor,
+    notifyViewportLine,
     notifyUploadImage,
     notifyGetProjectImages,
     notifyRenameImage,
@@ -76,6 +77,8 @@ const SCROLL_RETRY_DELAYS_MS = [0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000];
 /** 打开文档时的「视口复位到顶部」计划：焦点获取/布局稳定/滚动锚定都会在首帧后
  *  把视口推向第一个标题，需在前几帧内多次复位（用户交互后立即停止） */
 const INITIAL_SCROLL_TOP_DELAYS_MS = [0, 50, 150, 400];
+/** 首屏稳定后上报视口顶部行的延迟（晚于上面的复位计划，取到最终位置） */
+const INITIAL_VIEWPORT_LINE_REPORT_DELAY_MS = 600;
 
 let _topBarOverflowCtl: { dispose(): void } | null = null;
 
@@ -630,12 +633,21 @@ notifyReady();
 
 // ── 滚动位置持久化 ────────────────────────────────────────────
 // 保存：滚动时防抖写入 VSCode WebView 状态（跨会话可恢复）
+/** 上报视口顶部源码行（切回文本编辑器时定位用）——对照官方
+ *  markdown-language-features 用 onDidChangeTextEditorVisibleRanges 持续记录视口顶部行 */
+function reportViewportLine(): void {
+    const view = getEditorView();
+    if (view) {
+        notifyViewportLine(getFirstVisibleSourceLine(view, currentLineMap, currentLineEndMap));
+    }
+}
 let _scrollSaveTimer: ReturnType<typeof setTimeout> | null = null;
 window.addEventListener('scroll', () => {
     if (_scrollSaveTimer) clearTimeout(_scrollSaveTimer);
     _scrollSaveTimer = setTimeout(() => {
         const cur = getWebviewState() ?? {};
         setWebviewState({ ...cur, scrollY: window.scrollY });
+        reportViewportLine();
     }, SCROLL_SAVE_DEBOUNCE_MS);
 }, { passive: true });
 
@@ -803,6 +815,8 @@ async function handleEditorLifecycleMessage(
             }, delay);
         }
     }
+    // 首屏稳定后上报一次视口顶部行（未滚动过也有值，供切回文本编辑器时定位）
+    setTimeout(reportViewportLine, INITIAL_VIEWPORT_LINE_REPORT_DELAY_MS);
 }
 
 /** 非生命周期消息：直接分发（无编辑器重建副作用，可并行处理） */
