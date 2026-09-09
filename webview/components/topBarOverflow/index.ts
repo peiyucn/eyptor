@@ -8,7 +8,7 @@ import type { Ctx } from "@milkdown/kit/ctx";
 import { computeOverflow, type TopBarMeasuredItem } from "@/utils/topBarOverflow";
 import { applyTooltip } from "@/ui/tooltip";
 import { t } from "@/i18n";
-import { onViewportRestored, shouldSkipViewportWork } from "@/utils/viewportFreeze";
+import { shouldSkipViewportWork } from "@/utils/viewportFreeze";
 
 export interface TopBarButtonMeta {
     key: string;
@@ -300,8 +300,6 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
     const resizeObserver = new ResizeObserver(scheduleUnlessFrozen);
     resizeObserver.observe(document.body);
     window.addEventListener("resize", scheduleUnlessFrozen);
-    // 折叠态结束：折叠期的 resize/RO 已被跳过，这里补一次测量（否则按钮会晚一拍展开）
-    const unsubscribeRestored = onViewportRestored(schedule);
 
     moreBtn.addEventListener("mousedown", (e) => {
         // 防止「⋯」按钮夺走编辑器焦点（光标还在但输入失效）
@@ -324,9 +322,7 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
             mutObs?.disconnect();
             if (rafId !== null) cancelAnimationFrame(rafId);
             resizeObserver.disconnect();
-            // 回归：这里此前移除的是 schedule，而注册的是 scheduleUnlessFrozen——监听器一直没被摘掉
-            window.removeEventListener("resize", scheduleUnlessFrozen);
-            unsubscribeRestored();
+            window.removeEventListener("resize", schedule);
             moreBtn.remove();
             closeMenu();
         },
