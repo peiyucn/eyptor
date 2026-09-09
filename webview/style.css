@@ -200,12 +200,6 @@ html.epytor-viewport-frozen .toc-toggle-tab {
     -webkit-backdrop-filter: none !important;
 }
 
-/* 折叠恢复后等重组件就位（见 index.ts 的 beginSettleWindow）：期间同样不画正文，
-   避免「正文先出现 → 代码块随后挂载 → 内容二次变化」的第二次闪动。 */
-html.epytor-await-settle body {
-    visibility: hidden;
-}
-
 /* ─── 折叠第一帧的纯 CSS 兜底 ─────────────────────────────────────────────
    实测：宿主把面板显示出来后，iframe 会先以默认 300×150 绘制，resize 事件要
    60–100ms 后才到——那一帧用 JS 来不及（正文会按 300px 重排，用户看到闪动）。

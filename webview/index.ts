@@ -53,7 +53,7 @@ import { dispatchImagePathResolved } from "./components/imageView/imgPathComplet
 import { resolvePathSuggestionRequest } from "./utils/pathSuggestionRequests";
 import { setImageUriMap, remapImageUri, showGlobalLightbox } from "./components/imageView";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
-import { initViewportFreeze, onViewportRestored } from "./utils/viewportFreeze";
+import { initViewportFreeze } from "./utils/viewportFreeze";
 import { initFindBar } from "./components/findBar";
 import { initToc } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
@@ -79,55 +79,11 @@ const SCROLL_RETRY_DELAYS_MS = [0, 250, 500, 750, 1000, 1250, 1500, 1750, 2000];
 const INITIAL_SCROLL_TOP_DELAYS_MS = [0, 50, 150, 400];
 /** 首屏稳定后上报视口顶部行的延迟（晚于上面的复位计划，取到最终位置） */
 const INITIAL_VIEWPORT_LINE_REPORT_DELAY_MS = 600;
-/** 折叠恢复后「等重组件就位再显示正文」的静默窗口与上限（见 beginSettleWindow） */
-const SETTLE_QUIET_MS = 120;
-const SETTLE_MAX_MS = 450;
 
 let _topBarOverflowCtl: { dispose(): void } | null = null;
 
 // 宿主折叠态排版冻结（切到非 webview 标签时 iframe 回落 300×150 会引发整页重排）
 initViewportFreeze();
-
-/**
- * 折叠恢复后，等视口相关的重组件就位再把正文显示出来。
- *
- * 根因（用户实测「内容出来了又出来一次」）：宿主把 webview 放回真实尺寸后，正文立刻可见，
- * 但代码块的 CodeMirror（以及图片解码）要再晚 ~180ms 才挂载完成——那一瞬间内容会二次
- * 变化（代码块长出行号/语言下拉、下方内容整体下移）。官方预览没有这个问题，因为它的
- * HTML 是扩展侧渲染好的静态页。
- *
- * 做法：恢复后先继续隐藏正文（html.epytor-await-settle），每 SETTLE_QUIET_MS 检查一次
- * .cm-editor 数量与图片解码是否已稳定；稳定即显示，最多等 SETTLE_MAX_MS。用户一动
- * （滚轮/按键）立即显示，绝不卡住操作。
- */
-function beginSettleWindow(): void {
-    const root = document.documentElement;
-    root.classList.add("epytor-await-settle");
-    const deadline = Date.now() + SETTLE_MAX_MS;
-    let prevCount = -1;
-    const check = (): void => {
-        const container = document.getElementById("editor");
-        const count = container ? container.querySelectorAll(".cm-editor").length : 0;
-        const imagesReady = [...document.images].every((img) => img.complete);
-        const stable = count === prevCount && imagesReady;
-        prevCount = count;
-        if (stable || Date.now() >= deadline) {
-            root.classList.remove("epytor-await-settle");
-            return;
-        }
-        setTimeout(check, SETTLE_QUIET_MS);
-    };
-    setTimeout(check, SETTLE_QUIET_MS);
-}
-
-onViewportRestored(beginSettleWindow);
-// 兜底：用户已开始交互就别再等组件（交互纪元变化即撤掉遮罩）
-const releaseSettleOnInteraction = (): void => {
-    document.documentElement.classList.remove("epytor-await-settle");
-};
-window.addEventListener("wheel", releaseSettleOnInteraction, { passive: true });
-window.addEventListener("keydown", releaseSettleOnInteraction);
-window.addEventListener("touchmove", releaseSettleOnInteraction, { passive: true });
 
 let currentEditor: Editor | null = null;
 let currentLineMap: number[] = [];
