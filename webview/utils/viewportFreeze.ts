@@ -133,6 +133,11 @@ function apply(next: ViewportFreezeState, root: HTMLElement): void {
         root.style.setProperty("--epytor-last-vw", `${next.frozenVw}px`);
         root.style.setProperty("--epytor-last-vh", `${next.frozenVh}px`);
         root.style.setProperty("--epytor-last-body-width", `${next.frozenBodyWidth}px`);
+        // 用户真把编辑区拖到 300×150 时，媒体查询会误判为过渡帧——置位标记关闭隐藏
+        root.toggleAttribute(
+            "data-epytor-tiny-real",
+            isCollapsedViewport(next.frozenVw, next.frozenVh),
+        );
     }
 }
 
