@@ -93,13 +93,12 @@ export function shouldSkipViewportWork(): boolean {
 }
 
 /**
- * 是否处于「冻结 + 真实视口比冻结尺寸小」的过渡帧：宿主刚把面板显示出来、还没把
- * iframe 放回真实尺寸的那 1–3 帧（实测 2 帧 / 约 31ms）。这期间正文排版是冻结的
- * 正确版式，但被裁在左上角一小块里 —— 用户看到的就是「页面闪一下」。
- * 此期间把正文整体隐藏（保留宿主编辑器底色），闪动即不可见。
+ * 是否处于「冻结 + 真实视口比冻结尺寸小」的过渡帧：宿主显示面板后、把 iframe 放回
+ * 真实尺寸前的那 ~100ms（实测 resize 事件要 60–100ms 才到）。这期间正文排版是冻结的
+ * 正确版式，只是被视口裁切在左边一小块里；正文照常显示（内容连续，不出现空白闪），
+ * 仅额外抑制此刻会出现在编辑区中间的滚动条。
  *
- * 真实视口恰为 300×150（用户真把编辑区拖到那么小）时不隐藏：冻结值与视口一致，
- * 画面本来就是对的。
+ * 真实视口恰为 300×150（用户真把编辑区拖到那么小）时不算过渡帧：冻结值与视口一致。
  */
 export function isViewportShrunk(
     prev: ViewportFreezeState,
@@ -109,7 +108,7 @@ export function isViewportShrunk(
 }
 
 function apply(next: ViewportFreezeState, root: HTMLElement): void {
-    // 过渡帧隐藏标记：独立于冻结状态本身，所以放在早退之前
+    // 过渡帧标记：独立于冻结状态本身，所以放在早退之前
     root.classList.toggle(
         "epytor-viewport-shrunk",
         isViewportShrunk(next, { width: window.innerWidth, height: window.innerHeight }),
@@ -134,11 +133,6 @@ function apply(next: ViewportFreezeState, root: HTMLElement): void {
         root.style.setProperty("--epytor-last-vw", `${next.frozenVw}px`);
         root.style.setProperty("--epytor-last-vh", `${next.frozenVh}px`);
         root.style.setProperty("--epytor-last-body-width", `${next.frozenBodyWidth}px`);
-        // 用户真把编辑区拖到 300×150 时，媒体查询会误判为折叠帧——置位标记关闭隐藏
-        root.toggleAttribute(
-            "data-epytor-tiny-real",
-            isCollapsedViewport(next.frozenVw, next.frozenVh),
-        );
     }
 }
 
