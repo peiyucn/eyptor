@@ -33,21 +33,42 @@ let scrollY = 150;
 Object.defineProperty(window, "scrollY", { get: () => scrollY, configurable: true });
 
 class FakeResizeObserver {
+    /** 全部实例：测试用 fireResize 精确触发某个 target 的回调 */
+    static instances: FakeResizeObserver[] = [];
     private cb: ResizeObserverCallback;
+    targets: Element[] = [];
     constructor(cb: ResizeObserverCallback) {
         this.cb = cb;
+        FakeResizeObserver.instances.push(this);
     }
     observe(target: Element): void {
+        this.targets.push(target);
         // 模拟真实 RO 的初始回调（布局完成后触发）
         setTimeout(() => this.cb([{ target } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver), 0);
     }
     unobserve(): void { /* noop */ }
-    disconnect(): void { /* noop */ }
+    disconnect(): void { this.targets = []; }
+    fire(target: Element): void {
+        this.cb([{ target } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+    }
 }
 (window as unknown as Record<string, unknown>).ResizeObserver = FakeResizeObserver;
 
+/** 触发所有观测该 target 的 RO 回调（模拟一次真实布局变化） */
+function fireResize(target: Element): void {
+    for (const instance of FakeResizeObserver.instances) {
+        if (instance.targets.includes(target)) {
+            instance.fire(target);
+        }
+    }
+}
+
 const HEADING_HEIGHT = 40;
 const TOPBAR_BOTTOM = 36;
+
+/** 标题的视口几何（可变量：测试里模拟「正文容器只平移/改宽度」的布局变化） */
+let headingLeft = 100;
+let headingWidth = 800;
 
 /** 建编辑器 + 桩测每个标题的布局（docTop 由调用方给，视口坐标随 scrollY 换算） */
 async function mountWithStubLayout(
@@ -64,13 +85,13 @@ async function mountWithStubLayout(
         const docTop = docTopOf(index++);
         (el as HTMLElement).getBoundingClientRect = () =>
             ({
-                width: 800,
+                width: headingWidth,
                 height: HEADING_HEIGHT,
                 top: docTop - scrollY,
                 bottom: docTop + HEADING_HEIGHT - scrollY,
-                left: 100,
-                right: 900,
-                x: 100,
+                left: headingLeft,
+                right: headingLeft + headingWidth,
+                x: headingLeft,
                 y: docTop - scrollY,
                 toJSON: () => ({}),
             }) as DOMRect;
@@ -183,6 +204,38 @@ describe("标题吸顶完整链路", () => {
         expect(rows[0].querySelector(".heading-sticky-marker")?.textContent).toBe("#");
         expect(rows[1].querySelector(".heading-sticky-marker")?.textContent).toBe("###");
 
+        destroyEditor();
+        root.remove();
+    }, 60000);
+
+    it("目录开合改变正文可用宽度 应该 立即重算吸顶条几何（回归：要滑动一下才自适应宽度）", async () => {
+        scrollY = 150;
+        headingLeft = 100;
+        headingWidth = 800;
+        const root = await mountWithStubLayout(
+            Array.from({ length: 10 }, (_, i) => `## 标题 ${i}\n正文一行\n正文两行`).flatMap((s) => s.split("\n")),
+            (i) => 60 + i * 120,
+        );
+        await settle();
+
+        const sticky = stickyEl();
+        expect(sticky!.hidden).toBe(false);
+        expect(sticky!.style.left).toBe("100px");
+        expect(sticky!.style.width).toBe("800px");
+
+        // 目录钉住：正文靠 body 的 padding-left 让位。正文容器已达 max-width，
+        // 于是正文只平移/改宽而 view.dom 尺寸可以完全不变——默认 border-box 的
+        // ResizeObserver 收不到，吸顶条会停在旧几何直到用户滚动一次。
+        headingLeft = 200;
+        headingWidth = 600;
+        fireResize(document.body);
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+
+        expect(sticky!.style.left).toBe("200px");
+        expect(sticky!.style.width).toBe("600px");
+
+        headingLeft = 100;
+        headingWidth = 800;
         destroyEditor();
         root.remove();
     }, 60000);

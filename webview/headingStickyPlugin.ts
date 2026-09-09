@@ -217,6 +217,16 @@ export const headingStickyPlugin = $prose(() =>
                 }, CACHE_REBUILD_DEBOUNCE_MS);
             };
 
+            /**
+             * 布局变化（与文档内容无关）：宽度变化可能引起重新折行 → 缓存要重建（防抖），
+             * 但显示几何（left/width/吸顶行）必须**本帧**重算，不能等下一次滚动。
+             */
+            const onLayoutChange = () => {
+                if (shouldSkipViewportWork()) return;
+                markCacheDirty();
+                scheduleUpdate();
+            };
+
             /** 最多显示几行：不超过 3 行，且不超过视口高度的 25%（对照内置编辑器） */
             const maxStickyRows = (): number => Math.min(
                 STICKY_MAX_ROWS,
@@ -320,6 +330,16 @@ export const headingStickyPlugin = $prose(() =>
             const resizeObserver = new ResizeObserver(markCacheDirty);
             resizeObserver.observe(view.dom);
 
+            // 布局变化（目录钉住/拖宽度、侧边栏拖拽）→ 立即重算显示几何。
+            // 根因：正文容器达到 max-width 后，这些变化只让内容**平移**、不改尺寸，
+            // 而 ResizeObserver 默认观测 border-box、只对尺寸变化回调（view.dom 的
+            // 观测因此收不到），吸顶条的 left/width 就停在旧值，直到用户滚动一次
+            // 才被 scroll 事件补算（用户报告：目录开合后吸顶标题要滑一下才自适应宽度）。
+            // 目录钉住时正文靠 body 的 padding-left 让位，故观测 body 的 content-box：
+            // 位移与尺寸两类变化都能捕获。
+            const layoutObserver = new ResizeObserver(onLayoutChange);
+            layoutObserver.observe(document.body, { box: "content-box" });
+
             window.addEventListener("scroll", scheduleUpdate, { passive: true });
             // resize 只刷新显示位置（docTop 与视口无关，无需重建缓存）
             window.addEventListener("resize", scheduleUpdate);
@@ -353,6 +373,7 @@ export const headingStickyPlugin = $prose(() =>
                     window.removeEventListener("touchmove", clearSuppress);
                     window.removeEventListener("keydown", clearSuppress);
                     resizeObserver.disconnect();
+                    layoutObserver.disconnect();
                     sticky.remove();
                 },
             };
