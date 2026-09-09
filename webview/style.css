@@ -222,11 +222,13 @@ html.epytor-viewport-frozen .toc-toggle-tab {
         width: 0;
         height: 0;
     }
-    /* 折叠期不画正文——这就是内置预览的行为（见文件上方折叠说明）。
-       data-epytor-tiny-real：用户真把编辑区缩到 300×150 **并在这个尺寸下操作过**
-       才解除隐藏（由 utils/viewportFreeze.ts 依据用户输入打标记，不用计时）。 */
-    html:not([data-epytor-tiny-real]) body {
-        visibility: hidden;
+    /* 折叠期照常画正文：排版已被钉在折叠前的尺寸（上面的变量 + overflow-anchor），
+       所以看到的是同一版式被视口裁切的一角——与「窗口被拖小」同形，零重排、零空白。
+       （此前这里隐藏正文，用户反馈「空一下再出现」的过渡看着别扭。）
+       右缘用视口宽度渐变淡出：硬切一刀看起来像渲染故障（60fps 逐帧实测过）。 */
+    html {
+        mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent 100%);
+        -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent 100%);
     }
     .milkdown-top-bar {
         width: var(--epytor-last-body-width, 100%);

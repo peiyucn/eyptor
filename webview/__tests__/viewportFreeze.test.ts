@@ -3,7 +3,6 @@ import {
     INITIAL_VIEWPORT_FREEZE_STATE,
     IFRAME_DEFAULT_HEIGHT,
     IFRAME_DEFAULT_WIDTH,
-    TINY_REAL_ATTRIBUTE,
     initViewportFreeze,
     isCollapsedViewport,
     isViewportFrozen,
@@ -140,18 +139,15 @@ describe("isViewportShrunk", () => {
 });
 
 /**
- * 「真实小窗口」的认定：不看时间，看用户输入。
- * 例外本身是必要的——用户真把编辑区缩到 300×150 时不能一直隐藏正文（否则永久空白）；
- * 但**计时阈值是错的**（回归：宿主折叠态一直持续到用户切回来，远超阈值，标记在折叠期
- * 就被打上 → 切回来「出现-消失-再出现」）。
+ * 「真实小窗口」的认定：不看时间，看用户输入（回归：此前用 600ms 计时阈值，而宿主
+ * 折叠态会一直持续到用户切回来，远超阈值 → 折叠期就误判，切回来出现三次变化）。
  */
 describe("真尺寸认定（折叠尺寸下的用户输入）", () => {
     afterEach(() => {
-        document.documentElement.removeAttribute(TINY_REAL_ATTRIBUTE);
         setViewport(1024, 768);
     });
 
-    it("折叠尺寸下停留但没有用户输入 应该 不打标记（宿主折叠态不会误判）", () => {
+    it("折叠尺寸下停留但没有用户输入 应该 保持冻结（宿主折叠态不会误判）", () => {
         // 真实顺序：先在真实尺寸下加载（建立基准），再被宿主折叠
         setViewport(846, 677);
         initViewportFreeze();
@@ -160,31 +156,23 @@ describe("真尺寸认定（折叠尺寸下的用户输入）", () => {
         expect(isViewportFrozen()).toBe(true);
         window.dispatchEvent(new Event("focus"));
         window.dispatchEvent(new Event("blur"));
-        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(false);
+        expect(isViewportFrozen()).toBe(true);
     });
 
-    it("折叠尺寸下用户操作 应该 打标记并解除冻结（真实小窗口）", () => {
-        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+    it("折叠尺寸下用户操作 应该 解除冻结（真实小窗口）", () => {
+        setViewport(846, 677);
         initViewportFreeze();
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        window.dispatchEvent(new Event("resize"));
+        expect(isViewportFrozen()).toBe(true);
         window.dispatchEvent(new Event("pointerdown"));
-        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(true);
         expect(isViewportFrozen()).toBe(false);
     });
 
-    it("真实尺寸下用户操作 应该 不打标记", () => {
+    it("真实尺寸下用户操作 应该 不改变冻结状态", () => {
         setViewport(846, 677);
         initViewportFreeze();
         window.dispatchEvent(new Event("wheel"));
-        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(false);
-    });
-
-    it("标记后尺寸变回真实值 应该 清除标记（下一次折叠仍按折叠处理）", () => {
-        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
-        initViewportFreeze();
-        window.dispatchEvent(new Event("keydown"));
-        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(true);
-        setViewport(846, 677);
-        window.dispatchEvent(new Event("resize"));
-        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(false);
+        expect(isViewportFrozen()).toBe(false);
     });
 });

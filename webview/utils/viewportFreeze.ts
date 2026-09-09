@@ -78,25 +78,16 @@ export function recordBodyWidth(prev: ViewportFreezeState, bodyWidth: number): V
 
 /**
  * 「用户真的把编辑区缩到了 300×150」的认定：**不看时间，看有没有用户输入**。
- * 宿主折叠（切到别的标签）期间用户不在这个 webview 里，隐藏中的 webview 收不到任何
- * 输入事件；只有用户真在这个尺寸下操作（点/滚/敲键）才认定是真实的小窗口。
+ * 宿主折叠（切到别的标签）期间用户不在这个 webview 里，收不到任何输入事件；
+ * 只有用户真在这个尺寸下操作（点/滚/敲键）才认定是真实的小窗口并解冻排版。
  *
  * 回归（用户报告「切回 md 先出现-又消失-再出现」）：此前用 600ms 计时阈值认定
- * 「稳定停留」。但宿主折叠态会**一直持续到用户切回来**（远超 600ms），标记在折叠期
- * 就被打上 → 切回来第一帧按 300px 版式画出正文（出现）→ focus 清标记又隐藏（消失）
- * → resize 到位再显示（再出现）。计时阈值本身就是这个闪动的来源。
+ * 「稳定停留」，但宿主折叠态会**一直持续到用户切回来**（远超 600ms），标记在折叠期
+ * 就被打上，配合当时的「折叠期隐藏正文」规则产生三次变化。计时阈值已删除。
  */
-export const TINY_REAL_ATTRIBUTE = "data-epytor-tiny-real";
-
-/** 折叠尺寸下算作「用户真在操作」的输入事件（捕获阶段，正文隐藏时也能收到） */
 const USER_INPUT_EVENTS = ["pointerdown", "wheel", "keydown", "touchstart"] as const;
 
 let state: ViewportFreezeState = INITIAL_VIEWPORT_FREEZE_STATE;
-
-/** 清除「真尺寸」标记（尺寸变回真实值时调用，保证下一次折叠仍按折叠处理） */
-function clearTinyReal(root: HTMLElement): void {
-    root.removeAttribute(TINY_REAL_ATTRIBUTE);
-}
 
 /** 当前是否处于宿主折叠（排版已冻结）态——视口驱动的 UI 逻辑应跳过 */
 export function isViewportFrozen(): boolean {
@@ -165,33 +156,23 @@ function readViewport(): { width: number; height: number; bodyWidth: number } {
 }
 
 function sync(): void {
-    const root = document.documentElement;
-    const viewport = readViewport();
-    if (!isCollapsedViewport(viewport.width, viewport.height)) {
-        // 尺寸不再是折叠尺寸 → 真实尺寸，清掉小窗口标记
-        clearTinyReal(root);
-    }
-    apply(nextViewportFreezeState(state, viewport), root);
+    apply(nextViewportFreezeState(state, readViewport()), document.documentElement);
 }
 
 /**
- * 折叠尺寸下的用户输入：认定「用户真的把编辑区缩到了 300×150」，解除冻结并显示正文
- * （否则小窗口下编辑区永久空白）。隐藏中的 webview 收不到输入，宿主折叠态不会误判。
+ * 折叠尺寸下的用户输入：认定「用户真的把编辑区缩到了 300×150」，解除冻结并按当前
+ * 尺寸重建基准（否则排版被钉在旧宽度）。隐藏中的 webview 收不到输入，宿主折叠态不会误判。
  */
 function onUserInput(): void {
-    const root = document.documentElement;
-    if (root.hasAttribute(TINY_REAL_ATTRIBUTE)) { return; }
     if (!isCollapsedViewport(window.innerWidth, window.innerHeight)) { return; }
-    root.setAttribute(TINY_REAL_ATTRIBUTE, "");
-    // 真实尺寸即 300×150：解除冻结、按当前尺寸重建基准（否则排版被钉在旧宽度）
-    apply(nextViewportFreezeState(INITIAL_VIEWPORT_FREEZE_STATE, readViewport()), root);
+    apply(nextViewportFreezeState(INITIAL_VIEWPORT_FREEZE_STATE, readViewport()), document.documentElement);
 }
 
 /** 初始化（在 webview 入口调用一次）：建立基准 → 监听 resize → 跟踪 body 宽度 */
 export function initViewportFreeze(): void {
     sync();
     window.addEventListener("resize", sync);
-    // 折叠尺寸下的真实用户输入 → 认定为真实小窗口（见 onUserInput）
+    // 折叠尺寸下的真实用户输入 → 认定是真实小窗口并解冻（见 onUserInput）
     for (const type of USER_INPUT_EVENTS) {
         window.addEventListener(type, onUserInput, { passive: true, capture: true });
     }
