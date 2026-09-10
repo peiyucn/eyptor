@@ -195,6 +195,18 @@ body {
     html:not([data-epytor-tiny-real]) .milkdown-top-bar {
         width: var(--epytor-last-body-width, 100%);
     }
+
+    /* 4. 合成器守卫（回归 bc528e3 实测）：宿主切回时重新挂载 webview，合成器要重建
+       图层；backdrop-filter 的模糊要求先捕获背景再模糊，首帧因此被推迟约 2 帧——
+       那几帧里旧的小尺寸画面就多停留一会儿，用户偶尔能看清「小画面」。折叠期顶栏/
+       目录/浮动工具栏后面就是正文与底色，有无模糊肉眼无差，但首帧能立刻画出来。 */
+    .milkdown-top-bar,
+    .milkdown-toolbar,
+    .toc-panel,
+    .toc-toggle-tab {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
 }
 
 /* Milkdown 根容器 */

@@ -108,6 +108,17 @@ describe("WebView 样式", () => {
         expect(styleCss).toContain("var(--epytor-last-body-width, 100%)");
     });
 
+    it("折叠期 应该 关闭顶栏/目录/浮动工具栏模糊（回归：合成器重建图层推迟首帧，小画面偶发可见）", () => {
+        const start = styleCss.indexOf("@media (width: 300px) and (height: 150px)");
+        expect(start).toBeGreaterThanOrEqual(0);
+        const foldBlock = styleCss.slice(start, styleCss.indexOf("\n}", start));
+        expect(foldBlock).toContain("backdrop-filter: none !important");
+        expect(foldBlock).toContain(".milkdown-top-bar");
+        expect(foldBlock).toContain(".milkdown-toolbar");
+        expect(foldBlock).toContain(".toc-panel");
+        expect(foldBlock).toContain(".toc-toggle-tab");
+    });
+
     it("重建期加载点阵 应该 已移除（中间态只留主题背景，对齐官方预览观感）", () => {
         expect(styleCss).not.toContain("epytor-loading");
         expect(styleCss).not.toContain("epytor-matrix");

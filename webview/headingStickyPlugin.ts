@@ -207,11 +207,22 @@ export const headingStickyPlugin = $prose(() =>
                 cacheDirty = false;
             };
 
+            /**
+             * 最近一次「非折叠读数」下的 body 宽度（px；-1 = 尚未建立基准）。
+             * 宿主折叠恢复时宽度会回到这个值——此时缓存里的文档坐标仍然有效。
+             */
+            let lastStableBodyWidth = -1;
+
             /** 文档变更/折叠状态变化：防抖重建（输入连续时不重复全量扫描） */
             const markCacheDirty = () => {
                 cacheDirty = true;
                 if (rebuildTimer !== null) clearTimeout(rebuildTimer);
                 rebuildTimer = setTimeout(() => {
+                    rebuildTimer = null;
+                    // 宿主折叠期视口是假的 300×150：此刻重建会把文档坐标记成窄版式的值，
+                    // 而恢复原宽度后 onLayoutChange 会因「宽度回到基准」复用缓存 → 错误值
+                    // 永远留下。保持 cacheDirty，等恢复后用真实尺寸重建（下一次 onLayoutChange）。
+                    if (shouldSkipViewportWork()) { return; }
                     rebuildCache();
                     scheduleUpdate();
                 }, CACHE_REBUILD_DEBOUNCE_MS);
@@ -220,10 +231,21 @@ export const headingStickyPlugin = $prose(() =>
             /**
              * 布局变化（与文档内容无关）：宽度变化可能引起重新折行 → 缓存要重建（防抖），
              * 但显示几何（left/width/吸顶行）必须**本帧**重算，不能等下一次滚动。
+             *
+             * 宿主折叠恢复走「宽度回到基准」这条捷径：不重建缓存——重建要在切回第一帧
+             * 前做一次随标题数增长的全量 getBoundingClientRect，标题多时首帧被推迟，
+             * 旧的小尺寸画面就会偶尔停留到肉眼可见。真实布局变化（拖目录/拖窗口/开合
+             * 面板）会改变宽度，仍走原来的防抖重建。
              */
             const onLayoutChange = () => {
+                // 宿主折叠态（切走/切回过渡）视口是假的 300×150：不建立基准、不重建，
+                // 恢复后由下一次回调补上。
                 if (shouldSkipViewportWork()) return;
-                markCacheDirty();
+                const bodyWidth = document.body.getBoundingClientRect().width;
+                if (cacheDirty || Math.abs(bodyWidth - lastStableBodyWidth) > 0.5) {
+                    markCacheDirty();
+                }
+                lastStableBodyWidth = bodyWidth;
                 scheduleUpdate();
             };
 
@@ -326,8 +348,13 @@ export const headingStickyPlugin = $prose(() =>
                 if (suppressSticky) { scheduleUpdate(); }
             };
 
-            // 文档内容/布局变化（RO）→ 防抖重建缓存（而非每帧全量测量）；滚动时用缓存纯计算
-            const resizeObserver = new ResizeObserver(markCacheDirty);
+            // 文档内容/布局变化（RO）→ 防抖重建缓存（而非每帧全量测量）；滚动时用缓存纯计算。
+            // 折叠期视口是假的 300×150：view.dom 的「尺寸变化」只是折叠重排，恢复原宽度后
+            // 布局会回来、缓存仍有效——折叠期置脏会让切回帧必然全量重建（首帧被推迟）。
+            const resizeObserver = new ResizeObserver(() => {
+                if (shouldSkipViewportWork()) return;
+                markCacheDirty();
+            });
             resizeObserver.observe(view.dom);
 
             // 布局变化（目录钉住/拖宽度、侧边栏拖拽）→ 立即重算显示几何。

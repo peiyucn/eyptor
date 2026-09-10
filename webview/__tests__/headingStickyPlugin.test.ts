@@ -31,6 +31,12 @@ if (typeof window.matchMedia === "undefined") {
 let scrollY = 150;
 Object.defineProperty(window, "scrollY", { get: () => scrollY, configurable: true });
 
+/** 改写 jsdom 视口尺寸（只读属性需 defineProperty），模拟宿主折叠/恢复 */
+function setViewport(width: number, height: number): void {
+    Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: height, configurable: true });
+}
+
 class FakeResizeObserver {
     /** 全部实例：测试用 fireResize 精确触发某个 target 的回调 */
     static instances: FakeResizeObserver[] = [];
@@ -245,6 +251,53 @@ describe("标题吸顶完整链路", () => {
 
         headingLeft = 100;
         headingWidth = 800;
+        destroyEditor();
+        root.remove();
+    }, 60000);
+
+    it("宿主折叠恢复 应该 复用缓存、不在切回帧做全量重建（回归：小画面偶发可见的长尾）", async () => {
+        scrollY = 150;
+        headingLeft = 100;
+        headingWidth = 800;
+
+        // body 宽度基准：初始布局回调建立 800（jsdom 无布局，需桩测）
+        const originalBodyRect = document.body.getBoundingClientRect.bind(document.body);
+        let bodyWidth = 800;
+        const bodySpy = vi.spyOn(document.body, "getBoundingClientRect").mockImplementation(
+            () => ({ ...originalBodyRect(), width: bodyWidth }) as DOMRect,
+        );
+
+        const root = await mountWithStubLayout(
+            Array.from({ length: 8 }, (_, i) => `## 标题 ${i}\n正文一行`).flatMap((s) => s.split("\n")),
+            (i) => 60 + i * 120,
+        );
+        await settle();
+
+        // 计数：全量重建会读每个标题的 rect；轻量几何更新只读最内层一个
+        const headingEls = Array.from(root.querySelectorAll("h1,h2,h3,h4,h5,h6")) as HTMLElement[];
+        const readCounts = headingEls.map(() => 0);
+        headingEls.forEach((el, i) => {
+            const original = el.getBoundingClientRect.bind(el);
+            el.getBoundingClientRect = () => { readCounts[i]++; return original(); };
+        });
+
+        // 宿主折叠：假视口 300×150（body 宽 285）
+        setViewport(300, 150);
+        bodyWidth = 285;
+        fireResize(document.body);
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+
+        // 恢复真实尺寸：宽度回到基准 800
+        setViewport(1024, 768);
+        bodyWidth = 800;
+        fireResize(document.body);
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+
+        // 若切回帧全量重建，8 个标题会各被读一次；复用缓存则最多读最内层 1 个
+        expect(readCounts.filter((c) => c > 0).length).toBeLessThanOrEqual(1);
+
+        bodySpy.mockRestore();
+        setViewport(1024, 768);
         destroyEditor();
         root.remove();
     }, 60000);
