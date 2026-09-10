@@ -38,6 +38,15 @@ export const TINY_REAL_ATTRIBUTE = "data-epytor-tiny-real";
 /** 折叠读数下能证明「宿主没摘挂」的用户输入（摘挂的 webview 收不到任何输入事件） */
 const REAL_INPUT_EVENTS = ["pointerdown", "wheel", "keydown", "touchstart"] as const;
 
+/** 最近一次「真实读数」下的滚动位置（px）；折叠恢复后据此校正浏览器锚定造成的偏移 */
+let lastRealScrollY = 0;
+/** 是否记录过真实读数（后台以折叠尺寸创建的 webview 不能把 0 当成用户位置校正回去） */
+let hasRealScrollRecord = false;
+/** 上一次 resize 读数是否为宿主折叠态（识别「进入折叠 / 恢复」的沿） */
+let wasHostCollapsed = false;
+/** 正在执行折叠恢复的位置校正：期间滚动事件不得覆盖锁存的期望位置 */
+let restoringScroll = false;
+
 /** 最近一次记账的真实 body 宽度（px；0 = 尚未记到基准） */
 let lastBodyWidth = 0;
 
@@ -130,10 +139,32 @@ function onUserInput(): void {
     if (!isCollapsedViewport(window.innerWidth, window.innerHeight)) { return; }
     if (isRealTinyViewport()) { return; }
     document.documentElement.setAttribute(TINY_REAL_ATTRIBUTE, "");
+    // 这个 300×150 是真的：尺寸离开时不应按「宿主折叠恢复」去校正滚动位置
+    wasHostCollapsed = false;
     sync();
 }
 
-/** 视口尺寸变化：离开折叠读数即清除标记，并记一次（可能已变真实的）几何 */
+/**
+ * 真实读数下的滚动：持续记录当前位置（切走前最后一次滚动就是折叠恢复的期望位置）。
+ * 折叠期屏幕上是别的编辑器、收不到用户滚动；校正期间（restoringScroll）也不记录，
+ * 否则恢复帧的布局锚定调整会把期望位置污染成修正后的值。
+ */
+function onScroll(): void {
+    if (restoringScroll) { return; }
+    if (isCollapsedViewport(window.innerWidth, window.innerHeight) && !isRealTinyViewport()) { return; }
+    lastRealScrollY = window.scrollY;
+    hasRealScrollRecord = true;
+}
+
+/**
+ * 视口尺寸变化：离开折叠读数即清除标记；识别折叠的「进入 / 恢复」沿，
+ * 恢复时把被浏览器滚动锚定挪走的位置校正回折叠前的值。
+ *
+ * 为什么需要校正：折叠期视口缩到 300×150 后正文按窄列重排，浏览器会做滚动锚定
+ * 把位置「就地修正」（A6 实测同一位置 scrollY 1500 → 1773）；恢复真实尺寸时
+ * 布局再次变化，锚定可能再修正一次。折叠期屏幕上是别的编辑器、收不到用户滚动，
+ * 所以期望位置就是进入折叠前记下的值。两次 rAF：锚定调整可能晚于 resize 返回。
+ */
 function onViewportResize(): void {
     const marked = isRealTinyViewport();
     const next = nextTinyReal(marked, readViewport(), false);
@@ -141,6 +172,27 @@ function onViewportResize(): void {
         if (next) { document.documentElement.setAttribute(TINY_REAL_ATTRIBUTE, ""); }
         else { document.documentElement.removeAttribute(TINY_REAL_ATTRIBUTE); }
     }
+
+    const collapsed = isCollapsedViewport(window.innerWidth, window.innerHeight) && !isRealTinyViewport();
+    if (wasHostCollapsed && !collapsed && hasRealScrollRecord) {
+        const expected = lastRealScrollY;
+        restoringScroll = true;
+        const restore = (): void => {
+            if (window.scrollY !== expected) { window.scrollTo(0, expected); }
+        };
+        requestAnimationFrame(() => {
+            restore();
+            requestAnimationFrame(() => {
+                restore();
+                restoringScroll = false;
+            });
+        });
+    } else if (!collapsed) {
+        lastRealScrollY = window.scrollY;
+        hasRealScrollRecord = true;
+    }
+    wasHostCollapsed = collapsed;
+
     sync();
 }
 
@@ -159,6 +211,7 @@ export function initViewportLedger(): void {
         window.addEventListener(type, onUserInput, { passive: true });
     }
     window.addEventListener("resize", onViewportResize);
+    window.addEventListener("scroll", onScroll, { passive: true });
     if (typeof ResizeObserver === "undefined" || !document.body) { return; }
     new ResizeObserver(sync).observe(document.body);
 }

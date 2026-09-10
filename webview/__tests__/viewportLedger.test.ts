@@ -177,6 +177,31 @@ describe("initViewportLedger", () => {
         expect(cssVarValue()).toBe("831px");
     });
 
+    it("折叠恢复 应该 把被滚动锚定挪走的位置校正回折叠前（回归：切回后内容跳一下）", async () => {
+        installFakeResizeObserver();
+        let scrollY = 500;
+        Object.defineProperty(window, "scrollY", { get: () => scrollY, configurable: true });
+        const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(
+            ((_x: number, y: number) => { scrollY = y; }) as unknown as typeof window.scrollTo,
+        );
+
+        initViewportLedger();
+        window.dispatchEvent(new Event("resize")); // 真实读数：记录 500
+
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        window.dispatchEvent(new Event("resize")); // 进入折叠：不更新记录
+
+        scrollY = 700; // 折叠/恢复布局时浏览器滚动锚定把位置挪走
+        setViewport(846, 677);
+        window.dispatchEvent(new Event("resize")); // 恢复：校正回折叠前
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+        await new Promise((r) => requestAnimationFrame(() => r(null)));
+
+        expect(scrollY).toBe(500);
+        scrollTo.mockRestore();
+        Object.defineProperty(window, "scrollY", { get: () => 0, configurable: true });
+    });
+
     it("恢复真实尺寸后回调 应该 更新变量（含滚动条造成的宽度差）", () => {
         installFakeResizeObserver();
         initViewportLedger();
