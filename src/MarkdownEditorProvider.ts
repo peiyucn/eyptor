@@ -178,17 +178,36 @@ export class MarkdownEditorProvider
             provider,
             {
                 webviewOptions: {
-                    // 与官方内置预览同架构：切到别的标签时销毁 webview，切回来重建。
+                    // ⚠️ 对照实验（临时改动，不是正式架构，未定案）：这里由 false 改为 true。
                     //
+                    // 实验组 = 保活（retainContextWhenHidden:true）+ 摘掉**整套**折叠期机制：
+                    // webview/index.ts 不再调用 initViewportFreeze()（不冻结），style.css 删除
+                    // 折叠期媒体查询与冻结类规则（不隐藏、不钉宽）。三个文件同属这一组改动，
+                    // 不做取舍——本组要验证的正是「保活但完全不介入折叠期」这一种组合。
+                    //
+                    // 预测（来源：真机调查）——此前四个保活变体（隐藏正文 / 不隐藏 / 冻结+不
+                    // 隐藏 / 冻结+显示点阵）都比 1.1.6 刺眼，因为它们在折叠窗口里给出的都是
+                    // 「非正文」的画面（空白 / 裁切条 / 会动的空白）；而 1.1.6 给的是「完整但
+                    // 窄排的正文 → 跳正」的两段式。把折叠期机制整套摘掉后，画面序列应回落到
+                    // 1.1.6 那种两段式。
+                    //
+                    // 对照产物：releases/epytor-vscode-1.2.0-{destroy,retainA,retainA2-nofreeze,
+                    // retainA3-novis,retainA4-loading,noloading}.vsix（本组为
+                    // releases/epytor-vscode-1.2.0-retainA5-nofreeze-nohide.vsix）。
+                    //
+                    // 正式架构（实验的对照基准 = 上面那个 false 的理由，结论出来后按结论恢复）：
+                    // 与官方内置预览同架构——切到别的标签时销毁 webview，切回来重建。
                     // 根因（实测）：保留上下文时，宿主重新显示 webview 会先把容器设为
                     // visible、再测量尺寸——中间约 130ms iframe 只有 Chromium 默认的
                     // 300×150，这期间无论画什么（空白 / 正文被裁切）都与最终画面不同，
                     // 用户看到的就是「闪」。销毁重建则不同：新 iframe 出生时容器已是
                     // 正确尺寸，它从来不会以 300×150 画过一帧。
                     //
-                    // 代价（已知并接受）：切回时重建 Milkdown（长文档 1s+）、撤销历史与
-                    // 标题折叠状态丢失；滚动位置由 webview state 恢复（见 webview/index.ts）。
-                    retainContextWhenHidden: false,
+                    // 代价（本实验组会在切回时重新吃到）：保留上下文时，切回不再重建 Milkdown，
+                    // 但折叠期会真实重排一次（本组不再冻结/隐藏画面）；而放弃销毁重建的代价
+                    // 原本是——切回时重建 Milkdown（长文档 1s+）、撤销历史与标题折叠状态丢失，
+                    // 滚动位置由 webview state 恢复（见 webview/index.ts）。
+                    retainContextWhenHidden: true,
                 },
                 supportsMultipleEditorsPerDocument: false,
             },
@@ -369,10 +388,12 @@ export class MarkdownEditorProvider
                 // panel 已销毁（切换/关闭竞态），忽略
             }
             if (!p.active) {
-                // retainContextWhenHidden:false：面板失活后宿主会销毁 webview。未落盘的
-                // 编辑必须在此之前拉取写盘——否则重建时只能拿到旧内容（切走即丢编辑）。
-                // 拉取式保存自带超时兜底（CONTENT_REQUEST_TIMEOUT_MS），webview 已被
-                // 销毁时回退内存内容，不会悬挂。
+                // [对照实验：retainContextWhenHidden 现为 true，面板失活**不再**销毁 webview。
+                //  这条拉取写盘保留不动：webview 仍会因关闭标签/“重新打开方式”重建，且失活时
+                //  先落盘未保存编辑本身无害。]
+                // 未落盘的编辑必须在 webview 可能消失之前拉取写盘——否则重建时只能拿到旧内容
+                // （切走即丢编辑）。拉取式保存自带超时兜底（CONTENT_REQUEST_TIMEOUT_MS），
+                // webview 已被销毁时回退内存内容，不会悬挂。
                 if (this._webviewDirty.get(uriKey) === true) {
                     const cts = new vscode.CancellationTokenSource();
                     void this.saveCustomDocument(document, cts.token).finally(() => cts.dispose());
@@ -534,9 +555,10 @@ export class MarkdownEditorProvider
             case "ready": {
                 // 标记面板已初始化，onDidChangeViewState 此后才会处理 pending navigation
                 this._initializedPanels.add(uriKey);
-                // 未落盘编辑优先：retainContextWhenHidden:false 下切走会销毁 webview，
-                // 而 _markDirty 只通知 VS Code「变了」、并不把内容拷进文档——若此刻有
-                // 未保存改动，必须用 webview 推来的副本重建，否则切回来是旧内容
+                // 未落盘编辑优先：[对照实验：retainContextWhenHidden 现为 true，切标签不再
+                //  销毁 webview；这条路径仍是关闭标签/重开（真的重建）时的兜底。]
+                // _markDirty 只通知 VS Code「变了」、并不把内容拷进文档——webview 重建时若
+                // 此刻有未保存改动，必须用 webview 推来的副本重建，否则新实例拿到旧内容
                 // （编辑丢失，脏标记却还在，用户下次保存会把旧内容写回磁盘）。
                 const pushedContent = this._pushedContent.get(uriKey);
                 const memoryContent = document.getText();

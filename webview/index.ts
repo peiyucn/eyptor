@@ -56,7 +56,6 @@ import { dispatchImagePathResolved } from "./components/imageView/imgPathComplet
 import { resolvePathSuggestionRequest } from "./utils/pathSuggestionRequests";
 import { setImageUriMap, remapImageUri, showGlobalLightbox } from "./components/imageView";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
-import { initViewportFreeze } from "./utils/viewportFreeze";
 import { initFindBar } from "./components/findBar";
 import { initToc } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
@@ -85,8 +84,12 @@ const INITIAL_VIEWPORT_LINE_REPORT_DELAY_MS = 600;
 
 let _topBarOverflowCtl: { dispose(): void } | null = null;
 
-// 宿主折叠态排版冻结（切到非 webview 标签时 iframe 回落 300×150 会引发整页重排）
-initViewportFreeze();
+// [对照实验] 折叠期排版冻结在此**停用**（原先的 initViewportFreeze() 调用与 import 均已
+// 摘掉）——本组是「保活 + 完全不介入折叠期」：既不冻结也不隐藏，宿主折叠/恢复时按真实
+// 视口自然重排（预测观感回落 1.1.6 两段式）。utils/viewportFreeze.ts 与其单测保留：
+// shouldSkipViewportWork / isViewportFrozen 仍被吸顶条、目录、顶栏引用，不初始化时冻结态
+// 恒为 false，退化语义即「只有真视口恰为 300×150 时才跳过视口工作」（可接受的对照态）。
+// 结论出来后按结论决定恢复调用或删除整个模块。
 
 let currentEditor: Editor | null = null;
 let currentLineMap: number[] = [];

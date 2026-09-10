@@ -3,8 +3,8 @@
     box-sizing: border-box;
 }
 
-/* 视口单位统一走变量：宿主折叠态（切到非 webview 标签）可整体冻结，见
-   utils/viewportFreeze.ts——直接写 92vw/100vh 会在折叠时按 300×150 重排一次 */
+/* 视口单位统一走变量：灯箱、图片选择器、目录高度共用一处定义
+   （[对照实验] 折叠期冻结已停用，这里不再有折叠态的整体覆盖） */
 :root {
     --epytor-vw: 100vw;
     --epytor-vh: 100vh;
@@ -159,86 +159,6 @@ body {
     padding: 52px 48px 80px;
     min-height: var(--epytor-vh);
     outline: none;
-}
-
-/* ─── 宿主折叠态：排版冻结（见 utils/viewportFreeze.ts） ─────────────────
-   切到非 webview 标签时宿主把 webview 摘出布局，iframe 回落到默认 300×150；
-   把视口单位与正文宽度钉在折叠前的实测值 → 排版逐像素不变（只是被裁切），
-   宿主放回真实尺寸时零重排，用户不再看到「页面闪一下」。 */
-html.epytor-viewport-frozen {
-    --epytor-vw: var(--epytor-frozen-vw);
-    --epytor-vh: var(--epytor-frozen-vh);
-}
-html.epytor-viewport-frozen body {
-    width: var(--epytor-frozen-body-width);
-}
-html.epytor-viewport-frozen .milkdown-top-bar {
-    /* 顶栏 fixed + left/right:0，宽度跟随视口（= clientWidth，已扣滚动条）；
-       冻结期钉住同一宽度，避免按钮在 300px 里收进溢出菜单再展开 */
-    width: var(--epytor-frozen-body-width);
-}
-
-/* 过渡帧（宿主重新挂载 webview、iframe 短暂回落 300×150 的那几十毫秒）：
-   排版保持折叠前的正确版式（零重排、正文不跳），只抑制此刻会出现在编辑区中间的
-   滚动条，并关掉模糊——backdrop-filter 要求合成器重建图层后重新捕获并模糊背景，
-   会推迟首帧。 */
-html.epytor-viewport-shrunk,
-html.epytor-viewport-frozen {
-    scrollbar-width: none;
-}
-
-html.epytor-viewport-shrunk::-webkit-scrollbar,
-html.epytor-viewport-frozen::-webkit-scrollbar {
-    width: 0;
-    height: 0;
-}
-html.epytor-viewport-shrunk .milkdown-top-bar,
-html.epytor-viewport-frozen .milkdown-top-bar,
-html.epytor-viewport-shrunk .toc-panel,
-html.epytor-viewport-frozen .toc-panel,
-html.epytor-viewport-shrunk .toc-toggle-tab,
-html.epytor-viewport-frozen .toc-toggle-tab {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-}
-
-/* ─── 折叠第一帧的纯 CSS 兜底 ─────────────────────────────────────────────
-   实测：宿主把面板显示出来后，iframe 会先以默认 300×150 绘制，resize 事件要
-   60–100ms 后才到——那一帧用 JS 来不及（正文会按 300px 重排，用户看到闪动）。
-   媒体查询在样式/布局/绘制之前求值，所以这里用「上一次真实尺寸」变量把排版
-   钉住，第一帧就是折叠前的正确版式；JS 的 resize 兜底负责其他折叠尺寸。 */
-@media (width: 300px) and (height: 150px) {
-    /* 必须用 :root 而不是 html——基础规则写的是 :root（伪类，特异性 0,1,0），
-       html（类型选择器，0,0,1）会被它压过，变量根本不会生效（回归：这条规则
-       此前一直是无效的，折叠第一帧仍按 300px 重排，用户看到「闪出一排字」）。 */
-    :root {
-        --epytor-vw: var(--epytor-last-vw, 100vw);
-        --epytor-vh: var(--epytor-last-vh, 100vh);
-        scrollbar-width: none;
-        /* 折叠期禁用浏览器滚动锚定：视口从 846×677 缩到 300×150 时，锚定会把滚动
-           位置「就地修正」——实测同一位置从 scrollY 1500 跳到 1773（+273px）。宿主
-           放回真实尺寸后内容就停在错位处，用户看到的正是「内容出来了又变一次」。 */
-        overflow-anchor: none;
-    }
-    html::-webkit-scrollbar {
-        width: 0;
-        height: 0;
-    }
-    /* 折叠期不画正文——这就是内置预览的行为（见文件上方折叠说明）。
-       data-epytor-tiny-real：用户真把编辑区缩到 300×150 **并在这个尺寸下操作过**
-       才解除隐藏（由 utils/viewportFreeze.ts 依据用户输入打标记，不用计时）。 */
-    html:not([data-epytor-tiny-real]) body {
-        visibility: hidden;
-    }
-    .milkdown-top-bar {
-        width: var(--epytor-last-body-width, 100%);
-    }
-    .milkdown-top-bar,
-    .toc-panel,
-    .toc-toggle-tab {
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-    }
 }
 
 /* Milkdown 根容器 */
