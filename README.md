@@ -64,7 +64,6 @@ The Settings UI groups them into **epytor** (editor) and **epytor › Images**. 
 * ⚠️ Upstream — Ordered list multi-level numbering: decimal only (Milkdown kernel limitation)
 * ⚠️ Upstream — Inline styles at paragraph end cannot exit to normal text ([Milkdown#2413](https://github.com/Milkdown/milkdown/issues/2413))
 * **Very large documents (10k+ lines)**: WYSIWYG editing stays smooth up to ~3000 lines; beyond that the document-tree cost of the editor engine grows — use the VS Code text editor (source mode) for such files
-* Switching back to a Markdown tab restores the content, scroll position and folded headings, but undo/redo history starts over
 * If you switch tabs within ~400 ms of your last keystroke, that last change is not written to the file
 * Global search may not scroll precisely with multiple `.md` files open
 * Some extended Markdown syntax (footnotes, inline HTML, etc.) not yet supported

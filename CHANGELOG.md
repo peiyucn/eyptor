@@ -21,8 +21,8 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 ### Experience
 
-- **Opening or returning to a Markdown tab no longer flashes** — the content no longer appears, disappears and reappears
-- **Coming back to a tab restores your scroll position and your folded headings**
+- **Switching to another tab and back no longer flashes the Markdown tab** — the editor is kept alive instead of being rebuilt, so the content no longer disappears and reappears
+- **Undo/redo history, scroll position and folded headings are kept while you switch tabs**
 - **`.markdown` files get the same menu and `Ctrl/Cmd+Shift+M` shortcut as `.md`**
 - **List keyboard behavior follows the official defaults**: Backspace on an empty item deletes it, on a non-empty item merges it into the previous one, and numbering reflows automatically
 - **Auto save follows the built-in VS Code `files.autoSave`** (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`); `epytor.autoSave` and `epytor.autoSaveDelay` are gone
@@ -38,7 +38,6 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Opening a Markdown file is significantly faster**: the editor payload loads on demand (Mermaid, KaTeX and per-language syntax support only when used) and post-open bookkeeping no longer blocks the first frame
 - **Typing in large documents no longer stutters every few hundred milliseconds** — nothing is processed in the background while you type; the document is handed over after you stop
 - **Large-document input lag** (#16, thanks @dongjha): editing stays smooth up to ~3000 lines (see Known Limitations)
-- **Background Markdown tabs no longer hold an editor** — memory and CPU are released while a tab is hidden
 - **Search stays responsive on huge files**: highlighting is capped instead of building tens of thousands of ranges
 
 ### Bug fixes

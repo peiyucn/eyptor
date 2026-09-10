@@ -1,7 +1,7 @@
 # 技术债务
 
 > 面向开发者的代码质量改进清单，不涉及用户可见功能变更。
-> 最后更新：2026-09-10
+> 最后更新：2026-09-11
 
 ***
 
@@ -18,6 +18,7 @@
 * [ ] **溢出菜单与官方 Vue 渲染的耦合点**（2026-09-04 新增，`components/topBarOverflow`）— ① 隐藏 class 依赖 MutationObserver 自愈（Vue patch 覆盖）② 按钮 meta 与官方 DOM 渲染顺序对齐（官方渲染顺序变更需同步）；上游 topBar 提供 item key 或 overflow 能力后移除
 * [ ] **index.ts 剩余职责**（2026-09-08 审计）— 图片请求编排/滚动持久化/链接行为仍在入口文件，可再提 `linkBehavior`/`scrollPersistence` 模块（本轮已提取 codeBlockEnhance 与 topBarDecorations）
 * [ ] **折叠光标进出防护**（2026-09-08 审计，需手测确认）— 折叠后方向键能否把光标移入 display:none 的隐藏块并不可见输入，jsdom 无法验证；实测可达则补方向键拦截
+* [ ] **非激活面板的保存不拉取（`_panelActive` 闸门，2026-09-11 清账登记）** — 保活下非激活面板其实还活着、多半能回包，但 `_requestContent` 仍按保守口径短路，用 `_pushedContent`（最陈旧 400ms）或扩展内存内容落盘。README「停手后约 400ms 内切走标签，最后一次改动不会写入文件」正来自这条路径（失活落盘在置 `_panelActive=false` 之后触发）。放开闸门能否消除该窗口需真机验证：切标签 → 等自动保存 → 核对文件内容与 webview 内容是否一致；未验证前不改行为（回归 a4349cc 曾因等待不存在/未就绪的 webview 报「编辑器无响应」）
 
 ***
 
@@ -32,6 +33,8 @@
 * [x] **`createImageView` 拆分** — 提取 `startToolbarInlineEdit` 通用内联编辑辅助，消除 `startCaptionEdit`/`startSrcEdit` 重复（~80 行共用），同步修复路径解析不存在的文件产生畸形 URL
 * [x] **魔法数字常量化** — 新增 `shared/constants.ts`，提取 25 个命名常量，替换 ~55 处硬编码数字
 * [x] **`buildTopBar` 类型安全与拆分** — 移除 14 处 `as any` 后，2026-09-08 审计又发现 8 处 any 与 290 行巨型回调；已提取 `components/topBar/buildTopBar.ts`（类型从官方 TopBarFeatureConfig 推导，8 any 全清）
+* [x] **保活架构定案 + 折叠期机制清账**（2026-09-11，提交 `3aebc39` + `4b21977`）— `retainContextWhenHidden: true` 是**正式架构**（切标签不销毁、不重建：撤销/重做历史、滚动位置、折叠状态、选区自然保留）；折叠期**不隐藏正文、不冻结版式**，只保留三条几何中性守卫（禁用滚动锚定 / 抑制滚动条 / 钉定顶栏宽度，见 `webview/style.css` 的 `@media (width:300px) and (height:150px)`）。`webview/utils/viewportFreeze.ts`（冻结状态机、`epytor-viewport-frozen/-shrunk`、折叠期 `body{visibility:hidden}`）已删除，由 `webview/utils/viewportLedger.ts`（折叠识别 + 折叠期外实测 body 宽度 → `--epytor-last-body-width`）取代。**销毁时代机制逐条 grep 复核后全部保留**——保活只取消了「切标签销毁」这一条路径，关标签 / 窗口重载 / 切源码再切回 / revert 重建实例仍在：`_pushedContent`+`unsavedContent`+`scheduleContentPush`（重建时恢复内容、问不到 webview 时兜底保存）、`_panelActive`（等不等回包的保守闸门，见「待处理」）、`_webviewDirty` / `_initializedPanels`、失活落盘、`restoreFoldState` + 折叠持久化（revert 与窗口重载两条路径）、init 滚动恢复。说谎注释（原话建立在 `retainContextWhenHidden:false` 上）已按新架构改写，现存职责写在各机制注释里
+* [x] **顶栏溢出 resize 监听器未释放**（2026-09-11）— `components/topBarOverflow/index.ts` 的 `dispose()` 里 `removeEventListener("resize", schedule)` 与注册的 `scheduleUnlessCollapsed` 不是同一引用，监听器不释放（每次编辑器重建泄漏一个；切源码再切回、revert 都会走到）；已修 + 回归测试（修复前失败）
 * [x] **2026-09-08 全面审计修复（33 项）** — 3 critical（保存拉取单槽竞态/外部写盘不采纳/frontmatter 丢行）+ 22 major + 8 minor/nit：状态机化（ExpiryWindowMap 抑制窗口/ContentRequestCoordinator 单飞队列/消息串行链/滚动定位合一）、生命周期（themeBus 退订/destroyEditor/NodeView.destroy/防抖 timer 释放）、安全（配置净化/URL 白名单/路径边界/大小上限/错误脱敏/保留设备名）、性能（折叠双指针/吸顶 posAtDOM/滚动节流/查找封顶）、抽象（补全核心合并/请求注册表/index.ts 拆分）、死代码（-500+ 行）、文档与测试对齐（i18n 一致性测试/l10n 同步/覆盖率底线编码/CHANGELOG 行为级改写）；详见 `docs/audits/2026-09-08-full-code-audit.md`
 
 ### 🟡 中优先级
@@ -40,6 +43,7 @@
 * [x] **确认/取消编辑重复** — `startCaptionEdit` / `startSrcEdit` → 提取 `startToolbarInlineEdit` 到 `imageView/index.ts` 模块级
 * [x] **顶栏 P 下拉菜单不显示** — `.top-bar-inner` 的 `overflow: hidden` 裁剪了 Crepe heading dropdown；改为 `overflow: visible` 并补充 CSS 回归测试
 * [x] **空 catch 块**（12 处）— 已全部添加描述性注释（4 处已有充分注释未改，8 处补充）
+* [x] **真实 300×150 被误判为宿主折叠**（2026-09-11）— 折叠判定只看「视口恰为 300×150」，用户真把编辑区缩到该尺寸时被当成宿主摘挂：顶栏按上次真实宽度钉住而溢出、视口测量被跳过。加回**基于用户输入**的区分（pointerdown / wheel / keydown / touchstart → `data-epytor-tiny-real`，尺寸离开 300×150 即清除；**不看计时**——计时版曾在宿主折叠期被打上标记，切回来「出现-消失-再出现」），只影响顶栏钉定与记账，不隐藏正文、不冻结版式
 
 ### 配置项检修
 
