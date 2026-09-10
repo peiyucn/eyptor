@@ -21,7 +21,8 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 * **Mermaid diagrams**: inline rendering, source/preview toggle, preview zoom (0.2×–3×)
 * **Images**: paste/drag/picker insert, drag resize, caption, load retry
 * **TOC**: auto-generated, pinnable, click to navigate
-* **Headings**: sticky current-section title while scrolling, sibling folding (document unchanged)
+* **Headings**: sticky section title while scrolling (up to 3 levels), sibling folding (document unchanged)
+* **Source ↔ preview**: `Ctrl/Cmd+Shift+M` switches between the WYSIWYG editor and the VS Code text editor, keeping your position
 * **FindBar**: `Ctrl/Cmd+F` search with match-case and regular-expression modes
 * **Frontmatter**: editable key/value panel
 * **Path autocomplete**: `@/`, `./`, `../` triggers directory browsing
@@ -34,8 +35,6 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 | Setting | Default | Description |
 |---|---|---|
 | `epytor.defaultMode` | `"wysiwyg"` | Default open mode |
-
-> Auto save uses the built-in VS Code setting `files.autoSave` (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`). EPYTOR no longer ships its own auto-save setting.
 | `epytor.editorMaxWidth` | `900` | Editor max width (px) |
 | `epytor.fontFamily` | `""` | Editor font family |
 | `epytor.codeBlockMaxHeight` | `600` | Code block max height (px) |
@@ -50,6 +49,8 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 | `epytor.debugMode` | `false` | Debug mode |
 | `epytor.markdown.serializationMode` | `"clean"` | Markdown save mode: `clean` / `compatible` |
 
+> Auto save uses the built-in VS Code setting `files.autoSave` (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`). EPYTOR no longer ships its own auto-save setting.
+
 > See Settings UI for all options (`epytor.*`).
 
 ## Requirements
@@ -62,6 +63,8 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 * ⚠️ Upstream — Ordered list multi-level numbering: decimal only (Milkdown kernel limitation)
 * ⚠️ Upstream — Inline styles at paragraph end cannot exit to normal text ([Milkdown#2413](https://github.com/Milkdown/milkdown/issues/2413))
 * **Very large documents (10k+ lines)**: WYSIWYG editing stays smooth up to ~3000 lines; beyond that the document-tree cost of the editor engine grows — use the VS Code text editor (source mode) for such files
+* Switching back to a Markdown tab restores the content, scroll position and folded headings, but undo/redo history starts over
+* If you switch tabs within ~400 ms of your last keystroke, that last change is not written to the file
 * Global search may not scroll precisely with multiple `.md` files open
 * Some extended Markdown syntax (footnotes, inline HTML, etc.) not yet supported
 * Paragraph/heading text alignment is not provided (no standard Markdown syntax)

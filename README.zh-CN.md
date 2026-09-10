@@ -21,7 +21,8 @@
 * **Mermaid 图表**：内联渲染，源码/预览切换，预览缩放（0.2×–3×）
 * **图片**：粘贴/拖放/选择器插入，拖拽缩放，Caption 编辑，加载重试
 * **目录面板**：自动生成，可固定，点击跳转
-* **标题**：滚动时当前章节标题吸顶，同级折叠/展开（不修改文档）
+* **标题**：滚动时当前章节标题吸顶（最多三级），同级折叠/展开（不修改文档）
+* **源码 ↔ 预览**：`Ctrl/Cmd+Shift+M` 在所见即所得与 VS Code 文本编辑器之间切换，并保持当前位置
 * **查找栏**：`Ctrl/Cmd+F` 搜索，区分大小写 + 正则两种模式
 * **Frontmatter**：面板内直接编辑 key/value
 * **路径补全**：`@/`、`./`、`../` 触发，分级浏览
@@ -34,8 +35,6 @@
 | 设置项 | 默认值 | 说明 |
 |---|---|---|
 | `epytor.defaultMode` | `"wysiwyg"` | 默认打开模式 |
-
-> 自动保存使用 VS Code 内置设置 `files.autoSave`（`off` / `afterDelay` / `onFocusChange` / `onWindowChange`），EPYTOR 不再提供独立的自动保存设置。
 | `epytor.editorMaxWidth` | `900` | 编辑器最大宽度（px） |
 | `epytor.fontFamily` | `""` | 编辑器字体 |
 | `epytor.codeBlockMaxHeight` | `600` | 代码块最大高度（px） |
@@ -50,6 +49,8 @@
 | `epytor.debugMode` | `false` | 调试模式 |
 | `epytor.markdown.serializationMode` | `"clean"` | Markdown 保存模式：`clean` / `compatible` |
 
+> 自动保存使用 VS Code 内置设置 `files.autoSave`（`off` / `afterDelay` / `onFocusChange` / `onWindowChange`），EPYTOR 不再提供独立的自动保存设置。
+
 > 完整设置列表见 VSCode 设置面板（`epytor.*`）
 
 ## 环境
@@ -62,6 +63,8 @@
 * ⚠️ 上游 — 有序列表多层级编号均为十进制（Milkdown 内核限制）
 * ⚠️ 上游 — 行内样式尾部无后续内容时无法直接退出（[Milkdown#2413](https://github.com/Milkdown/milkdown/issues/2413)）
 * **超大文档（万行级）**：WYSIWYG 编辑在约 3000 行内保持流畅，超过后编辑器引擎的文档树成本显著上升——此类文件建议用 VS Code 文本编辑器（源码模式）编辑
+* 切回 Markdown 标签会恢复内容、滚动位置与折叠状态，但撤销/重做历史从零开始
+* 停手后约 400ms 内切走标签，最后一次改动不会写入文件
 * 全局搜索跳转：多文件同时打开时可能无法精确定位
 * 部分扩展语法（脚注等）尚未支持
 * 段落/标题文字对齐不提供（标准 Markdown 无对应语法）
