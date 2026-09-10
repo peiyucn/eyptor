@@ -15,10 +15,7 @@ import { OPEN_URL_SCHEMES, extractUrlScheme } from "../shared/constants";
 import {
     DEFAULT_CODE_BLOCK_MAX_HEIGHT,
     DEFAULT_EDITOR_MAX_WIDTH,
-    DEFAULT_IMAGE_SELECTION_COLOR,
-    sanitizeCssColor,
     sanitizeCssNumber,
-    sanitizeFontFamily,
     sanitizeSerializationMode,
 } from "./utils/webviewConfigSanitize";
 import type { ToExtensionMessage, ToWebviewMessage } from "../shared/messages";
@@ -130,7 +127,6 @@ export class MarkdownEditorProvider
         const initialized = this._initializedPanels.has(uriKey);
         const panel = this._webviewPanels.get(uriKey);
         const delivered = initialized && panel !== undefined && panel.visible;
-        if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[setPendingNav] file:', path.basename(fsPath), 'line:', line, '| initialized:', initialized, 'delivered:', delivered);
         if (delivered) {
             panel.webview.postMessage({ type: 'scrollToLine', line });
         }
@@ -284,8 +280,6 @@ export class MarkdownEditorProvider
         _openContext: vscode.CustomDocumentOpenContext,
         _token: vscode.CancellationToken,
     ): Promise<MarkdownDocument> {
-        // 调试：记录 URI fragment/query，排查全局搜索是否传递行号
-        if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[openCustomDocument] uri:', uri.toString(), '| fragment:', uri.fragment, '| query:', uri.query);
         return MarkdownDocument.create(uri);
     }
 
@@ -393,7 +387,6 @@ export class MarkdownEditorProvider
                 ?? this._consumeGlobalRevealLine()
                 ?? this._consumeLastTextLine(uriKey);
             if (line !== undefined) {
-                if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[viewState] immediate scrollToLine:', line);
                 p.webview.postMessage({ type: "scrollToLine", line });
             }
             // 回归（E5）：此处原有 1s 延迟复查定时器（「revealLine 可能在 viewState
@@ -559,7 +552,6 @@ export class MarkdownEditorProvider
                 // 消费 pending navigation（切换预览 / 全局搜索首次打开时设置）
                 const scrollToLine = this._consumePendingNavigation(document.uri.fsPath)
                     ?? this._consumeGlobalRevealLine();
-                if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) console.log('[ready] scrollToLine:', scrollToLine);
                 // 重置稳定化基准（新的 init 意味着内容将重新从磁盘加载）
                 const cfg = vscode.workspace.getConfiguration("epytor");
                 webviewPanel.webview.postMessage({
@@ -569,9 +561,8 @@ export class MarkdownEditorProvider
                     // panelActiveState 消息实时同步）
                     active: webviewPanel.active,
                     // 运行期配置随 init 下发（回归 F1：webview 不再用启动快照重置，
-                    // revert 不会把用户中途改的配置静默回滚）
+                    // revert 不会把用户中途改的序列化模式静默回滚）
                     serializationMode: sanitizeSerializationMode(cfg.get("markdown.serializationMode", "clean")),
-                    debugMode: cfg.get<boolean>("debugMode", false) === true,
                     ...(scrollToLine !== undefined ? { scrollToLine } : {}),
                 });
                 break;
@@ -800,9 +791,8 @@ export class MarkdownEditorProvider
             await document.save(token);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) {
-                console.error("[epytor] save failed:", message);
-            }
+            // 错误日志保留（与任何调试开关无关：保存失败必须可诊断）
+            console.error("[epytor] save failed:", message);
             // 内存已 ≠ 盘上内容：通知 VS Code 脏状态，避免关窗静默丢编辑
             this._markDirty(document);
             void vscode.window.showErrorMessage(
@@ -933,8 +923,6 @@ export class MarkdownEditorProvider
         // 配置值注入 HTML 前一律净化（恶意 workspace 设置不得逃逸 <style>/<script>，见 webviewConfigSanitize）
         const maxHeight = sanitizeCssNumber(cfg.get("codeBlockMaxHeight", DEFAULT_CODE_BLOCK_MAX_HEIGHT), DEFAULT_CODE_BLOCK_MAX_HEIGHT);
         const editorMaxWidth = sanitizeCssNumber(cfg.get("editorMaxWidth", DEFAULT_EDITOR_MAX_WIDTH), DEFAULT_EDITOR_MAX_WIDTH);
-        const fontFamily = sanitizeFontFamily(cfg.get("fontFamily", ""));
-        const imageSelectionColor = sanitizeCssColor(cfg.get("imageSelectionColor", DEFAULT_IMAGE_SELECTION_COLOR), DEFAULT_IMAGE_SELECTION_COLOR);
         const tableWrapMode = cfg.get<string>("tableWrapMode", "wrap");
         const tableWrapVars = resolveTableWrapVars(tableWrapMode);
         const tableWordBreak = tableWrapVars.wordBreak;
@@ -960,9 +948,8 @@ export class MarkdownEditorProvider
         const lang = vscode.env.language.toLowerCase();
         const isMac = process.platform === 'darwin';
         const translations = lang.startsWith('zh') ? ZH_CN_WEBVIEW : {};
-        const debugMode = cfg.get<boolean>("debugMode", false) === true;
         const serializationMode = sanitizeSerializationMode(cfg.get("markdown.serializationMode", "clean"));
-        const i18nScript = `window.__i18n=${JSON.stringify({ translations, isMac, debugMode, serializationMode })};`;
+        const i18nScript = `window.__i18n=${JSON.stringify({ translations, isMac, serializationMode })};`;
 
         return `<!DOCTYPE html>
 <html lang="${vscode.env.language}" style="background-color: var(--vscode-editor-background);">
@@ -976,7 +963,7 @@ export class MarkdownEditorProvider
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Markdown Editor</title>
   <link rel="stylesheet" href="${styleUri}">
-  <style>:root { --code-block-max-height: ${maxHeight}px; --editor-max-width: ${editorMaxWidth}px;${fontFamily ? ` --custom-font-family: ${fontFamily};` : ''} --image-selection-color: ${imageSelectionColor}; --epytor-table-word-break: ${tableWordBreak}; --epytor-table-white-space: ${tableWhiteSpace}; --epytor-table-overflow-x: ${tableOverflowX}; --epytor-table-width: ${tableWidth}; }</style>
+  <style>:root { --code-block-max-height: ${maxHeight}px; --editor-max-width: ${editorMaxWidth}px; --epytor-table-word-break: ${tableWordBreak}; --epytor-table-white-space: ${tableWhiteSpace}; --epytor-table-overflow-x: ${tableOverflowX}; --epytor-table-width: ${tableWidth}; }</style>
 </head>
 <body style="margin: 0; background-color: var(--vscode-editor-background);">
   <div id="epytor-loading"><svg class="epytor-matrix" width="16" height="16" viewBox="0 0 10 10" shape-rendering="crispEdges" aria-hidden="true">

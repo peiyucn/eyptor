@@ -9,7 +9,6 @@
 
 export const DEFAULT_CODE_BLOCK_MAX_HEIGHT = 600;
 export const DEFAULT_EDITOR_MAX_WIDTH = 900;
-export const DEFAULT_IMAGE_SELECTION_COLOR = "rgba(52, 211, 153, 0.6)";
 
 /** CSS 数值：必须是有限正数且不超上限（防 `0;}</style><script>` 类注入与离谱值），否则回退 */
 export function sanitizeCssNumber(value: unknown, fallback: number, max = 10000): number {
@@ -17,24 +16,6 @@ export function sanitizeCssNumber(value: unknown, fallback: number, max = 10000)
         return fallback;
     }
     return Math.round(value);
-}
-
-/** CSS 颜色：仅允许颜色语法字符集（拒绝 `;{}<>"'` 等语句/标签字符），否则回退 */
-export function sanitizeCssColor(value: unknown, fallback: string): string {
-    if (typeof value !== "string") return fallback;
-    const trimmed = value.trim();
-    if (trimmed.length === 0 || trimmed.length > 64) return fallback;
-    if (!/^[#(),.%\w\s/-]*$/.test(trimmed)) return fallback;
-    return trimmed;
-}
-
-/** 字体族：仅允许字体名字符（字母/数字/CJK/空白/逗号/引号/连字符/下划线/句点），否则回退空 */
-export function sanitizeFontFamily(value: unknown): string {
-    if (typeof value !== "string") return "";
-    const trimmed = value.trim();
-    if (trimmed.length === 0 || trimmed.length > 200) return "";
-    if (!/^[\w\s,"'.\-\u4e00-\u9fff]*$/.test(trimmed)) return "";
-    return trimmed;
 }
 
 /** 序列化模式白名单（值进入内联脚本 JSON 前必须收敛到枚举，防 `</script>` 逃逸） */

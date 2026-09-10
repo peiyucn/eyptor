@@ -17,8 +17,11 @@ body {
     padding: 0;
     background-color: var(--vscode-editor-background);
     color: var(--vscode-editor-foreground);
+    /* 字体跟随 VS Code 编辑器（口径与下面的 font-size 一致）；--custom-font-family 是
+       留给自定义 CSS 的可选覆盖位，未设置时依次落到编辑器字体、内置字体栈 */
     font-family: var(
         --custom-font-family,
+        var(--vscode-editor-font-family),
         "PingFang SC",
         "Microsoft YaHei",
         "Noto Sans SC",
@@ -309,25 +312,29 @@ html.epytor-viewport-frozen .toc-toggle-tab {
     --crepe-shadow-1: 0 1px 3px color-mix(in srgb, var(--vscode-editor-foreground) 45%, transparent);
     --crepe-shadow-2: 0 2px 6px color-mix(in srgb, var(--vscode-editor-foreground) 45%, transparent);
 
-    /* 字体：覆盖 Crepe 的 serif/sans，统一用 VSCode 编辑器字体 */
+    /* 字体：覆盖 Crepe 的 serif/sans，统一用 VSCode 编辑器字体（正文字体链同 html/body） */
     --crepe-font-default: var(
         --custom-font-family,
+        var(--vscode-editor-font-family),
         "PingFang SC", "Microsoft YaHei", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif
     );
     --crepe-font-title: var(
         --custom-font-family,
+        var(--vscode-editor-font-family),
         "PingFang SC", "Microsoft YaHei", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif
     );
     --crepe-font-code: var(--vscode-editor-font-family, monospace);
 }
 
-/* 确保 .milkdown 及子元素继承 VSCode 字体 */
+/* 确保 .milkdown 及子元素继承 VSCode 字体（同特异性下本表在 Crepe 主题之后加载，
+   无需 !important） */
 .milkdown,
 .milkdown .ProseMirror {
     font-family: var(
         --custom-font-family,
+        var(--vscode-editor-font-family),
         "PingFang SC", "Microsoft YaHei", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif
-    ) !important;
+    );
     caret-color: var(--vscode-editorCursor-foreground, auto);
     font-size: var(--vscode-editor-font-size, 14px) !important;
 }

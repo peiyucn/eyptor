@@ -3,12 +3,6 @@ import { MarkdownEditorProvider } from "./MarkdownEditorProvider";
 import { sanitizeSerializationMode } from "./utils/webviewConfigSanitize";
 import type { ToWebviewMessage } from "../shared/messages";
 
-function debugLog(...args: unknown[]): void {
-    if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) {
-        console.log(...args);
-    }
-}
-
 /**
  * 配置变更 → WebView 广播表（表驱动，新增配置项只加一行）：
  * 每项 = 配置全限定键 + 把配置值映射为消息的函数。
@@ -17,10 +11,6 @@ const CONFIG_BROADCASTS: ReadonlyArray<{
     section: string;
     message: (value: unknown) => ToWebviewMessage;
 }> = [
-    {
-        section: "epytor.debugMode",
-        message: (value) => ({ type: "setDebugMode", enabled: value === true }),
-    },
     {
         section: "epytor.markdown.serializationMode",
         message: (value) => ({ type: "setSerializationMode", mode: sanitizeSerializationMode(value) }),
@@ -31,67 +21,15 @@ const CONFIG_BROADCASTS: ReadonlyArray<{
     },
 ];
 
-/** 记录「workbench.editorAssociations 的 md 条目由本扩展注入」的标记（globalState） */
-const INJECTED_ASSOC_KEY = "epytor.injectedEditorAssociations";
-const MD_ASSOC_KEYS = ["*.md", "*.markdown"] as const;
-
-/**
- * 根据 defaultMode 同步 workbench.editorAssociations：
- * - "source"  → 注入 "*.md"/"*.markdown": "default"（文本编辑器直接打开）
- * - "wysiwyg" → 仅删除「本扩展注入过且值仍为 default」的条目（priority:default 自动生效）
- *
- * 回归（E2）：此前 wysiwyg 分支无条件 delete 用户全局配置里的 md 条目——既无法区分
- * 「本扩展上次注入的残留」与「用户经 Reopen Editor With 主动设置的关联」，每次激活
- * 都静默抹掉用户设置。现用 globalState 标记追踪注入来源：只清理自己写的值，
- * 用户自定义关联一律不动（source 注入覆盖用户自定义时在 debug 日志留痕）。
- */
-function syncEditorAssociation(mode: string, context: vscode.ExtensionContext): void {
-    const wbConfig = vscode.workspace.getConfiguration("workbench");
-    const current: Record<string, string> = {
-        ...(wbConfig.get<Record<string, string>>("editorAssociations") ?? {}),
-    };
-    const injected = context.globalState.get<boolean>(INJECTED_ASSOC_KEY, false);
-
-    if (mode === "source") {
-        const overwritten = MD_ASSOC_KEYS.filter((k) => current[k] !== undefined && current[k] !== "default");
-        for (const k of MD_ASSOC_KEYS) { current[k] = "default"; }
-        void wbConfig.update("editorAssociations", current, vscode.ConfigurationTarget.Global);
-        void context.globalState.update(INJECTED_ASSOC_KEY, true);
-        if (overwritten.length > 0) {
-            debugLog("[syncEditorAssociation] source 模式覆盖了用户自定义 md 关联:", overwritten.join(", "));
-        }
-        return;
-    }
-
-    // wysiwyg：只清理本扩展注入的条目；未注入过说明是用户自己的设置，绝不触碰
-    if (!injected) { return; }
-    let changed = false;
-    for (const k of MD_ASSOC_KEYS) {
-        if (current[k] === "default") {
-            delete current[k];
-            changed = true;
-        }
-    }
-    if (changed) {
-        void wbConfig.update("editorAssociations", current, vscode.ConfigurationTarget.Global);
-    }
-    void context.globalState.update(INJECTED_ASSOC_KEY, false);
-}
-
 export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         MarkdownEditorProvider.register(context),
     );
 
-    // 激活时同步一次 editorAssociations（非破坏性：只清理本扩展自己注入的值）
-    const initialMode = vscode.workspace
-        .getConfiguration("epytor")
-        .get<string>("defaultMode", "wysiwyg");
-    syncEditorAssociation(initialMode, context);
-
     // priority:default 下 md 直接以 WYSIWYG 打开（无「文本 tab → 转换」中间态——
-    // 该转换机制曾是打开闪动/双 tab/焦点互抢的根源，见 2026-09-08 简化设计）；
-    // defaultMode:"source" 由 syncEditorAssociation 注入 editorAssociations 实现。
+    // 该转换机制曾是打开闪动/双 tab/焦点互抢的根源，见 2026-09-08 简化设计）。
+    // 默认打开方式由用户在 VS Code 官方入口设置（Reopen Editor With → Configure
+    // default editor），本扩展不再改写 workbench.editorAssociations。
     // 全局搜索行号由 revealLine 命令拦截 + pendingNavigation 处理（见下）。
     // 回归（E3/C2）：此处原有 onDidChangeActiveTextEditor 行号回传监听器 + 配套
     // ExpiryWindowMap 抑制窗口——监听器的存在理由是 priority:option 时代「文本 tab
@@ -109,7 +47,6 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(
             'revealLine',
             (args: { lineNumber: number; at?: string }) => {
-                debugLog('[revealLine] 触发，lineNumber:', args.lineNumber, 'at:', args.at);
                 const targetLine = args.lineNumber + 1; // 转为 1-indexed
                 // 全局兜底槽：md 面板 ready / viewState 激活时消费（10s TTL）
                 MarkdownEditorProvider.current?.setGlobalRevealLine(targetLine);
@@ -136,32 +73,11 @@ export function activate(context: vscode.ExtensionContext) {
         ),
     );
 
-    // 调试模式开关命令：单命令，仅写配置——状态同步（postToAll 广播）统一由下方
-    // onDidChangeConfiguration 监听器处理（回归 B3：此前命令处理器与监听器双写，
-    // cfg.update 触发监听后同一动作执行两遍、每个面板收到两条相同消息）
-    const toggleDebugMode = () => {
-        const cfg = vscode.workspace.getConfiguration("epytor");
-        cfg.update(
-            "debugMode",
-            !cfg.get<boolean>("debugMode", false),
-            vscode.ConfigurationTarget.Global,
-        );
-    };
-    context.subscriptions.push(
-        vscode.commands.registerCommand("epytor.toggleDebugMode", toggleDebugMode),
-    );
-
     // 监听设置手动变更（从 VSCode 设置 UI 修改时同步）
     // 简单广播项用表驱动（回归 E10：此前每项一段同构分支，新增配置要复制第四份；
     // tableWrapMode 原在 Provider.register 内另设一份监听，现统一到此处）
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((e) => {
-            if (e.affectsConfiguration("epytor.defaultMode")) {
-                const mode = vscode.workspace
-                    .getConfiguration("epytor")
-                    .get<string>("defaultMode", "wysiwyg");
-                syncEditorAssociation(mode, context);
-            }
             for (const item of CONFIG_BROADCASTS) {
                 if (!e.affectsConfiguration(item.section)) { continue; }
                 const value = vscode.workspace.getConfiguration().get(item.section);

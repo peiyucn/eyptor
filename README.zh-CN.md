@@ -32,11 +32,11 @@
 
 ## 设置
 
+> 默认打开方式请用 VS Code 官方入口设置：右键 Markdown 文件 → **打开方式…** → **为「*.md」配置默认编辑器**。EPYTOR 不再自行管理编辑器关联。
+
 | 设置项 | 默认值 | 说明 |
 |---|---|---|
-| `epytor.defaultMode` | `"wysiwyg"` | 默认打开模式 |
 | `epytor.editorMaxWidth` | `900` | 编辑器最大宽度（px） |
-| `epytor.fontFamily` | `""` | 编辑器字体 |
 | `epytor.codeBlockMaxHeight` | `600` | 代码块最大高度（px） |
 | `epytor.tableWrapMode` | `"wrap"` | 表格单元格换行：`wrap`（任意字符断行）/ `nowrap`（不换行 + 横向滚动） |
 | `epytor.imageStorage` | `"local"` | 图片存储：`local` / `server` |
@@ -45,8 +45,6 @@
 | `epytor.imageServerFieldName` | `"file"` | 上传请求中图片文件的字段名 |
 | `epytor.imageServerExtraParams` | `""` | 上传请求附加参数，JSON 对象字符串格式，如 `{"token":"xxx"}` |
 | `epytor.imageServerResponsePath` | `"url"` | 从上传响应 JSON 中提取图片 URL 的点分路径，如 `data.url` |
-| `epytor.imageSelectionColor` | `"rgba(52, 211, 153, 0.6)"` | 编辑器中选中图片时的边框颜色 |
-| `epytor.debugMode` | `false` | 调试模式 |
 | `epytor.markdown.serializationMode` | `"clean"` | Markdown 保存模式：`clean` / `compatible` |
 
 > 自动保存使用 VS Code 内置设置 `files.autoSave`（`off` / `afterDelay` / `onFocusChange` / `onWindowChange`），EPYTOR 不再提供独立的自动保存设置。

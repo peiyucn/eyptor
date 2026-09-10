@@ -1,7 +1,7 @@
 /**
  * 序列化模式持久性回归测试（F1）：
  * init/revert 都走 createEditor，此前 createEditor 用启动快照重置
- * _serializationMode/_serializationDebug —— 用户中途改配置后，一次外部写盘
+ * _serializationMode —— 用户中途改配置后，一次外部写盘
  * 触发的 revert（重建编辑器）会把配置静默回滚。修复后重建不得重置。
  */
 import { afterEach, describe, expect, it } from "vitest";
@@ -29,7 +29,6 @@ if (typeof window.matchMedia === "undefined") {
 (window as unknown as Record<string, unknown>).__i18n = {
     translations: {},
     isMac: false,
-    debugMode: false,
     serializationMode: "clean",
 };
 

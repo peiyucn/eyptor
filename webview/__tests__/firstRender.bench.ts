@@ -28,7 +28,6 @@ if (typeof (window as unknown as Record<string, unknown>).IntersectionObserver =
 (window as unknown as Record<string, unknown>).__i18n = {
     translations: {},
     isMac: false,
-    debugMode: false,
     serializationMode: "clean",
 };
 

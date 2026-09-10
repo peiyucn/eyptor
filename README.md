@@ -32,11 +32,11 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 
 ## Settings
 
+> To choose how `.md` files open by default, use the built-in VS Code entry: right-click a Markdown file → **Reopen Editor With…** → **Configure default editor for '*.md'**. EPYTOR does not manage editor associations itself.
+
 | Setting | Default | Description |
 |---|---|---|
-| `epytor.defaultMode` | `"wysiwyg"` | Default open mode |
 | `epytor.editorMaxWidth` | `900` | Editor max width (px) |
-| `epytor.fontFamily` | `""` | Editor font family |
 | `epytor.codeBlockMaxHeight` | `600` | Code block max height (px) |
 | `epytor.tableWrapMode` | `"wrap"` | Table cell wrapping: `wrap` (break anywhere) / `nowrap` (no wrap + horizontal scroll) |
 | `epytor.imageStorage` | `"local"` | Image storage: `local` / `server` |
@@ -45,8 +45,6 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 | `epytor.imageServerFieldName` | `"file"` | Form field name for the image file in the upload request |
 | `epytor.imageServerExtraParams` | `""` | Extra upload request parameters as a JSON object string, e.g. `{"token":"xxx"}` |
 | `epytor.imageServerResponsePath` | `"url"` | Dot-notation path to extract the image URL from the upload response JSON, e.g. `data.url` |
-| `epytor.imageSelectionColor` | `"rgba(52, 211, 153, 0.6)"` | Border color when an image is selected in the editor |
-| `epytor.debugMode` | `false` | Debug mode |
 | `epytor.markdown.serializationMode` | `"clean"` | Markdown save mode: `clean` / `compatible` |
 
 > Auto save uses the built-in VS Code setting `files.autoSave` (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`). EPYTOR no longer ships its own auto-save setting.

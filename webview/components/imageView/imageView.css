@@ -20,8 +20,8 @@
 }
 
 .image-wrapper--selected {
-    border-color: var(--image-selection-color, rgba(52, 211, 153, 0.6));
-    box-shadow: 0 0 0 1px var(--image-selection-color, rgba(52, 211, 153, 0.6));
+    border-color: var(--vscode-list-activeSelectionBackground, rgba(52, 211, 153, 0.6));
+    box-shadow: 0 0 0 1px var(--vscode-list-activeSelectionBackground, rgba(52, 211, 153, 0.6));
 }
 
 /* 覆盖 ProseMirror 默认 NodeSelection 轮廓 */
@@ -314,8 +314,8 @@
     bottom: 3px;
     width: 8px;
     height: 8px;
-    border-right: 2px solid var(--image-selection-color, rgba(52, 211, 153, 0.8));
-    border-bottom: 2px solid var(--image-selection-color, rgba(52, 211, 153, 0.8));
+    border-right: 2px solid var(--vscode-list-activeSelectionBackground, rgba(52, 211, 153, 0.8));
+    border-bottom: 2px solid var(--vscode-list-activeSelectionBackground, rgba(52, 211, 153, 0.8));
     transition: transform 0.12s;
 }
 .img-resize-handle:hover::after {

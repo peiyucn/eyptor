@@ -46,13 +46,12 @@ export type ToExtensionMessage =
  * lineMap 在 init/revert 中为可选：Extension 始终发送，但 WebView 侧用 `?? []` 兜底以防万一。
  */
 export type ToWebviewMessage =
-    | { type: "init"; content: string; active?: boolean; serializationMode?: "clean" | "compatible"; debugMode?: boolean; lineMap?: number[]; lineEndMap?: number[]; scrollToLine?: number; frontmatter?: string; imageUriMap?: Record<string, string> }
+    | { type: "init"; content: string; active?: boolean; serializationMode?: "clean" | "compatible"; lineMap?: number[]; lineEndMap?: number[]; scrollToLine?: number; frontmatter?: string; imageUriMap?: Record<string, string> }
     | { type: "revert"; content: string; lineMap?: number[]; lineEndMap?: number[]; frontmatter?: string; imageUriMap?: Record<string, string> }
     | { type: "panelActiveState"; active: boolean }
     | { type: "requestContent" }
     | { type: "scrollToLine"; line: number }
     | { type: "lineMapUpdate"; lineMap: number[]; lineEndMap?: number[] }
-    | { type: "setDebugMode"; enabled: boolean }
     | { type: "setSerializationMode"; mode: "clean" | "compatible" }
     | { type: "tableWrapModeChanged"; mode: string }
     | { type: "imageUploaded"; id: string; url: string }

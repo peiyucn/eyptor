@@ -31,9 +31,6 @@
     "url": "https://github.com/peiyucn/epytor/issues"
   },
   "homepage": "https://github.com/peiyucn/epytor#readme",
-  "activationEvents": [
-    "onStartupFinished"
-  ],
   "main": "./dist/extension.js",
   "l10n": "./l10n",
   "contributes": {
@@ -62,10 +59,6 @@
         "command": "epytor.switchToPreview",
         "title": "%command.switchToPreview.title%",
         "icon": "$(eye)"
-      },
-      {
-        "command": "epytor.toggleDebugMode",
-        "title": "%command.toggleDebugMode.title%"
       }
     ],
     "keybindings": [
@@ -93,11 +86,6 @@
           "command": "epytor.switchToPreview",
           "group": "navigation",
           "when": "(resourceExtname == '.md' || resourceExtname == '.markdown') && activeCustomEditorId != 'epytor.editor'"
-        },
-        {
-          "command": "epytor.toggleDebugMode",
-          "group": "9_debug",
-          "when": "activeCustomEditorId == 'epytor.editor'"
         }
       ]
     },
@@ -110,34 +98,11 @@
           "minimum": 100,
           "description": "%config.codeBlockMaxHeight.description%"
         },
-        "epytor.defaultMode": {
-          "type": "string",
-          "enum": [
-            "wysiwyg",
-            "source"
-          ],
-          "enumDescriptions": [
-            "%config.defaultMode.wysiwyg%",
-            "%config.defaultMode.source%"
-          ],
-          "default": "wysiwyg",
-          "description": "%config.defaultMode.description%"
-        },
         "epytor.editorMaxWidth": {
           "type": "number",
           "default": 900,
           "minimum": 400,
           "description": "%config.editorMaxWidth.description%"
-        },
-        "epytor.fontFamily": {
-          "type": "string",
-          "default": "",
-          "description": "%config.fontFamily.description%"
-        },
-        "epytor.debugMode": {
-          "type": "boolean",
-          "default": false,
-          "description": "%config.debugMode.description%"
         },
         "epytor.markdown.serializationMode": {
           "type": "string",
@@ -208,12 +173,6 @@
           "type": "string",
           "default": "url",
           "description": "%config.imageServerResponsePath.description%"
-        },
-        "epytor.imageSelectionColor": {
-          "order": 16,
-          "type": "string",
-          "default": "rgba(52, 211, 153, 0.6)",
-          "description": "%config.imageSelectionColor.description%"
         }
       }
     }

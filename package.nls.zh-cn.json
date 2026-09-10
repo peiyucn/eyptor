@@ -3,13 +3,7 @@
   "command.switchToTextEditor.title": "EPYTOR OFF",
   "command.switchToPreview.title": "EPYTOR ON",
   "config.codeBlockMaxHeight.description": "代码块最大显示高度（像素），超出后出现滚动条。",
-  "config.defaultMode.description": "打开 .md 文件时的默认编辑模式。",
-  "config.defaultMode.wysiwyg": "以 WYSIWYG 模式打开（EPYTOR）。",
-  "config.defaultMode.source": "以 VS Code 文本编辑器打开。",
   "config.editorMaxWidth.description": "编辑器内容区域最大宽度（像素），默认 900。",
-  "config.fontFamily.description": "编辑器正文字体。留空则继承 VSCode 编辑器字体设置。示例：Georgia, serif 或 PingFang SC, sans-serif。",
-  "command.toggleDebugMode.title": "调试模式",
-    "config.debugMode.description": "显示调试叠层（如表格插入线触发范围），供开发调试使用。",
   "config.markdown.serializationMode.description": "Markdown 保存序列化模式。",
   "config.markdown.serializationMode.clean": "Clean 模式：减少不必要的 Markdown 转义和表格换行。",
   "config.markdown.serializationMode.compatible": "Compatible 模式：保持现有 EPYTOR 序列化行为。",
@@ -23,6 +17,5 @@
   "config.imageServerUrl.description": "图片上传接口地址（imageStorage 为 server 时使用）。",
   "config.imageServerFieldName.description": "上传请求中图片文件的字段名，默认为 file。",
   "config.imageServerExtraParams.description": "上传请求中附加的参数，JSON 对象字符串格式。示例：{\"token\":\"xxx\"}",
-  "config.imageServerResponsePath.description": "从上传响应 JSON 中提取图片 URL 的点分路径。示例：data.url",
-  "config.imageSelectionColor.description": "编辑器中选中图片时的边框颜色（CSS 颜色值）。默认与表格单元格选中颜色保持一致。"
+  "config.imageServerResponsePath.description": "从上传响应 JSON 中提取图片 URL 的点分路径。示例：data.url"
 }

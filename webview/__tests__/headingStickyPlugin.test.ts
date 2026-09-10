@@ -25,7 +25,6 @@ if (typeof window.matchMedia === "undefined") {
 (window as unknown as Record<string, unknown>).__i18n = {
     translations: {},
     isMac: false,
-    debugMode: false,
     serializationMode: "clean",
 };
 

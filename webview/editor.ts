@@ -321,7 +321,6 @@ let _disconnectCmObserver: (() => void) | null = null;
  * 闭包持有整篇旧文档的 mermaidCodeMap 且主题切换时重放全部旧回调 */
 let _unsubscribeTheme: (() => void) | null = null;
 let _serializationMode: SerializationMode = "clean";
-let _serializationDebug = false;
 
 export function setSerializationMode(mode: SerializationMode): void {
     _serializationMode = mode;
@@ -332,33 +331,14 @@ export function getSerializationMode(): SerializationMode {
     return _serializationMode;
 }
 
-export function setSerializationDebug(enabled: boolean): void {
-    _serializationDebug = enabled;
-}
-
 function prepareMarkdownForSave(source: string, serialized: string): string {
     if (_serializationMode === "compatible") return applyMinimalChanges(source, serialized);
     try {
-        const clean = serializeCleanMarkdown(source, serialized);
-        if (_serializationDebug) {
-            console.debug("[markdown-serialization]", {
-                nodeType: "document",
-                originalSource: source,
-                serializedSource: serialized,
-                output: clean,
-                reason: "clean-mode",
-                dirtyStatus: "phase1-whole-document",
-            });
-        }
-        return applyMinimalChanges(source, clean);
+        return applyMinimalChanges(source, serializeCleanMarkdown(source, serialized));
     } catch (error) {
-        if (_serializationDebug) {
-            console.warn("[markdown-serialization] Clean serializer failed; using compatible output", {
-                error,
-                reason: "clean-serializer-error",
-                dirtyStatus: "phase1-whole-document",
-            });
-        }
+        // 错误日志保留（与调试开关无关）：clean 序列化器异常时回退 compatible 输出，
+        // 静默回退会掩盖序列化器缺陷
+        console.warn("[markdown-serialization] Clean serializer failed; using compatible output", { error });
         return applyMinimalChanges(source, serialized);
     }
 }
@@ -401,9 +381,9 @@ export async function createEditor(
     onRenameImage?: (webviewUri: string, newBasename: string) => Promise<void>,
     onTocToggle?: () => void,
 ): Promise<Editor> {
-    // 回归（F1）：不再在此重置序列化模式/调试开关——init 与 revert 都走 createEditor，
+    // 回归（F1）：不再在此重置序列化模式——init 与 revert 都走 createEditor，
     // 用启动快照重置会把用户中途改的配置静默回滚（外部写盘触发 revert 即复现）。
-    // 运行期配置统一由 init 消息载荷与 setSerializationMode/setSerializationDebug 消息维护。
+    // 运行期配置统一由 init 消息载荷与 setSerializationMode 消息维护。
     // 用户交互纪元快照（回归 F4：与 index.ts 的延迟滚动共用同一跟踪器）
     const interactionEpochAtCreate = getUserInteractionEpoch();
 

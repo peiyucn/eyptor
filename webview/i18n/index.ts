@@ -5,7 +5,6 @@ declare global {
         __i18n?: {
             translations: Record<string, string>;
             isMac: boolean;
-            debugMode?: boolean;
             serializationMode?: SerializationMode;
         };
     }

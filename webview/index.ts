@@ -25,7 +25,6 @@ import {
     getEditorView,
     getMarkdownForSave,
     setSerializationMode,
-    setSerializationDebug,
 } from "./editor";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { TextSelection } from "@milkdown/kit/prose/state";
@@ -91,9 +90,6 @@ let currentEditor: Editor | null = null;
 let currentLineMap: number[] = [];
 /** 与 currentLineMap 同序的块结束行（滚动同步锚点） */
 let currentLineEndMap: number[] = [];
-// 启动值取自 HTML 注入的配置快照（回归：此前只由 setDebugMode 消息置位，
-// debugMode=true 启动时滚动调试日志直到发生一次配置变更才生效）
-let _debugLog = window.__i18n?.debugMode ?? false;
 
 // 修饰键监听：按住 Ctrl/Meta 时给 body 加 class，链接 hover 显示小手
 document.addEventListener('keydown', (e) => {
@@ -128,9 +124,6 @@ function getContentBlockElements(view: EditorView): HTMLElement[] {
         const dom = view.nodeDOM(offset);
         if (dom instanceof HTMLElement) { elements.push(dom); }
     });
-    if (_debugLog && elements.length !== view.state.doc.childCount) {
-        console.log('[blocks] DOM 块数', elements.length, '≠ 文档块数', view.state.doc.childCount);
-    }
     return elements;
 }
 
@@ -181,7 +174,6 @@ function scrollToSourceLine(view: EditorView, lineMap: number[], lineEndMap: num
         target = prevTop;
     }
 
-    if (_debugLog) console.log('[scrollToLine] targetLine:', targetLine, 'blockIdx:', prevIdx, 'start:', lineMap[prevIdx], 'end:', prevEnd, 'target:', target.toFixed(0));
     const place = () => window.scrollTo({ top: target - topbarH - stickyBarHeight() - VIEWPORT_PADDING });
     place();
     // 吸顶条的高度取决于滚动后的位置（滚动前多半还没吸顶，实测差一整行 ~45px）：
@@ -209,16 +201,13 @@ function getFirstVisibleSourceLine(view: EditorView, lineMap: number[], lineEndM
             if (end > start && rect.top < anchorY) {
                 const frac = Math.min(Math.max((anchorY - rect.top) / Math.max(1, rect.height), 0), 1);
                 const line = Math.round(start + frac * (end - start));
-                if (_debugLog) console.log('[getFirstVisible] result:', line, 'blockIdx:', i, 'start:', start, 'end:', end, 'frac:', frac.toFixed(2));
                 return line;
             }
-            if (_debugLog) console.log('[getFirstVisible] result:', start, 'blockIdx:', i, 'rect.bottom:', rect.bottom.toFixed(0));
             return start;
         }
     }
     // 全部块都在视口上方（理论上不会发生）→ 返回最后一块
     const fallback = lineMap[Math.min(lineMap.length - 1, children.length - 1)] ?? 1;
-    if (_debugLog) console.log('[getFirstVisible] fallback result:', fallback, 'lineMap.length:', lineMap.length);
     return fallback;
 }
 
@@ -923,12 +912,8 @@ async function handleEditorLifecycleMessage(
     if (isInit) {
         _isActivePanel = msg.active ?? true;
         // 运行期配置以 init 载荷为准（回归 F1：此前由 createEditor 用启动快照重置，
-        // revert 会把用户中途改的 serializationMode/debugMode 静默回滚）
+        // revert 会把用户中途改的序列化模式静默回滚）
         if (msg.serializationMode) { setSerializationMode(msg.serializationMode); }
-        if (msg.debugMode !== undefined) {
-            _debugLog = msg.debugMode;
-            setSerializationDebug(msg.debugMode);
-        }
     }
     await initEditor(container, msg.content);
     // webview 重建（retainContextWhenHidden:false）：还原折叠状态并收起加载指示。
@@ -1014,9 +999,6 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
     } else if (msg.type === "lineMapUpdate") {
         currentLineMap = msg.lineMap;
         currentLineEndMap = msg.lineEndMap ?? [];
-    } else if (msg.type === "setDebugMode") {
-        _debugLog = msg.enabled;
-        setSerializationDebug(msg.enabled);
     } else if (msg.type === "setSerializationMode") {
         setSerializationMode(msg.mode);
     } else if (msg.type === "tableWrapModeChanged") {
@@ -1068,7 +1050,7 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
     } else if (msg.type === "imagePathResolved") {
         dispatchImagePathResolved(msg.id, msg.webviewUri);
     } else {
-        // 未知消息类型：安全默认（丢弃），debug 模式给出可见性（回归：静默丢弃无诊断）
-        if (_debugLog) console.warn("[epytor] 未知消息类型:", (msg as { type: string }).type);
+        // 未知消息类型：安全默认（丢弃），但必须留痕（回归：静默丢弃无诊断）
+        console.warn("[epytor] 未知消息类型:", (msg as { type: string }).type);
     }
 }
