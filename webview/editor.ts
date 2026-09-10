@@ -18,6 +18,7 @@ import { toggleStrikethroughCommand } from "@milkdown/kit/preset/gfm";
 import type { EditorView } from "@milkdown/kit/prose/view";
 import type { Node as ProseNode } from "@milkdown/kit/prose/model";
 import { keymap } from "@milkdown/kit/prose/keymap";
+import { closeHistory } from "@milkdown/kit/prose/history";
 import { Plugin, NodeSelection, TextSelection } from "@milkdown/kit/prose/state";
 import { CellSelection } from "@milkdown/kit/prose/tables";
 import { $prose, getMarkdown } from "@milkdown/kit/utils";
@@ -558,6 +559,24 @@ export async function createEditor(
     // 导致行内代码边界的方向指示消失、方向键无法退出——自注册默认行为（7.22.0 一致）
     crepe.editor.use(cursor);
     crepe.editor.use($prose(() => createVirtualCursor()));
+
+    // 撤销粒度：每次输入一步（默认 500ms 合并窗会把连续输入并成一次撤销，
+    // 用户无法预知一次 Ctrl+Z 撤掉多少）。IME 组合内部仍按组合 ID 合并——
+    // 一段候选提交 = 一步，不会撤到拼音中间态。
+    crepe.editor.use($prose(() => {
+        let prevComposition: unknown = null;
+        return new Plugin({
+            filterTransaction(tr) {
+                if (!tr.docChanged) { return true; }
+                const composition = tr.getMeta("composition") ?? null;
+                const startsNewComposition = prevComposition !== null
+                    && composition !== null && composition !== prevComposition;
+                if (composition === null || startsNewComposition) { closeHistory(tr); }
+                prevComposition = composition;
+                return true;
+            },
+        });
+    }));
 
     // 注入保留的自定义配置
     crepe.editor
