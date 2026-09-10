@@ -48,12 +48,18 @@ describe("minimalDiff", () => {
         lines[lineCount / 2] = `paragraph ${lineCount / 2} changed`;
         const serialized = lines.join("\n");
 
-        const start = performance.now();
-        const output = applyMinimalChanges(saved, serialized);
-        const elapsed = performance.now() - start;
-
-        expect(output).toContain(`paragraph ${lineCount / 2} changed`);
-        expect(elapsed).toBeLessThan(1_000);
+        // 挂钟断言对机器负载与覆盖率插桩敏感（测覆盖率时单轮会翻数倍）：改为「多轮取最小值 + 宽松上限」。
+        // 实测（Node 24，1 万行改一行）：现实现约 30ms；去掉锚点与上限（= 全文 LCS）约 4s，相差约 120 倍，
+        // 真回归仍会被抓住。
+        applyMinimalChanges(saved, serialized); // 预热（首次调用含 JIT）
+        let best = Number.POSITIVE_INFINITY;
+        for (let round = 0; round < 3; round++) {
+            const start = performance.now();
+            const output = applyMinimalChanges(saved, serialized);
+            best = Math.min(best, performance.now() - start);
+            expect(output).toContain(`paragraph ${lineCount / 2} changed`);
+        }
+        expect(best).toBeLessThan(3_000);
     });
 });
 
