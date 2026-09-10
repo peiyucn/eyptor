@@ -12,27 +12,19 @@
  */
 
 export interface ExternalChangeContext {
-    /** webview 最新内容（含未落盘编辑） */
-    latest: string;
-    /** 本次外部写盘后的新盘内容（document.revert 之后的内存） */
-    diskContent: string;
-    /** 上次已知盘内容快照（外部写盘前的盘上内容） */
-    lastDisk: string | undefined;
-    /** revert 前内存内容（快照缺失时的保守基准） */
-    memoryBefore: string;
+    /**
+     * webview 是否有未落盘编辑（由 webview 的 markDirty 轻量标记维护，保存/采纳后清零）。
+     * **不要**改用内容比较：webview 交回的是**序列化结果**，会做 Markdown 规范化
+     * （如 `~` → `\~`），与盘上原文不可能逐字节相同。
+     */
+    webviewDirty: boolean;
 }
 
 export interface ExternalChangeDecision {
     /** true = 用户有未落盘编辑，保留 webview 内容并标记 dirty */
     keepUserContent: boolean;
-    /** 本次决策后的「已知盘内容」快照（保留分支也更新为外部内容——用户编辑相对其未落盘） */
-    nextLastDisk: string;
 }
 
 export function decideExternalChange(ctx: ExternalChangeContext): ExternalChangeDecision {
-    const baseline = ctx.lastDisk ?? ctx.memoryBefore;
-    return {
-        keepUserContent: ctx.latest !== baseline,
-        nextLastDisk: ctx.diskContent,
-    };
+    return { keepUserContent: ctx.webviewDirty };
 }

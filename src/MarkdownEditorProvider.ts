@@ -65,12 +65,19 @@ export class MarkdownEditorProvider
 
     // 记录最近一次我们自己写盘的时间，用于避免自身保存触发文件监听 revert
     private readonly _lastSaveTimes = new Map<string, number>();
+    /**
+     * webview 是否有未落盘编辑（由 webview 的 markDirty 轻量标记维护）。
+     * 外部写盘采纳判定**只认这个状态**——回归（用户报告「我根本没改东西，agent 写进去的
+     * 内容却每次被自动保存覆盖」）：此前用「webview 序列化结果 != 盘上原文快照」当作用户
+     * 有编辑的判据，但序列化会做 Markdown 规范化（如 `~` → `\~`），只要原文与序列化
+     * 结果差一个字节，就会被误判成「用户有未落盘编辑」→ 保留 webview 旧内容并置脏 →
+     * 自动保存把外部写入（AI 工具）整份覆盖。
+     */
+    private readonly _webviewDirty = new Map<string, boolean>();
 
     // 图片 webviewUri → relPath 映射（key: docUri.toString()）
     private readonly _imageUriMaps = new Map<string, Map<string, string>>();
     private readonly _frontmatterMap = new Map<string, string>(); // uriKey → raw frontmatter string
-    // 最近一次已知的盘上内容快照（外部写盘回退决策的基准，key: docUri.toString()）
-    private readonly _lastDiskContents = new Map<string, string>();
 
     // 待跳转行号（全局搜索点击 / 切换编辑器时临时存储）key: fsPath
     private readonly _pendingNavigations = new Map<string, { line: number; ts: number }>();
@@ -328,7 +335,6 @@ export class MarkdownEditorProvider
             this._imageUriMaps.delete(uriKey);
             this._initializedPanels.delete(uriKey);
             this._wordCounts.delete(uriKey);
-            this._lastDiskContents.delete(uriKey);
             this._fallbackWarnedUris.delete(uriKey);
             // 兜底结算未完成的拉取（面板已销毁，用内存内容）
             this._contentRequests.settleAll(uriKey);
@@ -447,8 +453,6 @@ export class MarkdownEditorProvider
     ): void {
         // 注意：vscode.workspace.createFileSystemWatcher 不会感知同一 Extension Host 写入的文件
         // 因此改用 Node.js fs.watch，直接监听 OS 级别事件
-        // 播种「已知盘内容」快照（面板打开时内存 = 盘上内容，外部写盘回退决策的基准）
-        this._lastDiskContents.set(uriKey, document.getText());
         import("fs").then(({ watch: fsWatch }) => {
             let debounceTimer: ReturnType<typeof setTimeout> | undefined;
             const targetFile = path.basename(document.uri.fsPath);
@@ -467,17 +471,13 @@ export class MarkdownEditorProvider
                         // 「webview 最新内容 vs 上次已知盘内容快照」判定用户是否有未落盘编辑。
                         // 回归：旧逻辑比较 latest 与「新盘内容」，外部修改后二者必然不同，
                         // 外部写盘永远进不了打开中的编辑器，后续保存还会覆盖它（数据丢失）。
-                        const memoryBefore = document.getText();
                         const latest = await this._requestContent(document, uriKey);
                         await document.revert(cts.token);
                         const diskContent = document.getText();
                         const decision = decideExternalChange({
-                            latest,
-                            diskContent,
-                            lastDisk: this._lastDiskContents.get(uriKey),
-                            memoryBefore,
+                            webviewDirty: this._webviewDirty.get(uriKey) === true,
                         });
-                        this._lastDiskContents.set(uriKey, decision.nextLastDisk);
+                        this._webviewDirty.set(uriKey, false);
                         if (decision.keepUserContent) {
                             // 用户有未落盘编辑：保留用户内容，并通知 VS Code 脏状态
                             // （回归：此前静默置脏，VS Code 认为干净，关窗不提示丢编辑）
@@ -541,6 +541,7 @@ export class MarkdownEditorProvider
             case "markDirty": {
                 // 轻量脏标记：内容已变（序列化改为保存时拉取）。保存入口统一为
                 // saveCustomDocument（Cmd+S / VS Code 原生 files.autoSave / 关窗）
+                this._webviewDirty.set(uriKey, true);
                 this._markDirty(document);
                 break;
             }
@@ -766,7 +767,7 @@ export class MarkdownEditorProvider
             return false;
         }
         this._lastSaveTimes.set(uriKey, Date.now());
-        this._lastDiskContents.set(uriKey, document.getText());
+        this._webviewDirty.set(uriKey, false);
         this._postLineMapUpdate(document, uriKey);
         return true;
     }
@@ -828,7 +829,7 @@ export class MarkdownEditorProvider
         await document.revert(cancellation);
         // 推送新内容给 WebView，触发编辑器重建
         const uriKey = document.uri.toString();
-        this._lastDiskContents.set(uriKey, document.getText());
+        this._webviewDirty.set(uriKey, false);
         const panel = this._webviewPanels.get(uriKey);
         if (panel) {
             const revertContent = document.getText();
