@@ -15,5 +15,7 @@
   "epytor.imageServer must be an object; the deprecated epytor.imageServer* settings are used instead": "epytor.imageServer must be an object; the deprecated epytor.imageServer* settings are used instead",
   "epytor.imageServer.extraParams must be a JSON object and was ignored": "epytor.imageServer.extraParams must be a JSON object and was ignored",
   "epytor.imageServerExtraParams is not valid JSON and was ignored": "epytor.imageServerExtraParams is not valid JSON and was ignored",
-  "Only strings, numbers and booleans are supported in epytor.imageServer.extraParams (nested objects and arrays are not); ignored keys: {0}": "Only strings, numbers and booleans are supported in epytor.imageServer.extraParams (nested objects and arrays are not); ignored keys: {0}"
+  "Only strings, numbers and booleans are supported in epytor.imageServer.extraParams (nested objects and arrays are not); ignored keys: {0}": "Only strings, numbers and booleans are supported in epytor.imageServer.extraParams (nested objects and arrays are not); ignored keys: {0}",
+  "Uploading to the image server was skipped because the image server settings come from workspace settings; the image was saved locally instead": "Uploading to the image server was skipped because the image server settings come from workspace settings; the image was saved locally instead",
+  "The image server URL uses plain http; uploads are sent unencrypted": "The image server URL uses plain http; uploads are sent unencrypted"
 }

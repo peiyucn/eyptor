@@ -4,7 +4,7 @@ import * as https from "https";
 import * as http from "http";
 import * as crypto from "crypto";
 import * as vscode from "vscode";
-import { isPathWithinBase } from "./pathGuard";
+import { planImageLocalDir } from "./imageLocalDir";
 import type { ImageServerSettings } from "./imageServerConfig";
 
 // ─── 常量 ────────────────────────────────────────────────────
@@ -52,9 +52,6 @@ export function generateFilename(altText: string, mimeType: string): string {
     return `${sanitized}_${ts}_${rand}.${ext}`;
 }
 
-// 候选图片目录列表（按优先级）
-const CANDIDATE_DIRS = ["images", "imgs", "assets/images", "assets"];
-
 // 检测目录是否存在
 async function dirExists(uri: vscode.Uri): Promise<boolean> {
     try {
@@ -63,6 +60,23 @@ async function dirExists(uri: vscode.Uri): Promise<boolean> {
     } catch {
         return false;
     }
+}
+
+/** 按候选顺序返回第一个已存在的目录（都不存在返回 null） */
+export async function firstExistingDir(candidates: string[]): Promise<string | null> {
+    for (const candidate of candidates) {
+        if (await dirExists(vscode.Uri.file(candidate))) { return candidate; }
+    }
+    return null;
+}
+
+/**
+ * 配置项是否来自工作区级设置（workspace / workspaceFolder）。
+ * 工作区级配置随克隆仓库生效、内容不可信；用户级全局配置是用户自己的选择，信任放行。
+ */
+export function isWorkspaceLevelSetting(cfg: vscode.WorkspaceConfiguration, key: string): boolean {
+    const inspect = cfg.inspect?.(key);
+    return inspect?.workspaceValue !== undefined || inspect?.workspaceFolderValue !== undefined;
 }
 
 export interface SaveImageResult {
@@ -83,56 +97,32 @@ export async function saveImageLocally(
     const ext = mimeToExt(mimeType);
     let targetDir: vscode.Uri;
 
-    const customPath = cfg.get<string>("imageLocalPath", "").trim();
+    // 目录解析与图库列举路径共用同一份纯逻辑（见 imageLocalDir.ts）：
+    // 自定义路径解析 + 工作区级越界降级 + 候选目录展开
+    const plan = planImageLocalDir({
+        customPath: cfg.get<string>("imageLocalPath", "").trim(),
+        docDir: docUri.scheme === "file" ? path.dirname(docUri.fsPath) : null,
+        workspaceRoot: vscode.workspace.getWorkspaceFolder(docUri)?.uri.fsPath ?? null,
+        workspaceLevel: isWorkspaceLevelSetting(cfg, "imageLocalPath"),
+    });
 
-    if (customPath) {
+    if (plan.kind === "fixed") {
         // 自定义路径：绝对路径直接用，相对路径优先 workspace root 再退回 .md 目录。
         // 边界校验仅针对「工作区级」配置（恶意仓库可随 .vscode/settings.json 注入、
-        // 把 imageLocalPath 指向任意目录如 ~/.ssh）；用户级全局配置是用户自己的选择，
-        // 信任放行。越界时降级默认 images/。
-        const inspect = cfg.inspect?.<string>("imageLocalPath");
-        const workspaceLevel =
-            inspect?.workspaceValue !== undefined ||
-            inspect?.workspaceFolderValue !== undefined;
-        const wsFolder = vscode.workspace.getWorkspaceFolder(docUri);
-        const mdDir = path.dirname(docUri.fsPath);
-        const resolved = path.isAbsolute(customPath)
-            ? customPath
-            : path.resolve(wsFolder?.uri.fsPath ?? mdDir, customPath);
-        const allowedBase = wsFolder?.uri.fsPath ?? mdDir;
-        targetDir =
-            !workspaceLevel || isPathWithinBase(resolved, allowedBase)
-                ? vscode.Uri.file(resolved)
-                : vscode.Uri.file(path.join(mdDir, "images"));
-        // 确保目录存在
+        // 把 imageLocalPath 指向任意目录如 ~/.ssh）；越界时 plan 已降级为
+        // <mdDir>/images。确保目录存在。
+        targetDir = vscode.Uri.file(plan.dir);
         await vscode.workspace.fs.createDirectory(targetDir);
     } else if (docUri.scheme !== "file") {
         // untitled 文件降级保存到 home/images/
         targetDir = vscode.Uri.file(path.join(os.homedir(), "images"));
         await vscode.workspace.fs.createDirectory(targetDir);
     } else {
-        // 自动检测：先在 workspace root 下找，再在 .md 同级目录找
-        const mdDir = vscode.Uri.joinPath(docUri, "..");
-        const wsFolder = vscode.workspace.getWorkspaceFolder(docUri);
-        const searchRoots = wsFolder ? [wsFolder.uri, mdDir] : [mdDir];
-
-        targetDir = vscode.Uri.joinPath(mdDir, "images"); // 默认兜底
-        let found = false;
-
-        outer: for (const root of searchRoots) {
-            for (const candidate of CANDIDATE_DIRS) {
-                const candidateUri = vscode.Uri.joinPath(root, candidate);
-                if (await dirExists(candidateUri)) {
-                    targetDir = candidateUri;
-                    found = true;
-                    break outer;
-                }
-            }
-        }
-
+        // 自动检测：先在 workspace root 下找，再在 .md 同级目录找；都没有则在 .md 同级创建 images/
+        const fallback = plan.fallbackDir ?? path.join(path.dirname(docUri.fsPath), "images");
+        const found = await firstExistingDir(plan.candidates);
+        targetDir = vscode.Uri.file(found ?? fallback);
         if (!found) {
-            // 在 .md 文件同级目录创建 images/
-            targetDir = vscode.Uri.joinPath(mdDir, "images");
             await vscode.workspace.fs.createDirectory(targetDir);
         }
     }

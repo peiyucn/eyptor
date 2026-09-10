@@ -4,8 +4,9 @@ import * as vscode from "vscode";
 import { MarkdownDocument } from "./MarkdownDocument";
 import { getNonce } from "./utils/getNonce";
 import { ZH_CN_WEBVIEW } from "./i18n/webviewTranslations";
-import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
-import { describeImageServerIssue, readImageServerConfig, type ImageServerIssue } from "./utils/imageServerConfig";
+import { firstExistingDir, isWorkspaceLevelSetting, saveImageLocally, uploadImageToServer } from "./utils/imageService";
+import { planImageLocalDir } from "./utils/imageLocalDir";
+import { describeImageServerIssue, readImageServerConfig, readServerStorageOrigin, shouldDowngradeServerStorage, type ImageServerIssue } from "./utils/imageServerConfig";
 import { computeDisplayLineRanges, type LineRange } from "./utils/lineMap";
 import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter, normalizeImageDestination, rewriteImageSources } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
@@ -1057,12 +1058,28 @@ export class MarkdownEditorProvider
         const cfg = vscode.workspace.getConfiguration('epytor', document.uri);
         const storage = cfg.get<string>('imageStorage', 'local');
         try {
+            // 图床配置：新键 epytor.imageServer 优先、弃用 4 键兜底；
+            // 非法配置必须给用户可见反馈（警告），不得静默忽略
+            const resolution = storage === 'server' ? readImageServerConfig(cfg) : undefined;
+            if (resolution) { this._warnImageServerIssues(resolution.issues); }
+
+            // 安全：工作区级配置决定「上传到哪」时降级为本地存储——克隆仓库可随
+            // .vscode/settings.json 注入 imageStorage=server 或 imageServer.url，
+            // 把用户粘贴的图片传到攻击者服务器；用户级全局配置是用户自己的选择。
+            const downgraded = resolution !== undefined
+                && shouldDowngradeServerStorage(readServerStorageOrigin(cfg, resolution.settings.url));
+            if (downgraded) {
+                panel.webview.postMessage({
+                    type: 'notice',
+                    message: vscode.l10n.t('Uploading to the image server was skipped because the image server settings come from workspace settings; the image was saved locally instead'),
+                });
+            } else if (resolution) {
+                // 非 https 不禁止（内网 http 有真实场景），但每个地址给一次可见警告
+                this._warnInsecureServerUrlOnce(resolution.settings.url);
+            }
+
             let url: string;
-            if (storage === 'server') {
-                // 图床配置：新键 epytor.imageServer 优先、弃用 4 键兜底；
-                // 非法配置必须给用户可见反馈（警告），不得静默忽略
-                const resolution = readImageServerConfig(cfg);
-                this._warnImageServerIssues(resolution.issues);
+            if (resolution && !downgraded) {
                 url = await uploadImageToServer(resolution.settings, data, mimeType, altText);
             } else {
                 const { relPath, absUri } = await saveImageLocally(document.uri, cfg, data, mimeType, altText);
@@ -1077,6 +1094,24 @@ export class MarkdownEditorProvider
             panel.webview.postMessage({ type: 'imageUploadError', id, error: errMsg });
             vscode.window.showErrorMessage(vscode.l10n.t('Image upload failed: {0}', errMsg));
         }
+    }
+
+    /** 已就非 https 图床地址告警过的 URL（每地址每会话一次，防每次上传重复骚扰） */
+    private readonly _insecureServerUrlWarned = new Set<string>();
+
+    /** 非 https 图床地址 → 可见警告一次（不禁止：内网 http 有真实场景） */
+    private _warnInsecureServerUrlOnce(serverUrl: string): void {
+        let isPlainHttp = false;
+        try {
+            isPlainHttp = new URL(serverUrl).protocol === 'http:';
+        } catch {
+            return; // 地址本身无法解析：上传时会给出明确错误
+        }
+        if (!isPlainHttp || this._insecureServerUrlWarned.has(serverUrl)) { return; }
+        this._insecureServerUrlWarned.add(serverUrl);
+        void vscode.window.showWarningMessage(
+            vscode.l10n.t('The image server URL uses plain http; uploads are sent unencrypted'),
+        );
     }
 
     /** 图床配置非法项 → 用户可见警告（本地化；文案由 describeImageServerIssue 提供） */
@@ -1094,37 +1129,25 @@ export class MarkdownEditorProvider
         id: string,
     ): Promise<void> {
         const cfg = vscode.workspace.getConfiguration('epytor', document.uri);
-        const customPath = cfg.get<string>('imageLocalPath', '').trim();
         const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.tiff', '.ico']);
-        const CANDIDATE_DIRS = ['images', 'imgs', 'assets/images', 'assets'];
+
+        // 与写路径（imageService.saveImageLocally）共用同一份解析与越界检查：
+        // 回归——此处此前没有边界校验，工作区级 imageLocalPath 可让图库列出工作区
+        // 外任意目录（如 ~/.ssh）的文件名与缩略图。
+        const plan = planImageLocalDir({
+            customPath: cfg.get<string>('imageLocalPath', '').trim(),
+            docDir: document.uri.scheme === 'file' ? path.dirname(document.uri.fsPath) : null,
+            workspaceRoot: vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ?? null,
+            workspaceLevel: isWorkspaceLevelSetting(cfg, 'imageLocalPath'),
+        });
 
         let targetDir: vscode.Uri | null = null;
-
-        if (customPath) {
-            if (path.isAbsolute(customPath)) {
-                targetDir = vscode.Uri.file(customPath);
-            } else {
-                const wsFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-                targetDir = wsFolder
-                    ? vscode.Uri.joinPath(wsFolder.uri, customPath)
-                    : vscode.Uri.joinPath(document.uri, '..', customPath);
-            }
-        } else if (document.uri.scheme === 'file') {
-            const mdDir = vscode.Uri.joinPath(document.uri, '..');
-            const wsFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-            const searchRoots = wsFolder ? [wsFolder.uri, mdDir] : [mdDir];
-            outer: for (const root of searchRoots) {
-                for (const candidate of CANDIDATE_DIRS) {
-                    const candidateUri = vscode.Uri.joinPath(root, candidate);
-                    try {
-                        const stat = await vscode.workspace.fs.stat(candidateUri);
-                        if (stat.type === vscode.FileType.Directory) {
-                            targetDir = candidateUri;
-                            break outer;
-                        }
-                    } catch { /* not found */ }
-                }
-            }
+        if (plan.kind === 'fixed') {
+            targetDir = vscode.Uri.file(plan.dir);
+        } else {
+            const found = await firstExistingDir(plan.candidates);
+            const dir = found ?? plan.fallbackDir;
+            targetDir = dir ? vscode.Uri.file(dir) : null;
         }
 
         const images: Array<{ relPath: string; webviewUri: string; name: string }> = [];

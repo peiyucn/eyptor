@@ -17,6 +17,7 @@ import { resolveTableWrapVars } from "../shared/tableWrap";
 import type { ToWebviewMessage } from "../shared/messages";
 import { PendingRequestRegistry } from "./utils/pendingRequest";
 import { applyTableWrapVars } from "./utils/tableWrap";
+import { showNotice } from "./ui/notice";
 import { computeAllHeadingSignature } from "./utils/headingFold";
 import { headingFoldPluginKey } from "./headingFoldPlugin";
 import {
@@ -1003,6 +1004,8 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         setSerializationMode(msg.mode);
     } else if (msg.type === "tableWrapModeChanged") {
         applyTableWrapVars(resolveTableWrapVars(msg.mode));
+    } else if (msg.type === "notice") {
+        showNotice(msg.message);
     } else if (msg.type === "requestContent") {
         // 保存时拉取（拉取式架构）：Extension 在 Cmd+S / 原生 autoSave 时请求一次序列化
         _hasUnsavedChanges = false; // 已按当前内容应答，落盘由扩展负责

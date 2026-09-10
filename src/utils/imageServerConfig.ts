@@ -216,6 +216,57 @@ export function resolveImageServerConfig(
     return { settings: { url, fieldName, extraParams: extra.params, responsePath }, issues };
 }
 
+/** 图床目标（存储方式 / 上传地址）的来源 */
+export interface ServerStorageOrigin {
+    /** imageStorage 来自工作区级配置 */
+    storageFromWorkspace: boolean;
+    /** 生效的上传地址来自工作区级配置（新旧键都查） */
+    urlFromWorkspace: boolean;
+}
+
+/**
+ * 安全：判断图床目标是否由工作区级配置决定。
+ *
+ * 克隆仓库可随 `.vscode/settings.json` 注入 imageStorage=server 或
+ * imageServer.url，把用户粘贴的图片上传到攻击者服务器；用户级全局配置是用户
+ * 自己的选择，信任放行（与 imageLocalPath 同口径）。
+ *
+ * url 的判定口径：生效地址与任一处「工作区级」候选值文本相同（含新旧键）。
+ * 宁可多降级一次，也不放过工作区级注入。
+ */
+export function readServerStorageOrigin(
+    cfg: Pick<vscode.WorkspaceConfiguration, "inspect">,
+    effectiveUrl: string,
+): ServerStorageOrigin {
+    const storageInspect = cfg.inspect?.("imageStorage");
+    const storageFromWorkspace =
+        storageInspect?.workspaceValue !== undefined ||
+        storageInspect?.workspaceFolderValue !== undefined;
+
+    const candidates: unknown[] = [];
+    for (const section of ["imageServer", "imageServerUrl"]) {
+        const inspect = cfg.inspect?.(section);
+        if (!inspect) { continue; }
+        for (const value of [inspect.workspaceFolderValue, inspect.workspaceValue]) {
+            if (section === "imageServer") {
+                if (isPlainObject(value)) { candidates.push(value["url"]); }
+            } else {
+                candidates.push(value);
+            }
+        }
+    }
+    const urlFromWorkspace = effectiveUrl !== "" && candidates.some(
+        (candidate) => typeof candidate === "string" && candidate.trim() === effectiveUrl,
+    );
+
+    return { storageFromWorkspace, urlFromWorkspace };
+}
+
+/** 是否必须把已配置的 server 存储降级为本地（安全） */
+export function shouldDowngradeServerStorage(origin: ServerStorageOrigin): boolean {
+    return origin.storageFromWorkspace || origin.urlFromWorkspace;
+}
+
 /** 从 VS Code 配置读取（`cfg` 为 `getConfiguration("epytor", uri)`） */
 export function readImageServerConfig(
     cfg: Pick<vscode.WorkspaceConfiguration, "get">,

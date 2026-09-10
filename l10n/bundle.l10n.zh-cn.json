@@ -15,5 +15,7 @@
   "epytor.imageServer must be an object; the deprecated epytor.imageServer* settings are used instead": "epytor.imageServer 必须是对象；本次改用已弃用的 epytor.imageServer* 旧设置",
   "epytor.imageServer.extraParams must be a JSON object and was ignored": "epytor.imageServer.extraParams 必须是 JSON 对象，本次已忽略",
   "epytor.imageServerExtraParams is not valid JSON and was ignored": "epytor.imageServerExtraParams 不是合法 JSON，本次已忽略",
-  "Only strings, numbers and booleans are supported in epytor.imageServer.extraParams (nested objects and arrays are not); ignored keys: {0}": "epytor.imageServer.extraParams 的值只支持字符串、数字或布尔（不支持嵌套对象与数组）；已忽略的键：{0}"
+  "Only strings, numbers and booleans are supported in epytor.imageServer.extraParams (nested objects and arrays are not); ignored keys: {0}": "epytor.imageServer.extraParams 的值只支持字符串、数字或布尔（不支持嵌套对象与数组）；已忽略的键：{0}",
+  "Uploading to the image server was skipped because the image server settings come from workspace settings; the image was saved locally instead": "图床设置来自工作区配置，已跳过上传，改为保存到本地",
+  "The image server URL uses plain http; uploads are sent unencrypted": "图床地址使用明文 http，上传内容不会被加密"
 }

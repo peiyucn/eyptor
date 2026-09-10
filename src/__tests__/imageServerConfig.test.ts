@@ -5,6 +5,8 @@ import {
     IMAGE_SERVER_FIELD_NAME_PATTERN,
     describeImageServerIssue,
     readImageServerConfig,
+    readServerStorageOrigin,
+    shouldDowngradeServerStorage,
     resolveImageServerConfig,
     sanitizeMultipartText,
 } from "../../src/utils/imageServerConfig";
@@ -217,6 +219,76 @@ describe("readImageServerConfig", () => {
         expect(settings.url).toBe("https://new.example.com");
         expect(settings.fieldName).toBe("legacyField");
         expect(settings.responsePath).toBe(DEFAULT_IMAGE_SERVER_RESPONSE_PATH);
+    });
+});
+
+describe("readServerStorageOrigin / shouldDowngradeServerStorage", () => {
+    /** 只提供 inspect 的配置桩（inspect 返回值按 section 注入） */
+    const makeCfg = (sections: Record<string, unknown>) => ({
+        inspect: (key: string) => sections[key] as never,
+    });
+
+    it("imageStorage 来自工作区级 应该 判定为需降级", () => {
+        const origin = readServerStorageOrigin(
+            makeCfg({ imageStorage: { workspaceValue: "server" } }),
+            "",
+        );
+
+        expect(origin).toEqual({ storageFromWorkspace: true, urlFromWorkspace: false });
+        expect(shouldDowngradeServerStorage(origin)).toBe(true);
+    });
+
+    it("imageStorage 来自 workspaceFolder 也应该 判定为需降级", () => {
+        const origin = readServerStorageOrigin(
+            makeCfg({ imageStorage: { workspaceFolderValue: "server" } }),
+            "",
+        );
+
+        expect(origin.storageFromWorkspace).toBe(true);
+    });
+
+    it("生效 url 与新键的工作区级 url 相同 应该 判定为需降级", () => {
+        const origin = readServerStorageOrigin(
+            makeCfg({ imageServer: { workspaceValue: { url: "https://evil.example.com/api" } } }),
+            "https://evil.example.com/api",
+        );
+
+        expect(origin.urlFromWorkspace).toBe(true);
+        expect(shouldDowngradeServerStorage(origin)).toBe(true);
+    });
+
+    it("生效 url 与旧键的工作区级 url 相同 应该 判定为需降级", () => {
+        const origin = readServerStorageOrigin(
+            makeCfg({ imageServerUrl: { workspaceFolderValue: "https://evil.example.com/api" } }),
+            "https://evil.example.com/api",
+        );
+
+        expect(origin.urlFromWorkspace).toBe(true);
+    });
+
+    it("生效 url 只出现在用户级配置 应该 放行", () => {
+        const origin = readServerStorageOrigin(
+            makeCfg({ imageServer: { globalValue: { url: "https://mine.example.com/api" } } }),
+            "https://mine.example.com/api",
+        );
+
+        expect(origin.urlFromWorkspace).toBe(false);
+        expect(shouldDowngradeServerStorage(origin)).toBe(false);
+    });
+
+    it("无生效 url 且 imageStorage 非工作区级 应该 放行", () => {
+        const origin = readServerStorageOrigin(
+            makeCfg({ imageStorage: { globalValue: "server" } }),
+            "",
+        );
+
+        expect(shouldDowngradeServerStorage(origin)).toBe(false);
+    });
+
+    it("inspect 不存在时 应该 不抛错且放行", () => {
+        const origin = readServerStorageOrigin({ inspect: undefined } as never, "https://x.example.com");
+
+        expect(shouldDowngradeServerStorage(origin)).toBe(false);
     });
 });
 

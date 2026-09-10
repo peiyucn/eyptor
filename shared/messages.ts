@@ -54,6 +54,8 @@ export type ToWebviewMessage =
     | { type: "lineMapUpdate"; lineMap: number[]; lineEndMap?: number[] }
     | { type: "setSerializationMode"; mode: "clean" | "compatible" }
     | { type: "tableWrapModeChanged"; mode: string }
+    /** WebView 内一次性提示条（文案已由 Extension 本地化） */
+    | { type: "notice"; message: string }
     | { type: "imageUploaded"; id: string; url: string }
     | { type: "imageUploadError"; id: string; error: string }
     | { type: "projectImagesList"; id: string; images: ProjectImage[] }
