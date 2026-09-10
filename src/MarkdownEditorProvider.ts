@@ -77,12 +77,23 @@ export class MarkdownEditorProvider
      */
     private readonly _webviewDirty = new Map<string, boolean>();
     /**
-     * webview 在失活/卸载前主动推来的未落盘内容（unsavedContent 消息）。
-     * 面板不可见时优先用它——此刻 webview 可能已被宿主销毁，等待拉取只会超时
-     * （VS Code 报「编辑器无响应，文件可能已用旧内容保存」），并且会丢编辑。
+     * webview 主动推来的未落盘内容副本（unsavedContent 消息：停手 400ms、blur、pagehide、
+     * 页面隐藏时推送，见 webview/index.ts）。
+     *
+     * 保活架构（retainContextWhenHidden: true）下切标签**不**销毁 webview，这份副本仍有两处
+     * 真实职责：
+     *   1. webview 真的消失后又重建时（关标签重开、窗口重载、切源码再切回）用它重建编辑器
+     *      内容——此刻未落盘编辑只存在于这份副本里（见 ready 分支）；
+     *   2. 面板问不了（未 ready / 非激活 / 已销毁）时，它就是保存与热退出备份的兜底内容
+     *      （见 _requestContent）。
      */
     private readonly _pushedContent = new Map<string, string>();
-    /** 面板是否处于激活（onDidChangeViewState 维护）：非激活时保存直接用推送副本，绝不等待拉取 */
+    /**
+     * 面板是否处于激活（onDidChangeViewState 维护）。
+     * 它**不是**「webview 还在不在」的判据（保活下一直在），而是「要不要等它回话」的保守闸门：
+     * 只有当前激活的面板才保证有人读消息并及时回包，其余情况立刻用手里的副本或内存内容返回
+     * （见 _requestContent 的 canAskWebview）。
+     */
     private readonly _panelActive = new Map<string, boolean>();
 
     // 图片 webviewUri → relPath 映射（key: docUri.toString()）
@@ -375,11 +386,15 @@ export class MarkdownEditorProvider
                 // panel 已销毁（切换/关闭竞态），忽略
             }
             if (!p.active) {
-                // 保活架构下失活**不销毁** webview，但这条拉取写盘保留：webview 仍会因
-                // 关闭标签 /「重新打开方式」重建，失活时先落盘未保存编辑本身无害。
-                // 未落盘的编辑必须在 webview 可能消失之前拉取写盘——否则重建时只能拿到旧内容
-                // （切走即丢编辑）。拉取式保存自带超时兜底（CONTENT_REQUEST_TIMEOUT_MS），
-                // webview 已被销毁时回退内存内容，不会悬挂。
+                // 失活即落盘（回归 9941cef 的兜底，保活下继续保留、理由变了）：保活后切标签
+                // 本身不再销毁 webview，但**关标签 / 切到源码 / 退出窗口**都会让它消失，而
+                // 脏标记只告诉 VS Code「变了」、内容仍只在 webview 里——失活时先写盘，后面
+                // 任何路径都不会再丢。
+                //
+                // 诚实标注：这一步拿到的多是**副本**而不是拉取。_panelActive 在上一行刚被置为
+                // false，_requestContent 走「问不了 webview」的短路分支，用的是 _pushedContent
+                // （停手 400ms / blur 时推来的）或内存内容——所以停手 400ms 内的最后一次改动可能
+                // 不在这次落盘里（见 README 已知限制）。
                 if (this._webviewDirty.get(uriKey) === true) {
                     const cts = new vscode.CancellationTokenSource();
                     void this.saveCustomDocument(document, cts.token).finally(() => cts.dispose());
@@ -541,8 +556,9 @@ export class MarkdownEditorProvider
             case "ready": {
                 // 标记面板已初始化，onDidChangeViewState 此后才会处理 pending navigation
                 this._initializedPanels.add(uriKey);
-                // 未落盘编辑优先：保活架构下切标签不销毁 webview，这条路径覆盖的是关闭标签 /
-                // 重开（webview 真的重建）时的兜底。
+                // 未落盘编辑优先：保活下切标签不销毁 webview，会走到 ready 的只有「webview
+                // 真的重建」——关标签重开、窗口重载、切到源码再切回（reopenActiveEditorWith
+                // 换掉编辑器类型）。
                 // _markDirty 只通知 VS Code「变了」、并不把内容拷进文档——webview 重建时若
                 // 此刻有未保存改动，必须用 webview 推来的副本重建，否则新实例拿到旧内容
                 // （编辑丢失，脏标记却还在，用户下次保存会把旧内容写回磁盘）。
@@ -556,8 +572,8 @@ export class MarkdownEditorProvider
                 } else if (pushedContent !== undefined) {
                     // 与内存一致：只是一次 webview 重建，没有未保存改动 ——
                     // 回归：此前无条件 update+markDirty，导致「开着几个 md 什么都没干」，
-                    // 文档被反复置脏 → 到点自动保存时该 webview 已被销毁/未初始化 →
-                    // 等拉取超时 → VS Code 报「编辑器无响应，文件可能已用旧内容保存」
+                    // 文档被反复置脏 → 到点自动保存时该 webview 尚未 ready（或已随标签关闭
+                    // 消失）→ 等拉取超时 → VS Code 报「编辑器无响应，文件可能已用旧内容保存」
                     this._pushedContent.delete(uriKey);
                     this._webviewDirty.set(uriKey, false);
                 }
@@ -588,7 +604,8 @@ export class MarkdownEditorProvider
                 break;
             }
             case "unsavedContent": {
-                // 失活兜底推送：存内存 + 置脏；随后的保存直接用它（不再等拉取）
+                // 内容副本推送（停手 400ms / blur / pagehide）：存副本 + 置脏；webview 重建时
+                // 用它恢复内容，保存问不到 webview 时用它兜底（不再等拉取）
                 this._pushedContent.set(uriKey, message.content);
                 this._webviewDirty.set(uriKey, true);
                 break;
@@ -842,10 +859,12 @@ export class MarkdownEditorProvider
         const panel = this._webviewPanels.get(uriKey);
         const pushed = this._pushedContent.get(uriKey);
         const fallback = pushed ?? document.getText();
-        // 只有「存在面板 + 面板处于激活 + 已收到过 ready」时才值得等 webview 回话。
-        // 其余情况（失活/销毁中/重建中/没有面板）等待只会超时——VS Code 会报
-        // 「编辑器无响应，文件可能已用旧内容保存」，而且多文档同时开着时这条路径
-        // 会在「什么都没干」时被自动保存触发。直接用推送副本或内存内容，立即返回。
+        // 只对「存在面板 + 面板处于激活 + 已收到过 ready」的面板等待回包。其余情况（还没
+        // ready / 非激活 / 已销毁 / 没有面板）等待没有把握：超时后 VS Code 会报「编辑器无
+        // 响应，文件可能已用旧内容保存」，而多文档同时开着时这条路径会在「什么都没干」时被
+        // 自动保存触发（回归 a4349cc）。保活架构下非激活面板其实还活着、多半能回包，这里仍
+        // 按保守口径处理——立即用推送副本或内存内容返回。代价是停手 400ms 内的最后改动可能
+        // 不在这次落盘里（见 README 已知限制）。
         const canAskWebview = panel !== undefined
             && this._panelActive.get(uriKey) === true
             && this._initializedPanels.has(uriKey);

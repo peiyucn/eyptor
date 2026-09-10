@@ -404,7 +404,7 @@ async function initEditor(
         markdown,
         () => {
             // 文档变更轻量通知（序列化已在保存时拉取，这里只做 UI 刷新 + 脏标记）
-            _hasUnsavedChanges = true; // 同步置位：失活兜底推送不依赖下面的防抖
+            _hasUnsavedChanges = true; // 同步置位：兜底推送不依赖下面的防抖
             scheduleContentPush(); // 停手 400ms 后推送副本（尾沿，打字期间零序列化）
             if (_docChangedTimer) clearTimeout(_docChangedTimer);
             _docChangedTimer = setTimeout(() => {
@@ -670,12 +670,14 @@ window.addEventListener("keydown", (e) => {
 // WebView 加载完成，通知 Extension 侧发送初始内容
 notifyReady();
 
-// ── 失活兜底：未落盘内容主动回传 ────────────────────────────────
+// ── 内容兜底：未落盘内容主动回传 ────────────────────────────────
 /**
- * retainContextWhenHidden:false 下，切走时宿主会**先销毁 iframe**，扩展再发
- * requestContent 已经无人应答——VS Code 会报「编辑器无响应，文件可能已用旧内容保存」，
+ * 保活架构（retainContextWhenHidden: true）下切标签不销毁 iframe，但 webview 仍会因
+ * **关标签 / 窗口重载 / 切到源码再切回**整个消失（热退出、进程被杀同理）。那些时刻扩展
+ * 再发 requestContent 已经无人应答——VS Code 会报「编辑器无响应，文件可能已用旧内容保存」，
  * 且未落盘的编辑丢失。blur / pagehide 是 webview 内部**还能拿到编辑器状态的最后时机**，
- * 此刻主动把内容推给扩展（扩展存内存，随后的保存直接用，不再等拉取）。
+ * 此刻主动把内容推给扩展（扩展存副本：webview 重建时用它恢复内容，保存/备份问不到 webview
+ * 时用它兜底）。
  */
 let _hasUnsavedChanges = false;
 
@@ -691,17 +693,18 @@ function pushContentNow(): void {
 /**
  * 停手后推送内容给扩展（**尾沿**，不在打字期间推）。
  *
- * 背景：宿主销毁 webview 的时机早于扩展能拉取的时机（实测连 blur/pagehide 都来不及），
- * 而 VS Code 随后保存时又会等一个已经不存在的 webview → 超时后用旧内容落盘并报
- * 「编辑器无响应」。所以扩展侧必须持有一份副本。
+ * 需求（保活下不变）：扩展侧必须持有一份不依赖拉取的副本——webview 消失（关标签 / 窗口
+ * 重载 / 切到源码再切回）后重建要用它恢复内容；保存时问不到 webview（未 ready / 非激活）
+ * 也要用它兜底，否则只能等超时后用旧内存内容落盘并报「编辑器无响应」。
  *
  * 但前沿推送代价太高（回归）：连续输入时每约 400ms 就要整篇序列化一次，实测 3000 行
  * 单次 getMarkdown() 约 77ms（getMarkdownForSave P50 84ms / P95 132ms）、942 行约 20ms，
  * 打字期间会周期性卡顿。改为停手 400ms 后才序列化一次：打字期间零成本，那笔开销落在
  * 用户已经停手的时候。
  *
- * 代价（与市面实现同档，zaaack 100ms / markdown-for-humans 500ms）：停手后这 400ms 内
- * 切走，最后一次改动不会被交接。
+ * 代价（与市面实现同档，zaaack 100ms / markdown-for-humans 500ms）：停手后这 400ms 内的
+ * 改动还没进副本——此刻若触发保存，落盘的是上一份副本或扩展内存内容（blur/pagehide 会立即
+ * 补推一次，但「宿主触发保存」与「webview 收到 blur」的先后顺序没有保证）。
  */
 function scheduleContentPush(): void {
     if (_pushTimer !== null) { clearTimeout(_pushTimer); }
@@ -903,8 +906,9 @@ async function handleEditorLifecycleMessage(
         if (msg.serializationMode) { setSerializationMode(msg.serializationMode); }
     }
     await initEditor(container, msg.content);
-    // webview 重建（retainContextWhenHidden:false）：还原折叠状态。
-    // 折叠会改变布局，必须在定位滚动之前恢复。
+    // 还原折叠状态：服务两个真实场景——① 同一个 webview 内的编辑器实例被重建（revert、
+    // 外部写盘采纳）；② webview 整体重建（窗口重载、关标签重开）时从 webview state 取回。
+    // 保活下切标签不需要它（实例根本没销毁）。折叠会改变布局，必须在定位滚动之前恢复。
     restoreFoldState();
     // 新 WebView 打开时主动获取 DOM 焦点。
     // 若不调用：旧 WebView（path-link-test.md）在 Cmd+Click 后 blur() 释放了焦点，
@@ -927,8 +931,8 @@ async function handleEditorLifecycleMessage(
         _pendingScrollLine = msg.scrollToLine;
     } else if (isInit && _pendingScrollLine === null
         && Number((getWebviewState() as { scrollY?: number } | null)?.scrollY ?? 0) > 0) {
-        // 折叠重建（retainContextWhenHidden:false：切到别的标签时 webview 被销毁，切回来
-        // 是全新实例）→ 恢复上次滚动位置，否则每次切回都从文档顶部开始。
+        // webview 重建（窗口重载 / 关标签重开）→ 恢复上次滚动位置，否则每次重建都从文档
+        // 顶部开始。保活下切标签不经过这里：iframe 与编辑器实例都活着，滚动位置天然保留。
         // 首次打开（无存档）走下面的顶部复位，保证 frontmatter 可见。
         const savedScrollY = Number((getWebviewState() as { scrollY?: number } | null)?.scrollY ?? 0);
         scheduleDelayedScroll(() => { window.scrollTo({ top: savedScrollY }); });

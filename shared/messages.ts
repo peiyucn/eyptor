@@ -25,7 +25,7 @@ export type PathSuggestionItem = {
 export type ToExtensionMessage =
     | { type: "ready" }
     | { type: "markDirty" }
-    /** webview 失活/卸载前主动推来的未落盘内容（拉取式保存在此之后已无人应答） */
+    /** webview 主动推来的未落盘内容副本（停手 400ms / blur / pagehide；扩展在 webview 重建时用它恢复内容、问不到 webview 时用它兜底保存） */
     | { type: "unsavedContent"; content: string }
     | { type: "contentResponse"; content: string }
     | { type: "frontmatterUpdate"; frontmatter: string }

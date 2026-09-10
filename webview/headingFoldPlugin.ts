@@ -16,10 +16,10 @@ import { findHeadingFoldRange, getHeadingLevel, isHeadingNode, buildHeadingIndex
 import { getWebviewState, setWebviewState } from "./messaging";
 
 /**
- * 折叠状态持久化（webview 重建后恢复）。
- * 根因：`retainContextWhenHidden: false` 下切走会销毁 webview，插件 state 随之丢失，
- * 切回来所有标题都展开。存进 webview state，并用「标题结构签名」校验——文档变了就
- * 不恢复（位置会错位）。
+ * 折叠状态持久化（编辑器重建后恢复）。
+ * 折叠集合存在插件 state 里，而插件 state 随 Milkdown 实例一起消失——revert（同一 webview
+ * 内重建实例）、窗口重载 / 关标签重开（webview 整体重建）都会丢。存进 webview state，并用
+ * 「标题结构签名」校验——文档变了就不恢复（位置会错位）。保活下切标签不需要：实例还在。
  */
 function persistFoldState(doc: ProseNode, folded: ReadonlySet<number>): void {
     const cur = getWebviewState() ?? {};
@@ -46,7 +46,7 @@ export function normalizeFoldPositions(doc: ProseNode, folded: number[]): number
 
 export type HeadingFoldMeta =
     | { type: "toggle"; pos: number }
-    /** 折叠集合整体恢复（webview 重建后从 state 还原，见 index.ts restoreFoldState） */
+    /** 折叠集合整体恢复（编辑器重建后从 state 还原，见 index.ts restoreFoldState） */
     | { type: "set"; folded: number[] };
 type HeadingFoldRange = { from: number; to: number };
 
