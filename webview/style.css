@@ -34,50 +34,6 @@ body {
     line-height: 1.6;
 }
 
-/* ─── 重建期加载指示 ─────────────────────────────────────────────────────
-   切回 md 时 webview 被重建（retainContextWhenHidden:false），Milkdown 渲染完成前
-   编辑区是空的。这里盖一层底色 + 转圈，由 webview/index.ts 在首屏内容上屏后移除。
-   显形延迟 150ms：加载快时用户看不到它，不会变成新的「闪一下」。 */
-#epytor-loading {
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--vscode-editor-background);
-    opacity: 0;
-    animation: epytor-loading-show 0s linear 150ms forwards;
-}
-
-@keyframes epytor-loading-show {
-    to { opacity: 1; }
-}
-
-/* 与 DSH Web 的 loading 同款点阵：10×10 网格上 8 个 2×2 方块绕圈追逐
-   （几何与节奏照搬 DSH 前端：位置表 [0,0][4,0][8,0][8,4][8,8][4,8][0,8][0,4]，
-   每格错开 125ms = 一圈 1s，透明度按 1 → .6 → .35 → .15 四档跳变） */
-.epytor-matrix {
-    color: var(--vscode-focusBorder, #007acc);
-}
-
-.epytor-matrix rect {
-    fill: currentColor;
-    opacity: 0.15;
-    animation: epytor-dot-chase 1s infinite;
-}
-
-@keyframes epytor-dot-chase {
-    0%, 12.4% { opacity: 1; }
-    12.5%, 24.9% { opacity: 0.6; }
-    25%, 37.4% { opacity: 0.35; }
-    37.5%, 100% { opacity: 0.15; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .epytor-matrix rect { animation-duration: 2.5s; }
-}
-
 /* 编辑器容器 */
 /* ─── Frontmatter 面板 ─── */
 .frontmatter-panel {

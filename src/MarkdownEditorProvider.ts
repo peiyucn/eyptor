@@ -24,6 +24,7 @@ import {
 } from "./utils/webviewConfigSanitize";
 import type { ToExtensionMessage, ToWebviewMessage } from "../shared/messages";
 import { resolveTableWrapVars } from "../shared/tableWrap";
+import { buildWebviewHtml } from "./utils/webviewHtml";
 
 // ─── 常量 ────────────────────────────────────────────────────
 const GLOBAL_REVEAL_LINE_TTL_MS = 10_000;
@@ -937,10 +938,6 @@ export class MarkdownEditorProvider
         );
         const tableWrapMode = cfg.get<string>("tableWrapMode", "wrap");
         const tableWrapVars = resolveTableWrapVars(tableWrapMode);
-        const tableWordBreak = tableWrapVars.wordBreak;
-        const tableWhiteSpace = tableWrapVars.whiteSpace;
-        const tableOverflowX = tableWrapVars.overflowX;
-        const tableWidth = tableWrapVars.tableWidth;
         const scriptUri = webview.asWebviewUri(
             vscode.Uri.joinPath(
                 this.context.extensionUri,
@@ -963,37 +960,22 @@ export class MarkdownEditorProvider
         const serializationMode = sanitizeSerializationMode(cfg.get("serializationMode", "clean"));
         const i18nScript = `window.__i18n=${JSON.stringify({ translations, isMac, serializationMode })};`;
 
-        return `<!DOCTYPE html>
-<html lang="${vscode.env.language}" style="background-color: var(--vscode-editor-background);">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none';
-             style-src ${webview.cspSource} 'unsafe-inline';
-             script-src 'nonce-${nonce}' ${webview.cspSource};
-             img-src ${webview.cspSource} https: data:;">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Markdown Editor</title>
-  <link rel="stylesheet" href="${styleUri}">
-  <style>:root { --code-block-max-height: ${maxHeight}px; --editor-max-width: ${editorMaxWidth}px; --epytor-table-word-break: ${tableWordBreak}; --epytor-table-white-space: ${tableWhiteSpace}; --epytor-table-overflow-x: ${tableOverflowX}; --epytor-table-width: ${tableWidth}; }</style>
-</head>
-<body style="margin: 0; background-color: var(--vscode-editor-background);">
-  <div id="epytor-loading"><svg class="epytor-matrix" width="16" height="16" viewBox="0 0 10 10" shape-rendering="crispEdges" aria-hidden="true">
-      <rect x="0" y="0" width="2" height="2" style="animation-delay:-1000ms"></rect>
-      <rect x="4" y="0" width="2" height="2" style="animation-delay:-875ms"></rect>
-      <rect x="8" y="0" width="2" height="2" style="animation-delay:-750ms"></rect>
-      <rect x="8" y="4" width="2" height="2" style="animation-delay:-625ms"></rect>
-      <rect x="8" y="8" width="2" height="2" style="animation-delay:-500ms"></rect>
-      <rect x="4" y="8" width="2" height="2" style="animation-delay:-375ms"></rect>
-      <rect x="0" y="8" width="2" height="2" style="animation-delay:-250ms"></rect>
-      <rect x="0" y="4" width="2" height="2" style="animation-delay:-125ms"></rect>
-    </svg></div>
-  <div class="editor-topbar"></div>
-  <div id="editor"></div>
-  <script nonce="${nonce}">${i18nScript}</script>
-  <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
-</body>
-</html>`;
+        return buildWebviewHtml({
+            language: vscode.env.language,
+            cspSource: webview.cspSource,
+            nonce,
+            styleUri: styleUri.toString(),
+            scriptUri: scriptUri.toString(),
+            i18nScript,
+            cssVars: {
+                "--code-block-max-height": `${maxHeight}px`,
+                "--editor-max-width": `${editorMaxWidth}px`,
+                "--epytor-table-word-break": tableWrapVars.wordBreak,
+                "--epytor-table-white-space": tableWrapVars.whiteSpace,
+                "--epytor-table-overflow-x": tableWrapVars.overflowX,
+                "--epytor-table-width": tableWrapVars.tableWidth,
+            },
+        });
     }
 
     private _prepareContentForDisplay(

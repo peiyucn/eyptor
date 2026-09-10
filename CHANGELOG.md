@@ -18,7 +18,6 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Editable frontmatter panel** — add, edit and remove key/value rows in place
 - **Toolbar overflow menu** — buttons collapse into a "⋯" menu on narrow windows
 - **Mermaid preview zoom** (0.2×–3×, with reset and horizontal scroll)
-- **Loading indicator** while a Markdown editor is opening or rebuilding
 
 ### Experience
 

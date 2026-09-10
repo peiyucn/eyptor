@@ -99,4 +99,10 @@ describe("WebView 样式", () => {
     it("codeBlockMaxHeight 注入的 CSS 变量 应该 有消费规则（回归：零消费方=死配置）", () => {
         expect(styleCss).toContain("var(--code-block-max-height)");
     });
+
+    it("重建期加载点阵 应该 已移除（中间态只留主题背景，对齐官方预览观感）", () => {
+        expect(styleCss).not.toContain("epytor-loading");
+        expect(styleCss).not.toContain("epytor-matrix");
+        expect(styleCss).not.toContain("epytor-dot-chase");
+    });
 });
