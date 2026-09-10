@@ -32,6 +32,7 @@ import { TextSelection } from "@milkdown/kit/prose/state";
 import {
     notifyReady,
     notifyMarkDirty,
+    notifyUnsavedContent,
     notifyContentResponse,
     notifyFrontmatterUpdate,
     onMessage,
@@ -405,6 +406,7 @@ async function initEditor(
         markdown,
         () => {
             // 文档变更轻量通知（序列化已在保存时拉取，这里只做 UI 刷新 + 脏标记）
+            _hasUnsavedChanges = true; // 同步置位：失活兜底推送不依赖下面的防抖
             if (_docChangedTimer) clearTimeout(_docChangedTimer);
             _docChangedTimer = setTimeout(() => {
                 notifyMarkDirty(); // 通知 Extension 内容已变（自动保存防抖到点后拉取）
@@ -668,6 +670,26 @@ window.addEventListener("keydown", (e) => {
 
 // WebView 加载完成，通知 Extension 侧发送初始内容
 notifyReady();
+
+// ── 失活兜底：未落盘内容主动回传 ────────────────────────────────
+/**
+ * retainContextWhenHidden:false 下，切走时宿主会**先销毁 iframe**，扩展再发
+ * requestContent 已经无人应答——VS Code 会报「编辑器无响应，文件可能已用旧内容保存」，
+ * 且未落盘的编辑丢失。blur / pagehide 是 webview 内部**还能拿到编辑器状态的最后时机**，
+ * 此刻主动把内容推给扩展（扩展存内存，随后的保存直接用，不再等拉取）。
+ */
+let _hasUnsavedChanges = false;
+
+function flushUnsavedContent(): void {
+    if (!_hasUnsavedChanges) { return; }
+    notifyUnsavedContent(getMarkdownForSave());
+}
+
+window.addEventListener("blur", flushUnsavedContent);
+window.addEventListener("pagehide", flushUnsavedContent);
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") { flushUnsavedContent(); }
+});
 
 // ── 滚动位置持久化 ────────────────────────────────────────────
 // 保存：滚动时防抖写入 VSCode WebView 状态（跨会话可恢复）
@@ -968,6 +990,7 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         applyTableWrapVars(resolveTableWrapVars(msg.mode));
     } else if (msg.type === "requestContent") {
         // 保存时拉取（拉取式架构）：Extension 在 Cmd+S / 原生 autoSave 时请求一次序列化
+        _hasUnsavedChanges = false; // 已按当前内容应答，落盘由扩展负责
         notifyContentResponse(getMarkdownForSave());
     } else if (msg.type === "imageUploaded") {
         _uploadRequests.resolve(msg.id, msg.url);

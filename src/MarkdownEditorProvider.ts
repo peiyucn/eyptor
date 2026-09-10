@@ -74,6 +74,12 @@ export class MarkdownEditorProvider
      * 自动保存把外部写入（AI 工具）整份覆盖。
      */
     private readonly _webviewDirty = new Map<string, boolean>();
+    /**
+     * webview 在失活/卸载前主动推来的未落盘内容（unsavedContent 消息）。
+     * 面板不可见时优先用它——此刻 webview 可能已被宿主销毁，等待拉取只会超时
+     * （VS Code 报「编辑器无响应，文件可能已用旧内容保存」），并且会丢编辑。
+     */
+    private readonly _pushedContent = new Map<string, string>();
 
     // 图片 webviewUri → relPath 映射（key: docUri.toString()）
     private readonly _imageUriMaps = new Map<string, Map<string, string>>();
@@ -486,6 +492,7 @@ export class MarkdownEditorProvider
                             webviewDirty: this._webviewDirty.get(uriKey) === true,
                         });
                         this._webviewDirty.set(uriKey, false);
+                        this._pushedContent.delete(uriKey);
                         if (decision.keepUserContent) {
                             // 用户有未落盘编辑：保留用户内容，并通知 VS Code 脏状态
                             // （回归：此前静默置脏，VS Code 认为干净，关窗不提示丢编辑）
@@ -551,6 +558,12 @@ export class MarkdownEditorProvider
                 // saveCustomDocument（Cmd+S / VS Code 原生 files.autoSave / 关窗）
                 this._webviewDirty.set(uriKey, true);
                 this._markDirty(document);
+                break;
+            }
+            case "unsavedContent": {
+                // 失活兜底推送：存内存 + 置脏；随后的保存直接用它（不再等拉取）
+                this._pushedContent.set(uriKey, message.content);
+                this._webviewDirty.set(uriKey, true);
                 break;
             }
             case "contentResponse": {
@@ -776,6 +789,7 @@ export class MarkdownEditorProvider
         }
         this._lastSaveTimes.set(uriKey, Date.now());
         this._webviewDirty.set(uriKey, false);
+        this._pushedContent.delete(uriKey);
         this._postLineMapUpdate(document, uriKey);
         return true;
     }
@@ -800,10 +814,15 @@ export class MarkdownEditorProvider
      */
     private _requestContent(document: MarkdownDocument, uriKey: string): Promise<string> {
         const panel = this._webviewPanels.get(uriKey);
-        if (!panel) {
-            return Promise.resolve(document.getText());
+        const pushed = this._pushedContent.get(uriKey);
+        // 面板不可见（失活/销毁中）：webview 可能已经不在，直接用它失活前推来的内容
+        if (pushed !== undefined && (!panel || !panel.visible)) {
+            return Promise.resolve(pushed);
         }
-        return this._contentRequests.request(uriKey, document.getText());
+        if (!panel) {
+            return Promise.resolve(pushed ?? document.getText());
+        }
+        return this._contentRequests.request(uriKey, pushed ?? document.getText());
     }
 
     async saveCustomDocument(
@@ -838,6 +857,7 @@ export class MarkdownEditorProvider
         // 推送新内容给 WebView，触发编辑器重建
         const uriKey = document.uri.toString();
         this._webviewDirty.set(uriKey, false);
+        this._pushedContent.delete(uriKey);
         const panel = this._webviewPanels.get(uriKey);
         if (panel) {
             const revertContent = document.getText();

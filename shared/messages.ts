@@ -25,6 +25,8 @@ export type PathSuggestionItem = {
 export type ToExtensionMessage =
     | { type: "ready" }
     | { type: "markDirty" }
+    /** webview 失活/卸载前主动推来的未落盘内容（拉取式保存在此之后已无人应答） */
+    | { type: "unsavedContent"; content: string }
     | { type: "contentResponse"; content: string }
     | { type: "frontmatterUpdate"; frontmatter: string }
     | { type: "openUrl"; url: string }
