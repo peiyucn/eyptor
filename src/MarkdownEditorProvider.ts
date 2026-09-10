@@ -17,6 +17,8 @@ import { OPEN_URL_SCHEMES, extractUrlScheme } from "../shared/constants";
 import {
     DEFAULT_CODE_BLOCK_MAX_HEIGHT,
     DEFAULT_EDITOR_MAX_WIDTH,
+    MIN_CODE_BLOCK_MAX_HEIGHT,
+    MIN_EDITOR_MAX_WIDTH,
     sanitizeCssNumber,
     sanitizeSerializationMode,
 } from "./utils/webviewConfigSanitize";
@@ -923,8 +925,16 @@ export class MarkdownEditorProvider
     private _getHtmlForWebview(webview: vscode.Webview): string {
         const cfg = vscode.workspace.getConfiguration("epytor");
         // 配置值注入 HTML 前一律净化（恶意 workspace 设置不得逃逸 <style>/<script>，见 webviewConfigSanitize）
-        const maxHeight = sanitizeCssNumber(cfg.get("codeBlockMaxHeight", DEFAULT_CODE_BLOCK_MAX_HEIGHT), DEFAULT_CODE_BLOCK_MAX_HEIGHT);
-        const editorMaxWidth = sanitizeCssNumber(cfg.get("editorMaxWidth", DEFAULT_EDITOR_MAX_WIDTH), DEFAULT_EDITOR_MAX_WIDTH);
+        const maxHeight = sanitizeCssNumber(
+            cfg.get("codeBlockMaxHeight", DEFAULT_CODE_BLOCK_MAX_HEIGHT),
+            DEFAULT_CODE_BLOCK_MAX_HEIGHT,
+            MIN_CODE_BLOCK_MAX_HEIGHT,
+        );
+        const editorMaxWidth = sanitizeCssNumber(
+            cfg.get("editorMaxWidth", DEFAULT_EDITOR_MAX_WIDTH),
+            DEFAULT_EDITOR_MAX_WIDTH,
+            MIN_EDITOR_MAX_WIDTH,
+        );
         const tableWrapMode = cfg.get<string>("tableWrapMode", "wrap");
         const tableWrapVars = resolveTableWrapVars(tableWrapMode);
         const tableWordBreak = tableWrapVars.wordBreak;

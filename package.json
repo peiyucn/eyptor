@@ -112,6 +112,7 @@
             "type": "number",
             "default": 600,
             "minimum": 100,
+            "maximum": 10000,
             "description": "%config.codeBlockMaxHeight.description%"
           },
           "epytor.editorMaxWidth": {
@@ -119,6 +120,7 @@
             "type": "number",
             "default": 900,
             "minimum": 400,
+            "maximum": 10000,
             "description": "%config.editorMaxWidth.description%"
           },
           "epytor.serializationMode": {

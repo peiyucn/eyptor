@@ -1,13 +1,20 @@
 import * as vscode from "vscode";
 import { MarkdownEditorProvider } from "./MarkdownEditorProvider";
-import { sanitizeSerializationMode } from "./utils/webviewConfigSanitize";
+import {
+    DEFAULT_CODE_BLOCK_MAX_HEIGHT,
+    DEFAULT_EDITOR_MAX_WIDTH,
+    MIN_CODE_BLOCK_MAX_HEIGHT,
+    MIN_EDITOR_MAX_WIDTH,
+    sanitizeCssNumber,
+    sanitizeSerializationMode,
+} from "./utils/webviewConfigSanitize";
 import type { ToWebviewMessage } from "../shared/messages";
 
 /**
  * 配置变更 → WebView 广播表（表驱动，新增配置项只加一行）：
  * 每项 = 配置全限定键 + 把配置值映射为消息的函数。
  */
-const CONFIG_BROADCASTS: ReadonlyArray<{
+export const CONFIG_BROADCASTS: ReadonlyArray<{
     section: string;
     message: (value: unknown) => ToWebviewMessage;
 }> = [
@@ -18,6 +25,21 @@ const CONFIG_BROADCASTS: ReadonlyArray<{
     {
         section: "epytor.tableWrapMode",
         message: (value) => ({ type: "tableWrapModeChanged", mode: typeof value === "string" ? value : "wrap" }),
+    },
+    {
+        // 数值口径与 schema 对齐：越界/非法一律回退默认值，见 webviewConfigSanitize
+        section: "epytor.editorMaxWidth",
+        message: (value) => ({
+            type: "editorMaxWidthChanged",
+            value: sanitizeCssNumber(value, DEFAULT_EDITOR_MAX_WIDTH, MIN_EDITOR_MAX_WIDTH),
+        }),
+    },
+    {
+        section: "epytor.codeBlockMaxHeight",
+        message: (value) => ({
+            type: "codeBlockMaxHeightChanged",
+            value: sanitizeCssNumber(value, DEFAULT_CODE_BLOCK_MAX_HEIGHT, MIN_CODE_BLOCK_MAX_HEIGHT),
+        }),
     },
 ];
 

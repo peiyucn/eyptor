@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
     DEFAULT_CODE_BLOCK_MAX_HEIGHT,
     DEFAULT_EDITOR_MAX_WIDTH,
+    MIN_CODE_BLOCK_MAX_HEIGHT,
+    MIN_EDITOR_MAX_WIDTH,
     sanitizeCssNumber,
     sanitizeSerializationMode,
 } from "../utils/webviewConfigSanitize";
@@ -20,6 +22,19 @@ describe("webviewConfigSanitize 配置值净化（防恶意 workspace 设置注�
             expect(sanitizeCssNumber(-5, DEFAULT_CODE_BLOCK_MAX_HEIGHT)).toBe(DEFAULT_CODE_BLOCK_MAX_HEIGHT);
             expect(sanitizeCssNumber(0, DEFAULT_CODE_BLOCK_MAX_HEIGHT)).toBe(DEFAULT_CODE_BLOCK_MAX_HEIGHT);
             expect(sanitizeCssNumber(99999, DEFAULT_CODE_BLOCK_MAX_HEIGHT)).toBe(DEFAULT_CODE_BLOCK_MAX_HEIGHT);
+        });
+
+        it("低于 schema minimum 的值 应该 回退默认（运行时下限与配置项对齐）", () => {
+            expect(sanitizeCssNumber(99, DEFAULT_CODE_BLOCK_MAX_HEIGHT, MIN_CODE_BLOCK_MAX_HEIGHT))
+                .toBe(DEFAULT_CODE_BLOCK_MAX_HEIGHT);
+            expect(sanitizeCssNumber(399, DEFAULT_EDITOR_MAX_WIDTH, MIN_EDITOR_MAX_WIDTH))
+                .toBe(DEFAULT_EDITOR_MAX_WIDTH);
+        });
+
+        it("恰好等于上下限的值 应该 通过（闭区间）", () => {
+            expect(sanitizeCssNumber(MIN_CODE_BLOCK_MAX_HEIGHT, DEFAULT_CODE_BLOCK_MAX_HEIGHT, MIN_CODE_BLOCK_MAX_HEIGHT))
+                .toBe(MIN_CODE_BLOCK_MAX_HEIGHT);
+            expect(sanitizeCssNumber(10000, DEFAULT_CODE_BLOCK_MAX_HEIGHT, MIN_CODE_BLOCK_MAX_HEIGHT)).toBe(10000);
         });
     });
 

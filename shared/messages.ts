@@ -54,6 +54,10 @@ export type ToWebviewMessage =
     | { type: "lineMapUpdate"; lineMap: number[]; lineEndMap?: number[] }
     | { type: "setSerializationMode"; mode: "clean" | "compatible" }
     | { type: "tableWrapModeChanged"; mode: string }
+    /** 编辑器内容区最大宽度（px，已按 schema 上下限净化） */
+    | { type: "editorMaxWidthChanged"; value: number }
+    /** 代码块最大显示高度（px，已按 schema 上下限净化） */
+    | { type: "codeBlockMaxHeightChanged"; value: number }
     /** WebView 内一次性提示条（文案已由 Extension 本地化） */
     | { type: "notice"; message: string }
     | { type: "imageUploaded"; id: string; url: string }

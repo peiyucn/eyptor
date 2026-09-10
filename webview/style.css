@@ -81,7 +81,8 @@ body {
 /* 编辑器容器 */
 /* ─── Frontmatter 面板 ─── */
 .frontmatter-panel {
-    max-width: var(--editor-max-width, min(1400px, calc(var(--epytor-vw) * 0.92)));
+    /* 与 #editor 同宽：变量由 Extension 注入（--editor-max-width），始终有值 */
+    max-width: var(--editor-max-width);
     margin: 0 auto;
     /* 顶部 36px 让位 fixed 顶栏（否则面板首行被顶栏遮挡） */
     padding: 44px 48px 0;
@@ -195,11 +196,9 @@ body {
 }
 
 #editor {
-    /* 用户未设置 editorMaxWidth 时：自适应视口宽度
-       - 小屏：92vw 先收窄，永不超出
-       - 大屏（2K/4K）：1400px 封顶，保持舒适阅读列宽
-       用户在设置中显式设定宽度时，--editor-max-width 生效，覆盖默认 */
-    max-width: var(--editor-max-width, min(1400px, calc(var(--epytor-vw) * 0.92)));
+    /* 内容区最大宽度：--editor-max-width 由 Extension 注入（epytor.editorMaxWidth，
+       默认 900px，改设置经 postMessage 即时生效，见 utils/layoutVars.ts） */
+    max-width: var(--editor-max-width);
     margin: 0 auto;
     padding: 52px 48px 80px;
     min-height: var(--epytor-vh);

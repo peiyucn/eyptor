@@ -17,6 +17,7 @@ import { resolveTableWrapVars } from "../shared/tableWrap";
 import type { ToWebviewMessage } from "../shared/messages";
 import { PendingRequestRegistry } from "./utils/pendingRequest";
 import { applyTableWrapVars } from "./utils/tableWrap";
+import { applyCodeBlockMaxHeight, applyEditorMaxWidth } from "./utils/layoutVars";
 import { showNotice } from "./ui/notice";
 import { computeAllHeadingSignature } from "./utils/headingFold";
 import { headingFoldPluginKey } from "./headingFoldPlugin";
@@ -1004,6 +1005,10 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         setSerializationMode(msg.mode);
     } else if (msg.type === "tableWrapModeChanged") {
         applyTableWrapVars(resolveTableWrapVars(msg.mode));
+    } else if (msg.type === "editorMaxWidthChanged") {
+        applyEditorMaxWidth(msg.value);
+    } else if (msg.type === "codeBlockMaxHeightChanged") {
+        applyCodeBlockMaxHeight(msg.value);
     } else if (msg.type === "notice") {
         showNotice(msg.message);
     } else if (msg.type === "requestContent") {

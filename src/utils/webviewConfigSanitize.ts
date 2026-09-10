@@ -9,10 +9,23 @@
 
 export const DEFAULT_CODE_BLOCK_MAX_HEIGHT = 600;
 export const DEFAULT_EDITOR_MAX_WIDTH = 900;
+/** 与 package.json contributes.configuration 的 minimum 对齐（out-of-range 一律回退默认值） */
+export const MIN_CODE_BLOCK_MAX_HEIGHT = 100;
+export const MIN_EDITOR_MAX_WIDTH = 400;
+/** 与 schema 的 maximum 对齐 */
+export const MAX_CSS_NUMBER = 10_000;
 
-/** CSS 数值：必须是有限正数且不超上限（防 `0;}</style><script>` 类注入与离谱值），否则回退 */
-export function sanitizeCssNumber(value: unknown, fallback: number, max = 10000): number {
-    if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > max) {
+/**
+ * CSS 数值：必须是有限数且落在 [min, max] 内（防 `0;}</style><script>` 类注入与离谱值），
+ * 否则回退。min/max 与配置 schema 的 minimum/maximum 保持同一口径。
+ */
+export function sanitizeCssNumber(
+    value: unknown,
+    fallback: number,
+    min = 1,
+    max = MAX_CSS_NUMBER,
+): number {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
         return fallback;
     }
     return Math.round(value);
