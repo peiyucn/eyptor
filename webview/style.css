@@ -51,33 +51,28 @@ body {
     to { opacity: 1; }
 }
 
-/* 与 DSH Web 的 boot loading 同款：圆环 + 72° conic 弧（旋转），
-   几何照搬 DSH 前端 .spinner（20px / 边框 2px / 0.8s linear / 弧 72deg） */
-.epytor-loading-spinner {
-    position: relative;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: 2px solid color-mix(in srgb, var(--vscode-editor-foreground) 15%, transparent);
-    animation: epytor-spin 0.8s linear infinite;
+/* 与 DSH Web 的 loading 同款点阵：10×10 网格上 8 个 2×2 方块绕圈追逐
+   （几何与节奏照搬 DSH 前端：位置表 [0,0][4,0][8,0][8,4][8,8][4,8][0,8][0,4]，
+   每格错开 125ms = 一圈 1s，透明度按 1 → .6 → .35 → .15 四档跳变） */
+.epytor-matrix {
+    color: var(--vscode-focusBorder, #007acc);
 }
 
-.epytor-loading-spinner::after {
-    content: "";
-    position: absolute;
-    inset: -2px;
-    border-radius: inherit;
-    background: conic-gradient(var(--vscode-focusBorder, #007acc) 72deg, transparent 0);
-    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0);
-    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 0);
+.epytor-matrix rect {
+    fill: currentColor;
+    opacity: 0.15;
+    animation: epytor-dot-chase 1s infinite;
 }
 
-@keyframes epytor-spin {
-    to { transform: rotate(360deg); }
+@keyframes epytor-dot-chase {
+    0%, 12.4% { opacity: 1; }
+    12.5%, 24.9% { opacity: 0.6; }
+    25%, 37.4% { opacity: 0.35; }
+    37.5%, 100% { opacity: 0.15; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .epytor-loading-spinner { animation-duration: 2.4s; }
+    .epytor-matrix rect { animation-duration: 2.5s; }
 }
 
 /* 编辑器容器 */

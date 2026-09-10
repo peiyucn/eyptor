@@ -952,7 +952,16 @@ export class MarkdownEditorProvider
   <style>:root { --code-block-max-height: ${maxHeight}px; --editor-max-width: ${editorMaxWidth}px;${fontFamily ? ` --custom-font-family: ${fontFamily};` : ''} --image-selection-color: ${imageSelectionColor}; --epytor-table-word-break: ${tableWordBreak}; --epytor-table-white-space: ${tableWhiteSpace}; --epytor-table-overflow-x: ${tableOverflowX}; --epytor-table-width: ${tableWidth}; }</style>
 </head>
 <body style="margin: 0; background-color: var(--vscode-editor-background);">
-  <div id="epytor-loading"><div class="epytor-loading-spinner"></div></div>
+  <div id="epytor-loading"><svg class="epytor-matrix" width="16" height="16" viewBox="0 0 10 10" shape-rendering="crispEdges" aria-hidden="true">
+      <rect x="0" y="0" width="2" height="2" style="animation-delay:-1000ms"></rect>
+      <rect x="4" y="0" width="2" height="2" style="animation-delay:-875ms"></rect>
+      <rect x="8" y="0" width="2" height="2" style="animation-delay:-750ms"></rect>
+      <rect x="8" y="4" width="2" height="2" style="animation-delay:-625ms"></rect>
+      <rect x="8" y="8" width="2" height="2" style="animation-delay:-500ms"></rect>
+      <rect x="4" y="8" width="2" height="2" style="animation-delay:-375ms"></rect>
+      <rect x="0" y="8" width="2" height="2" style="animation-delay:-250ms"></rect>
+      <rect x="0" y="4" width="2" height="2" style="animation-delay:-125ms"></rect>
+    </svg></div>
   <div class="editor-topbar"></div>
   <div id="editor"></div>
   <script nonce="${nonce}">${i18nScript}</script>
