@@ -6,5 +6,14 @@
   "Image too large: maximum size is {0} MB": "图片过大：最大支持 {0} MB",
   "Image upload failed: {0}": "图片上传失败：{0}",
   "A file named \"{0}\" already exists.": "文件 \"{0}\" 已存在。",
-  "Image rename failed: {0}": "图片重命名失败：{0}"
+  "Image rename failed: {0}": "图片重命名失败：{0}",
+  "Please set epytor.imageServer.url in Settings first": "请先在设置中配置 epytor.imageServer.url",
+  "Upload response exceeds {0} bytes": "上传响应超过 {0} 字节",
+  "Image upload timed out after {0}s": "图片上传超时（{0} 秒）",
+  "Server returned a non-JSON response": "服务器返回的不是 JSON 响应",
+  "Cannot extract the image URL using path \"{0}\" from the response": "无法用路径 \"{0}\" 从响应中提取图片 URL",
+  "epytor.imageServer must be an object; the deprecated epytor.imageServer* settings are used instead": "epytor.imageServer 必须是对象；本次改用已弃用的 epytor.imageServer* 旧设置",
+  "epytor.imageServer.extraParams must be a JSON object and was ignored": "epytor.imageServer.extraParams 必须是 JSON 对象，本次已忽略",
+  "epytor.imageServerExtraParams is not valid JSON and was ignored": "epytor.imageServerExtraParams 不是合法 JSON，本次已忽略",
+  "Only strings, numbers and booleans are supported in epytor.imageServer.extraParams (nested objects and arrays are not); ignored keys: {0}": "epytor.imageServer.extraParams 的值只支持字符串、数字或布尔（不支持嵌套对象与数组）；已忽略的键：{0}"
 }

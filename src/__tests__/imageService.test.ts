@@ -17,6 +17,7 @@ const mockFs = vscode.workspace.fs as unknown as {
     createDirectory: ReturnType<typeof vi.fn>;
 };
 
+import type { ImageServerSettings } from "../../src/utils/imageServerConfig";
 import {
     mimeToExt,
     generateFilename,
@@ -443,8 +444,9 @@ function createErrorMockTransport(error: Error) {
 describe("uploadImageToServer", () => {
     const imageData = new Uint8Array([1, 2, 3, 4]);
 
-    function makeCfg(overrides: Record<string, unknown> = {}) {
-        return { get: vi.fn((key: string, def?: unknown) => overrides[key] ?? def) };
+    /** 已解析的图床设置；解析/兜底/白名单行为由 imageServerConfig.test.ts 覆盖 */
+    function makeSettings(overrides: Partial<ImageServerSettings> = {}): ImageServerSettings {
+        return { url: "", fieldName: "file", extraParams: {}, responsePath: "url", ...overrides };
     }
 
     beforeEach(() => {
@@ -452,10 +454,10 @@ describe("uploadImageToServer", () => {
     });
 
     it("serverUrl 为空时立即抛出错误，不发起网络请求", async () => {
-        const cfg = makeCfg({ imageServerUrl: "" });
+        const settings = makeSettings();
         await expect(
-            uploadImageToServer(cfg as never, imageData, "image/png", "photo"),
-        ).rejects.toThrow("请先在设置中配置");
+            uploadImageToServer(settings, imageData, "image/png", "photo"),
+        ).rejects.toThrow("Please set epytor.imageServer.url");
     });
 
     it("HTTPS 上传成功，返回响应中的 URL", async () => {
@@ -465,8 +467,8 @@ describe("uploadImageToServer", () => {
             return mockReq as never;
         });
 
-        const cfg = makeCfg({ imageServerUrl: "https://upload.example.com/api" });
-        const result = await uploadImageToServer(cfg as never, imageData, "image/png", "photo");
+        const settings = makeSettings({ url: "https://upload.example.com/api" });
+        const result = await uploadImageToServer(settings, imageData, "image/png", "photo");
         expect(result).toBe("https://cdn.example.com/img.png");
     });
 
@@ -478,9 +480,9 @@ describe("uploadImageToServer", () => {
             return mockReq as never;
         });
 
-        const cfg = makeCfg({ imageServerUrl: "https://upload.example.com/api" });
+        const settings = makeSettings({ url: "https://upload.example.com/api" });
         await expect(
-            uploadImageToServer(cfg as never, imageData, "image/png", "photo"),
+            uploadImageToServer(settings, imageData, "image/png", "photo"),
         ).rejects.toThrow("exceeds");
         expect(mockReq.destroy).toHaveBeenCalled();
     });
@@ -492,8 +494,8 @@ describe("uploadImageToServer", () => {
             return mockReq as never;
         });
 
-        const cfg = makeCfg({ imageServerUrl: "http://upload.example.com/api" });
-        await uploadImageToServer(cfg as never, imageData, "image/png", "photo");
+        const settings = makeSettings({ url: "http://upload.example.com/api" });
+        await uploadImageToServer(settings, imageData, "image/png", "photo");
 
         expect(vi.mocked(http.request)).toHaveBeenCalled();
         expect(vi.mocked(https.request)).not.toHaveBeenCalled();
@@ -506,31 +508,15 @@ describe("uploadImageToServer", () => {
             return mockReq as never;
         });
 
-        const cfg = makeCfg({
-            imageServerUrl: "https://upload.example.com/api",
-            imageServerExtraParams: '{"token":"abc123"}',
+        const settings = makeSettings({
+            url: "https://upload.example.com/api",
+            extraParams: { token: "abc123" },
         });
-        await uploadImageToServer(cfg as never, imageData, "image/png", "photo");
+        await uploadImageToServer(settings, imageData, "image/png", "photo");
 
         const body = (mockReq.write.mock.calls[0]?.[0] as Buffer).toString();
         expect(body).toContain("token");
         expect(body).toContain("abc123");
-    });
-
-    it("extraParams 为无效 JSON 时忽略并继续上传", async () => {
-        const { mockRes, mockReq } = createSuccessMockTransport('{"url":"https://cdn.example.com/img.png"}');
-        vi.mocked(https.request).mockImplementation((_opts, cb) => {
-            (cb as (r: typeof mockRes) => void)(mockRes);
-            return mockReq as never;
-        });
-
-        const cfg = makeCfg({
-            imageServerUrl: "https://upload.example.com/api",
-            imageServerExtraParams: "not-valid-json!!!",
-        });
-        await expect(
-            uploadImageToServer(cfg as never, imageData, "image/png", "photo"),
-        ).resolves.toBe("https://cdn.example.com/img.png");
     });
 
     it("服务端返回非 JSON 时抛出错误", async () => {
@@ -540,9 +526,9 @@ describe("uploadImageToServer", () => {
             return mockReq as never;
         });
 
-        const cfg = makeCfg({ imageServerUrl: "https://upload.example.com/api" });
+        const settings = makeSettings({ url: "https://upload.example.com/api" });
         await expect(
-            uploadImageToServer(cfg as never, imageData, "image/png", "photo"),
+            uploadImageToServer(settings, imageData, "image/png", "photo"),
         ).rejects.toThrow("non-JSON");
     });
 
@@ -553,19 +539,19 @@ describe("uploadImageToServer", () => {
             return mockReq as never;
         });
 
-        const cfg = makeCfg({ imageServerUrl: "https://upload.example.com/api" });
+        const settings = makeSettings({ url: "https://upload.example.com/api" });
         await expect(
-            uploadImageToServer(cfg as never, imageData, "image/png", "photo"),
-        ).rejects.toThrow("Cannot extract URL");
+            uploadImageToServer(settings, imageData, "image/png", "photo"),
+        ).rejects.toThrow("Cannot extract the image URL");
     });
 
     it("网络错误时 Promise reject", async () => {
         const mockReq = createErrorMockTransport(new Error("ECONNREFUSED"));
         vi.mocked(https.request).mockImplementation(() => mockReq as never);
 
-        const cfg = makeCfg({ imageServerUrl: "https://upload.example.com/api" });
+        const settings = makeSettings({ url: "https://upload.example.com/api" });
         await expect(
-            uploadImageToServer(cfg as never, imageData, "image/png", "photo"),
+            uploadImageToServer(settings, imageData, "image/png", "photo"),
         ).rejects.toThrow("ECONNREFUSED");
     });
 
@@ -585,11 +571,11 @@ describe("uploadImageToServer", () => {
             }),
         };
         vi.mocked(https.request).mockImplementation(() => mockReq as never);
-        const cfg = makeCfg({ imageServerUrl: "https://upload.example.com/api" });
+        const settings = makeSettings({ url: "https://upload.example.com/api" });
 
         await expect(
-            uploadImageToServer(cfg as never, imageData, "image/png", "photo"),
-        ).rejects.toThrow("Upload request timed out after 30s");
+            uploadImageToServer(settings, imageData, "image/png", "photo"),
+        ).rejects.toThrow("Image upload timed out after 30s");
         expect(mockReq.setTimeout).toHaveBeenCalledWith(30000, expect.any(Function));
         expect(mockReq.destroy).toHaveBeenCalledOnce();
     });
@@ -603,11 +589,11 @@ describe("uploadImageToServer", () => {
             return mockReq as never;
         });
 
-        const cfg = makeCfg({
-            imageServerUrl: "https://upload.example.com/api",
-            imageServerResponsePath: "data.url",
+        const settings = makeSettings({
+            url: "https://upload.example.com/api",
+            responsePath: "data.url",
         });
-        const result = await uploadImageToServer(cfg as never, imageData, "image/png", "photo");
+        const result = await uploadImageToServer(settings, imageData, "image/png", "photo");
         expect(result).toBe("https://cdn.example.com/img.png");
     });
 });

@@ -14,8 +14,17 @@
   "config.imageStorage.local": "Save images to local disk (default).",
   "config.imageStorage.server": "Upload images to a remote server.",
   "config.imageLocalPath.description": "Local folder for saving images (relative or absolute path). Leave empty to auto-detect (images/, imgs/, assets/images/, assets/).",
+  "config.imageServer.description": "Image server upload settings (used when 'imageStorage' is 'server'). Per field, a value here wins over the deprecated 'imageServer*' settings below; invalid values fall back to them, then to the defaults. The settings are read-only: EPYTOR never rewrites your settings.json.",
+  "config.imageServer.url": "Upload endpoint URL. https is recommended; http is allowed for intranet servers (a warning is shown once).",
+  "config.imageServer.fieldName": "Form field name of the image file in the multipart upload request. Default: file. Only letters, digits, dot, dash and underscore are allowed; anything else falls back to file.",
+  "config.imageServer.extraParams": "Extra form fields sent with the upload, as a JSON object. Values must be strings, numbers or booleans (nested objects and arrays are not supported). Example: { \"token\": \"xxx\" }",
+  "config.imageServer.responsePath": "Dot-notation path used to read the image URL from the upload response JSON. Default: url. Example: data.url",
   "config.imageServerUrl.description": "HTTP endpoint URL for image upload when imageStorage is 'server'.",
+  "config.imageServerUrl.deprecation": "Deprecated: use 'epytor.imageServer.url' instead.",
   "config.imageServerFieldName.description": "Form field name for the image file in the multipart upload request. Default: file.",
+  "config.imageServerFieldName.deprecation": "Deprecated: use 'epytor.imageServer.fieldName' instead.",
   "config.imageServerExtraParams.description": "Extra parameters to include in the upload request body, as a JSON object string. Example: {\"token\":\"xxx\"}",
-  "config.imageServerResponsePath.description": "Dot-notation path to extract the image URL from the upload response JSON. Example: data.url"
+  "config.imageServerExtraParams.deprecation": "Deprecated: use 'epytor.imageServer.extraParams' (a JSON object) instead.",
+  "config.imageServerResponsePath.description": "Dot-notation path to extract the image URL from the upload response JSON. Example: data.url",
+  "config.imageServerResponsePath.deprecation": "Deprecated: use 'epytor.imageServer.responsePath' instead."
 }

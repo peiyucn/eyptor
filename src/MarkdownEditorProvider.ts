@@ -5,6 +5,7 @@ import { MarkdownDocument } from "./MarkdownDocument";
 import { getNonce } from "./utils/getNonce";
 import { ZH_CN_WEBVIEW } from "./i18n/webviewTranslations";
 import { saveImageLocally, uploadImageToServer } from "./utils/imageService";
+import { describeImageServerIssue, readImageServerConfig, type ImageServerIssue } from "./utils/imageServerConfig";
 import { computeDisplayLineRanges, type LineRange } from "./utils/lineMap";
 import { extractFrontmatter, restoreContentForSave, convertTableBrForDisplay, buildContentWithFrontmatter, normalizeImageDestination, rewriteImageSources } from "./utils/contentTransform";
 import { ContentRequestCoordinator } from "./utils/contentRequestCoordinator";
@@ -1058,7 +1059,11 @@ export class MarkdownEditorProvider
         try {
             let url: string;
             if (storage === 'server') {
-                url = await uploadImageToServer(cfg, data, mimeType, altText);
+                // 图床配置：新键 epytor.imageServer 优先、弃用 4 键兜底；
+                // 非法配置必须给用户可见反馈（警告），不得静默忽略
+                const resolution = readImageServerConfig(cfg);
+                this._warnImageServerIssues(resolution.issues);
+                url = await uploadImageToServer(resolution.settings, data, mimeType, altText);
             } else {
                 const { relPath, absUri } = await saveImageLocally(document.uri, cfg, data, mimeType, altText);
                 const webviewUri = panel.webview.asWebviewUri(absUri);
@@ -1071,6 +1076,14 @@ export class MarkdownEditorProvider
             const errMsg = e instanceof Error ? e.message : String(e);
             panel.webview.postMessage({ type: 'imageUploadError', id, error: errMsg });
             vscode.window.showErrorMessage(vscode.l10n.t('Image upload failed: {0}', errMsg));
+        }
+    }
+
+    /** 图床配置非法项 → 用户可见警告（本地化；文案由 describeImageServerIssue 提供） */
+    private _warnImageServerIssues(issues: ImageServerIssue[]): void {
+        for (const issue of issues) {
+            const { message, args } = describeImageServerIssue(issue);
+            void vscode.window.showWarningMessage(vscode.l10n.t(message, ...args));
         }
     }
 

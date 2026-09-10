@@ -5,6 +5,7 @@ import * as http from "http";
 import * as crypto from "crypto";
 import * as vscode from "vscode";
 import { isPathWithinBase } from "./pathGuard";
+import type { ImageServerSettings } from "./imageServerConfig";
 
 // ─── 常量 ────────────────────────────────────────────────────
 const MAX_ALT_TEXT_LENGTH = 20;
@@ -193,34 +194,25 @@ export function buildRelPath(docUri: vscode.Uri, fileUri: vscode.Uri): string {
 }
 
 /**
- * 上传图片到远程服务器，返回图片 URL
+ * 上传图片到远程服务器，返回图片 URL。
+ *
+ * `settings` 必须来自 `readImageServerConfig` / `resolveImageServerConfig`
+ * （已做白名单、CRLF/引号剥离与类型校验），本函数不再直接读配置。
  */
 export async function uploadImageToServer(
-    cfg: vscode.WorkspaceConfiguration,
+    settings: ImageServerSettings,
     data: Uint8Array,
     mimeType: string,
     altText: string,
 ): Promise<string> {
-    const serverUrl = cfg.get<string>("imageServerUrl", "").trim();
+    const serverUrl = settings.url;
     if (!serverUrl) {
-        throw new Error("请先在设置中配置 epytor.imageServerUrl");
+        throw new Error(vscode.l10n.t("Please set epytor.imageServer.url in Settings first"));
     }
 
-    const fieldName =
-        cfg.get<string>("imageServerFieldName", "file").trim() || "file";
-    const responsePath =
-        cfg.get<string>("imageServerResponsePath", "url").trim() || "url";
-
-    // 解析额外参数
-    let extraParams: Record<string, string> = {};
-    const extraParamsStr = cfg.get<string>("imageServerExtraParams", "").trim();
-    if (extraParamsStr) {
-        try {
-            extraParams = JSON.parse(extraParamsStr);
-        } catch {
-            // 非法 JSON 忽略，继续上传
-        }
-    }
+    const fieldName = settings.fieldName;
+    const responsePath = settings.responsePath;
+    const extraParams = settings.extraParams;
 
     // 构建 multipart/form-data
     const boundary = `----FormBoundary${Date.now().toString(16)}`;
@@ -277,7 +269,7 @@ export async function uploadImageToServer(
                 if (totalBytes > MAX_UPLOAD_RESPONSE_BYTES) {
                     // 响应体大小上限：直接结算（不依赖 error 事件），destroy 断开连接
                     req.destroy();
-                    reject(new Error(`Upload response exceeds ${MAX_UPLOAD_RESPONSE_BYTES} bytes`));
+                    reject(new Error(vscode.l10n.t("Upload response exceeds {0} bytes", MAX_UPLOAD_RESPONSE_BYTES)));
                     return;
                 }
                 chunks.push(chunk);
@@ -291,7 +283,7 @@ export async function uploadImageToServer(
 
         // 30 秒超时
         req.setTimeout(UPLOAD_TIMEOUT_MS, () => {
-            req.destroy(new Error("Upload request timed out after 30s"));
+            req.destroy(new Error(vscode.l10n.t("Image upload timed out after {0}s", UPLOAD_TIMEOUT_MS / 1000)));
         });
 
         req.write(body);
@@ -304,13 +296,13 @@ export async function uploadImageToServer(
     } catch {
         // 不回显响应体（回归：服务器响应可能回显请求参数——imageServerExtraParams
         // 可能含 token，原样进错误提示与 WebView 面板）
-        throw new Error("Server returned non-JSON response");
+        throw new Error(vscode.l10n.t("Server returned a non-JSON response"));
     }
 
     const imageUrl = getByPath(parsed, responsePath);
     if (typeof imageUrl !== "string" || !imageUrl) {
         throw new Error(
-            `Cannot extract URL using path "${responsePath}" from response`,
+            vscode.l10n.t("Cannot extract the image URL using path \"{0}\" from the response", responsePath),
         );
     }
 

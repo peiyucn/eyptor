@@ -14,8 +14,17 @@
   "config.imageStorage.local": "保存图片到本地磁盘（默认）。",
   "config.imageStorage.server": "上传图片到远程服务器。",
   "config.imageLocalPath.description": "本地图片保存目录（相对路径或绝对路径）。留空时自动检测 images/、imgs/、assets/images/、assets/ 等目录。",
+  "config.imageServer.description": "图床（远程图床）上传设置，仅在 imageStorage 为 server 时使用。逐字段生效：这里填了有效值就覆盖下方已弃用的 imageServer* 旧设置；无效值回退旧设置，再回退默认值。仅读取配置，EPYTOR 绝不改写你的 settings.json。",
+  "config.imageServer.url": "上传接口地址。建议用 https；内网 http 服务也可用（首次使用时给一次警告）。",
+  "config.imageServer.fieldName": "上传请求中图片文件的字段名，默认 file。只允许字母、数字、点、短横线与下划线，其它值一律回退 file。",
+  "config.imageServer.extraParams": "上传请求中附加的表单字段，JSON 对象。值只支持字符串、数字或布尔（不支持嵌套对象与数组）。示例：{ \"token\": \"xxx\" }",
+  "config.imageServer.responsePath": "从上传响应 JSON 中提取图片 URL 的点分路径，默认 url。示例：data.url",
   "config.imageServerUrl.description": "图片上传接口地址（imageStorage 为 server 时使用）。",
+  "config.imageServerUrl.deprecation": "已弃用：请改用 epytor.imageServer.url。",
   "config.imageServerFieldName.description": "上传请求中图片文件的字段名，默认为 file。",
+  "config.imageServerFieldName.deprecation": "已弃用：请改用 epytor.imageServer.fieldName。",
   "config.imageServerExtraParams.description": "上传请求中附加的参数，JSON 对象字符串格式。示例：{\"token\":\"xxx\"}",
-  "config.imageServerResponsePath.description": "从上传响应 JSON 中提取图片 URL 的点分路径。示例：data.url"
+  "config.imageServerExtraParams.deprecation": "已弃用：请改用 epytor.imageServer.extraParams（JSON 对象）。",
+  "config.imageServerResponsePath.description": "从上传响应 JSON 中提取图片 URL 的点分路径。示例：data.url",
+  "config.imageServerResponsePath.deprecation": "已弃用：请改用 epytor.imageServer.responsePath。"
 }

@@ -150,29 +150,61 @@
           "default": "",
           "description": "%config.imageLocalPath.description%"
         },
-        "epytor.imageServerUrl": {
+        "epytor.imageServer": {
           "order": 12,
-          "type": "string",
-          "default": "",
-          "description": "%config.imageServerUrl.description%"
+          "type": "object",
+          "default": {},
+          "description": "%config.imageServer.description%",
+          "properties": {
+            "url": {
+              "type": "string",
+              "default": "",
+              "description": "%config.imageServer.url%"
+            },
+            "fieldName": {
+              "type": "string",
+              "default": "file",
+              "description": "%config.imageServer.fieldName%"
+            },
+            "extraParams": {
+              "type": "object",
+              "default": {},
+              "description": "%config.imageServer.extraParams%"
+            },
+            "responsePath": {
+              "type": "string",
+              "default": "url",
+              "description": "%config.imageServer.responsePath%"
+            }
+          }
         },
-        "epytor.imageServerFieldName": {
+        "epytor.imageServerUrl": {
           "order": 13,
           "type": "string",
-          "default": "file",
-          "description": "%config.imageServerFieldName.description%"
+          "default": "",
+          "description": "%config.imageServerUrl.description%",
+          "deprecationMessage": "%config.imageServerUrl.deprecation%"
         },
-        "epytor.imageServerExtraParams": {
+        "epytor.imageServerFieldName": {
           "order": 14,
           "type": "string",
-          "default": "",
-          "description": "%config.imageServerExtraParams.description%"
+          "default": "file",
+          "description": "%config.imageServerFieldName.description%",
+          "deprecationMessage": "%config.imageServerFieldName.deprecation%"
         },
-        "epytor.imageServerResponsePath": {
+        "epytor.imageServerExtraParams": {
           "order": 15,
           "type": "string",
+          "default": "",
+          "description": "%config.imageServerExtraParams.description%",
+          "deprecationMessage": "%config.imageServerExtraParams.deprecation%"
+        },
+        "epytor.imageServerResponsePath": {
+          "order": 16,
+          "type": "string",
           "default": "url",
-          "description": "%config.imageServerResponsePath.description%"
+          "description": "%config.imageServerResponsePath.description%",
+          "deprecationMessage": "%config.imageServerResponsePath.deprecation%"
         }
       }
     }
