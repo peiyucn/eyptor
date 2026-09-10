@@ -10,7 +10,6 @@
 export const DEFAULT_CODE_BLOCK_MAX_HEIGHT = 600;
 export const DEFAULT_EDITOR_MAX_WIDTH = 900;
 export const DEFAULT_IMAGE_SELECTION_COLOR = "rgba(52, 211, 153, 0.6)";
-export const DEFAULT_FONT_FAMILY = "";
 
 /** CSS 数值：必须是有限正数且不超上限（防 `0;}</style><script>` 类注入与离谱值），否则回退 */
 export function sanitizeCssNumber(value: unknown, fallback: number, max = 10000): number {
