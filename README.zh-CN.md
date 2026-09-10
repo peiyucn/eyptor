@@ -34,18 +34,21 @@
 
 > 默认打开方式请用 VS Code 官方入口设置：右键 Markdown 文件 → **打开方式…** → **为「*.md」配置默认编辑器**。EPYTOR 不再自行管理编辑器关联。
 
+设置面板分为 **epytor**（编辑器）与 **epytor › 图片** 两组；任一项改完立即生效，不必重开标签页。
+
 | 设置项 | 默认值 | 说明 |
 |---|---|---|
-| `epytor.editorMaxWidth` | `900` | 编辑器最大宽度（px） |
-| `epytor.codeBlockMaxHeight` | `600` | 代码块最大高度（px） |
 | `epytor.tableWrapMode` | `"wrap"` | 表格单元格换行：`wrap`（任意字符断行）/ `nowrap`（不换行 + 横向滚动） |
-| `epytor.imageStorage` | `"local"` | 图片存储：`local` / `server` |
-| `epytor.imageLocalPath` | `""` | 本地图片路径 |
-| `epytor.imageServerUrl` | `""` | 图片上传接口地址（`imageStorage` 为 `server` 时使用） |
-| `epytor.imageServerFieldName` | `"file"` | 上传请求中图片文件的字段名 |
-| `epytor.imageServerExtraParams` | `""` | 上传请求附加参数，JSON 对象字符串格式，如 `{"token":"xxx"}` |
-| `epytor.imageServerResponsePath` | `"url"` | 从上传响应 JSON 中提取图片 URL 的点分路径，如 `data.url` |
+| `epytor.codeBlockMaxHeight` | `600` | 代码块最大高度（px，100–10000） |
+| `epytor.editorMaxWidth` | `900` | 编辑器内容区最大宽度（px，400–10000） |
 | `epytor.serializationMode` | `"clean"` | Markdown 保存模式：`clean` / `compatible` |
+| `epytor.imageStorage` | `"local"` | 图片存储：`local`（存本地）/ `server`（上传到你的图床） |
+| `epytor.imageLocalPath` | `""` | 本地图片目录——相对工作区根目录（无工作区时相对 Markdown 文件）或绝对路径。留空则自动检测 `images/`、`imgs/`、`assets/images/`、`assets/`，都没有时用文件同级的 `images/` |
+| `epytor.imageServer` | `{}` | 图床设置：`{ "url": "", "fieldName": "file", "extraParams": {}, "responsePath": "url" }` |
+
+**图床**（`imageStorage` 为 `server` 时）：必须配置 `epytor.imageServer.url` 指向上传接口，否则上传会失败并说明原因。`fieldName`（默认 `file`）是图片在 multipart 表单中的字段名；`extraParams`（JSON 对象，值只支持字符串/数字/布尔）附加额外表单字段；`responsePath`（默认 `url`，如 `data.url`）是从响应 JSON 中提取图片 URL 的点分路径。明文 `http` 地址可用（内网场景），但会给一次警告。旧的 `epytor.imageServerUrl`、`epytor.imageServerFieldName`、`epytor.imageServerExtraParams`、`epytor.imageServerResponsePath` 仍作为兜底可用，但已弃用——建议迁移到 `epytor.imageServer`。
+
+**图片路径安全**：工作区级 `.vscode/settings.json` 不能把 `epytor.imageLocalPath` 指向工作区之外——这类值会被忽略，保存与图库面板都改用 Markdown 文件同级的 `images/`。若工作区配置替你把上传打开（`epytor.imageStorage` 或图床地址来自工作区设置），上传会被跳过：图片存本地并给出提示。
 
 > 自动保存使用 VS Code 内置设置 `files.autoSave`（`off` / `afterDelay` / `onFocusChange` / `onWindowChange`），EPYTOR 不再提供独立的自动保存设置。
 
@@ -64,7 +67,7 @@
 * 切回 Markdown 标签会恢复内容、滚动位置与折叠状态，但撤销/重做历史从零开始
 * 停手后约 400ms 内切走标签，最后一次改动不会写入文件
 * 全局搜索跳转：多文件同时打开时可能无法精确定位
-* 部分扩展语法（脚注等）尚未支持
+* 部分扩展语法（脚注、内联 HTML 等）尚未支持
 * 段落/标题文字对齐不提供（标准 Markdown 无对应语法）
 
 ## 参与贡献

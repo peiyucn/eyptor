@@ -34,18 +34,21 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 
 > To choose how `.md` files open by default, use the built-in VS Code entry: right-click a Markdown file → **Reopen Editor With…** → **Configure default editor for '*.md'**. EPYTOR does not manage editor associations itself.
 
+The Settings UI groups them into **epytor** (editor) and **epytor › Images**. Changing any of them takes effect immediately — no need to reopen the tab.
+
 | Setting | Default | Description |
 |---|---|---|
-| `epytor.editorMaxWidth` | `900` | Editor max width (px) |
-| `epytor.codeBlockMaxHeight` | `600` | Code block max height (px) |
 | `epytor.tableWrapMode` | `"wrap"` | Table cell wrapping: `wrap` (break anywhere) / `nowrap` (no wrap + horizontal scroll) |
-| `epytor.imageStorage` | `"local"` | Image storage: `local` / `server` |
-| `epytor.imageLocalPath` | `""` | Local image path |
-| `epytor.imageServerUrl` | `""` | Image upload endpoint URL (used when `imageStorage` is `server`) |
-| `epytor.imageServerFieldName` | `"file"` | Form field name for the image file in the upload request |
-| `epytor.imageServerExtraParams` | `""` | Extra upload request parameters as a JSON object string, e.g. `{"token":"xxx"}` |
-| `epytor.imageServerResponsePath` | `"url"` | Dot-notation path to extract the image URL from the upload response JSON, e.g. `data.url` |
+| `epytor.codeBlockMaxHeight` | `600` | Code block max height in px (100–10000) |
+| `epytor.editorMaxWidth` | `900` | Editor content max width in px (400–10000) |
 | `epytor.serializationMode` | `"clean"` | Markdown save mode: `clean` / `compatible` |
+| `epytor.imageStorage` | `"local"` | Image storage: `local` (save to disk) / `server` (upload to your image server) |
+| `epytor.imageLocalPath` | `""` | Local image folder — relative to the workspace root (or to the Markdown file when there is no workspace) or an absolute path. Empty = auto-detect `images/`, `imgs/`, `assets/images/`, `assets/`, otherwise `images/` next to the file |
+| `epytor.imageServer` | `{}` | Image server settings: `{ "url": "", "fieldName": "file", "extraParams": {}, "responsePath": "url" }` |
+
+**Image server** (`imageStorage` = `server`): `epytor.imageServer.url` must point at the upload endpoint — without it the upload fails with an explanation. `fieldName` (default `file`) is the multipart form field of the image; `extraParams` (a JSON object; values must be strings, numbers or booleans) adds extra form fields; `responsePath` (default `url`, e.g. `data.url`) is the dot-notation path used to read the image URL from the JSON response. A plain-`http` endpoint is allowed (intranet servers) but you get one warning. The older `epytor.imageServerUrl`, `epytor.imageServerFieldName`, `epytor.imageServerExtraParams` and `epytor.imageServerResponsePath` settings still work as a fallback but are deprecated — please migrate to `epytor.imageServer`.
+
+**Image path safety**: a workspace-level `.vscode/settings.json` may not point `epytor.imageLocalPath` outside the workspace — such a value is ignored and `images/` next to the Markdown file is used for saving and for the image picker. If a workspace turns uploads on for you (`epytor.imageStorage` or the image server URL coming from workspace settings), the upload is skipped, the image is saved locally and a notice is shown.
 
 > Auto save uses the built-in VS Code setting `files.autoSave` (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`). EPYTOR no longer ships its own auto-save setting.
 

@@ -1,7 +1,7 @@
 # 技术债务
 
 > 面向开发者的代码质量改进清单，不涉及用户可见功能变更。
-> 最后更新：2026-09-08
+> 最后更新：2026-09-10
 
 ***
 
@@ -43,12 +43,20 @@
 
 ### 配置项检修
 
-* [x] 全部 13 个配置项已验证在代码中实际使用，无死配置。
+* [x] **配置面收敛（2026-09-10 结论）**：v1.1.6 的 **14 项 → 7 项**（另有 4 个已弃用键仅作兜底，带 `deprecationMessage`，VS Code 设置面板默认隐藏）。
   * ~~`autoSave` / `autoSaveDelay`~~ — 2026-09-07 移除：自动保存改用 VS Code 原生 `files.autoSave`（拉取式保存架构）
-  * `codeBlockMaxHeight` / `editorMaxWidth` / `fontFamily` / `imageSelectionColor` → 注入 CSS 变量
-  * `defaultMode` → `extension.ts` 编辑器关联同步
-  * `debugMode` → 全局调试日志开关 + WebView 同步
-  * `imageStorage` / `imageLocalPath` / `imageServer*` → `imageService.ts` 图片上传流程
+  * ~~`defaultMode`~~ — 2026-09-10 移除：默认打开方式交回 VS Code 官方入口（打开方式… → 为 `*.md` 配置默认编辑器），扩展不再改写 `workbench.editorAssociations`
+  * ~~`debugMode`~~（连命令 `epytor.toggleDebugMode`）— 2026-09-10 移除：调试日志管线整体下线
+  * ~~`fontFamily`~~ — 2026-09-10 移除：编辑器字体统一跟随 VS Code 编辑器字体（`--vscode-editor-font-family`），保留 `--custom-font-family` 作为自定义 CSS 覆盖位
+  * ~~`imageSelectionColor`~~ — 2026-09-10 移除：图片选中边框改用 VS Code 主题色（`--vscode-list-activeSelectionBackground`）
+  * `markdown.serializationMode` → **改名** `serializationMode`（该键从未发布，零迁移成本；读取点与广播表同步）
+  * `imageServerUrl` / `imageServerFieldName` / `imageServerExtraParams` / `imageServerResponsePath` → **合并**为对象 `imageServer`：解析集中在 `utils/imageServerConfig.ts` 纯函数（新键优先、旧键逐字段兜底，只读不改写 settings.json）；`extraParams` 由 JSON 字符串改为真正的 object，值仅接受字符串/数字/布尔，类型不对或出现嵌套给**用户可见**本地化警告；`fieldName` 走白名单 `^[A-Za-z0-9_.-]+$`（非法回退 `file`）；key/value 剥 CRLF 与引号
+  * **实际生效 7 项**（逐项确认有消费方，无死配置）：`tableWrapMode`（2026-09-07 新增）/ `codeBlockMaxHeight` / `editorMaxWidth` / `serializationMode` / `imageStorage` / `imageLocalPath` / `imageServer`
+    * `tableWrapMode` / `codeBlockMaxHeight` / `editorMaxWidth` → 注入 :root CSS 变量，且**配置变更实时广播**（`extension.ts` 的 `CONFIG_BROADCASTS` 表驱动 + `webview/utils/{tableWrap,layoutVars}.ts`）
+    * `serializationMode` → WebView 序列化模式（init 载荷 + 变更广播）
+    * `imageStorage` / `imageLocalPath` / `imageServer` → `imageService.ts` 图片保存/上传（目录解析与越界判定抽到 `utils/imageLocalDir.ts`，写入与图库列举两处共用）
+  * **分组与排序**（2026-09-10）：`contributes.configuration` 由单节改为数组——*epytor*（tableWrapMode → codeBlockMaxHeight → editorMaxWidth → serializationMode）与 *epytor › 图片*（imageStorage → imageLocalPath → imageServer，随后 4–7 为弃用旧键）；分组标题走 nls（`config.group.images`）
+  * **数值口径**：`codeBlockMaxHeight` / `editorMaxWidth` 的 schema `minimum`/`maximum`（100–10000 / 400–10000）与运行时 `sanitizeCssNumber(value, fallback, min, max)` 同一口径，越界一律回退默认值
 
 ### 测试补齐
 
