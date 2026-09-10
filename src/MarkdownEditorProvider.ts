@@ -536,7 +536,25 @@ export class MarkdownEditorProvider
             case "ready": {
                 // 标记面板已初始化，onDidChangeViewState 此后才会处理 pending navigation
                 this._initializedPanels.add(uriKey);
-                const initContent = document.getText();
+                // 未落盘编辑优先：retainContextWhenHidden:false 下切走会销毁 webview，
+                // 而 _markDirty 只通知 VS Code「变了」、并不把内容拷进文档——若此刻有
+                // 未保存改动，必须用 webview 推来的副本重建，否则切回来是旧内容
+                // （编辑丢失，脏标记却还在，用户下次保存会把旧内容写回磁盘）。
+                const pushedContent = this._pushedContent.get(uriKey);
+                const memoryContent = document.getText();
+                const initContent = pushedContent ?? memoryContent;
+                if (pushedContent !== undefined && pushedContent !== memoryContent) {
+                    // 确有未落盘改动：用推送副本重建并保持脏状态
+                    document.update(pushedContent);
+                    this._markDirty(document);
+                } else if (pushedContent !== undefined) {
+                    // 与内存一致：只是一次 webview 重建，没有未保存改动 ——
+                    // 回归：此前无条件 update+markDirty，导致「开着几个 md 什么都没干」，
+                    // 文档被反复置脏 → 到点自动保存时该 webview 已被销毁/未初始化 →
+                    // 等拉取超时 → VS Code 报「编辑器无响应，文件可能已用旧内容保存」
+                    this._pushedContent.delete(uriKey);
+                    this._webviewDirty.set(uriKey, false);
+                }
                 const displayContent = this._prepareContentForDisplay(initContent, document, webviewPanel, uriKey);
                 // 消费 pending navigation（切换预览 / 全局搜索首次打开时设置）
                 const scrollToLine = this._consumePendingNavigation(document.uri.fsPath)
@@ -820,15 +838,18 @@ export class MarkdownEditorProvider
     private _requestContent(document: MarkdownDocument, uriKey: string): Promise<string> {
         const panel = this._webviewPanels.get(uriKey);
         const pushed = this._pushedContent.get(uriKey);
-        // 面板非激活（失活/销毁中）：webview 可能已经不在，直接用它推来的副本——
-        // 等待拉取只会超时，VS Code 会报「编辑器无响应，文件可能已用旧内容保存」
-        if (pushed !== undefined && this._panelActive.get(uriKey) !== true) {
-            return Promise.resolve(pushed);
+        const fallback = pushed ?? document.getText();
+        // 只有「存在面板 + 面板处于激活 + 已收到过 ready」时才值得等 webview 回话。
+        // 其余情况（失活/销毁中/重建中/没有面板）等待只会超时——VS Code 会报
+        // 「编辑器无响应，文件可能已用旧内容保存」，而且多文档同时开着时这条路径
+        // 会在「什么都没干」时被自动保存触发。直接用推送副本或内存内容，立即返回。
+        const canAskWebview = panel !== undefined
+            && this._panelActive.get(uriKey) === true
+            && this._initializedPanels.has(uriKey);
+        if (!canAskWebview) {
+            return Promise.resolve(fallback);
         }
-        if (!panel) {
-            return Promise.resolve(pushed ?? document.getText());
-        }
-        return this._contentRequests.request(uriKey, pushed ?? document.getText());
+        return this._contentRequests.request(uriKey, fallback);
     }
 
     async saveCustomDocument(
