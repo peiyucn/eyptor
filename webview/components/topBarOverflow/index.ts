@@ -325,7 +325,9 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
             mutObs?.disconnect();
             if (rafId !== null) cancelAnimationFrame(rafId);
             resizeObserver.disconnect();
-            window.removeEventListener("resize", schedule);
+            // 必须与注册时同一引用（回归：此前移除的是 schedule，而注册的是
+            // scheduleUnlessCollapsed——监听器不释放，编辑器每次重建泄漏一个）
+            window.removeEventListener("resize", scheduleUnlessCollapsed);
             moreBtn.remove();
             closeMenu();
         },
