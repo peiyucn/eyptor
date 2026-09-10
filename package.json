@@ -89,125 +89,136 @@
         }
       ]
     },
-    "configuration": {
-      "title": "epytor",
-      "properties": {
-        "epytor.codeBlockMaxHeight": {
-          "type": "number",
-          "default": 600,
-          "minimum": 100,
-          "description": "%config.codeBlockMaxHeight.description%"
-        },
-        "epytor.editorMaxWidth": {
-          "type": "number",
-          "default": 900,
-          "minimum": 400,
-          "description": "%config.editorMaxWidth.description%"
-        },
-        "epytor.serializationMode": {
-          "type": "string",
-          "enum": [
-            "clean",
-            "compatible"
-          ],
-          "enumDescriptions": [
-            "%config.serializationMode.clean%",
-            "%config.serializationMode.compatible%"
-          ],
-          "default": "clean",
-          "description": "%config.serializationMode.description%"
-        },
-        "epytor.tableWrapMode": {
-          "type": "string",
-          "enum": [
-            "wrap",
-            "nowrap"
-          ],
-          "enumDescriptions": [
-            "%config.tableWrapMode.wrap%",
-            "%config.tableWrapMode.nowrap%"
-          ],
-          "default": "wrap",
-          "description": "%config.tableWrapMode.description%"
-        },
-        "epytor.imageStorage": {
-          "order": 10,
-          "type": "string",
-          "enum": [
-            "local",
-            "server"
-          ],
-          "enumDescriptions": [
-            "%config.imageStorage.local%",
-            "%config.imageStorage.server%"
-          ],
-          "default": "local",
-          "description": "%config.imageStorage.description%"
-        },
-        "epytor.imageLocalPath": {
-          "order": 11,
-          "type": "string",
-          "default": "",
-          "description": "%config.imageLocalPath.description%"
-        },
-        "epytor.imageServer": {
-          "order": 12,
-          "type": "object",
-          "default": {},
-          "description": "%config.imageServer.description%",
-          "properties": {
-            "url": {
-              "type": "string",
-              "default": "",
-              "description": "%config.imageServer.url%"
-            },
-            "fieldName": {
-              "type": "string",
-              "default": "file",
-              "description": "%config.imageServer.fieldName%"
-            },
-            "extraParams": {
-              "type": "object",
-              "default": {},
-              "description": "%config.imageServer.extraParams%"
-            },
-            "responsePath": {
-              "type": "string",
-              "default": "url",
-              "description": "%config.imageServer.responsePath%"
-            }
+    "configuration": [
+      {
+        "title": "epytor",
+        "properties": {
+          "epytor.tableWrapMode": {
+            "order": 1,
+            "type": "string",
+            "enum": [
+              "wrap",
+              "nowrap"
+            ],
+            "enumDescriptions": [
+              "%config.tableWrapMode.wrap%",
+              "%config.tableWrapMode.nowrap%"
+            ],
+            "default": "wrap",
+            "description": "%config.tableWrapMode.description%"
+          },
+          "epytor.codeBlockMaxHeight": {
+            "order": 2,
+            "type": "number",
+            "default": 600,
+            "minimum": 100,
+            "description": "%config.codeBlockMaxHeight.description%"
+          },
+          "epytor.editorMaxWidth": {
+            "order": 3,
+            "type": "number",
+            "default": 900,
+            "minimum": 400,
+            "description": "%config.editorMaxWidth.description%"
+          },
+          "epytor.serializationMode": {
+            "order": 4,
+            "type": "string",
+            "enum": [
+              "clean",
+              "compatible"
+            ],
+            "enumDescriptions": [
+              "%config.serializationMode.clean%",
+              "%config.serializationMode.compatible%"
+            ],
+            "default": "clean",
+            "description": "%config.serializationMode.description%"
           }
-        },
-        "epytor.imageServerUrl": {
-          "order": 13,
-          "type": "string",
-          "default": "",
-          "description": "%config.imageServerUrl.description%",
-          "deprecationMessage": "%config.imageServerUrl.deprecation%"
-        },
-        "epytor.imageServerFieldName": {
-          "order": 14,
-          "type": "string",
-          "default": "file",
-          "description": "%config.imageServerFieldName.description%",
-          "deprecationMessage": "%config.imageServerFieldName.deprecation%"
-        },
-        "epytor.imageServerExtraParams": {
-          "order": 15,
-          "type": "string",
-          "default": "",
-          "description": "%config.imageServerExtraParams.description%",
-          "deprecationMessage": "%config.imageServerExtraParams.deprecation%"
-        },
-        "epytor.imageServerResponsePath": {
-          "order": 16,
-          "type": "string",
-          "default": "url",
-          "description": "%config.imageServerResponsePath.description%",
-          "deprecationMessage": "%config.imageServerResponsePath.deprecation%"
+        }
+      },
+      {
+        "title": "%config.group.images%",
+        "properties": {
+          "epytor.imageStorage": {
+            "order": 1,
+            "type": "string",
+            "enum": [
+              "local",
+              "server"
+            ],
+            "enumDescriptions": [
+              "%config.imageStorage.local%",
+              "%config.imageStorage.server%"
+            ],
+            "default": "local",
+            "description": "%config.imageStorage.description%"
+          },
+          "epytor.imageLocalPath": {
+            "order": 2,
+            "type": "string",
+            "default": "",
+            "description": "%config.imageLocalPath.description%"
+          },
+          "epytor.imageServer": {
+            "order": 3,
+            "type": "object",
+            "default": {},
+            "description": "%config.imageServer.description%",
+            "properties": {
+              "url": {
+                "type": "string",
+                "default": "",
+                "description": "%config.imageServer.url%"
+              },
+              "fieldName": {
+                "type": "string",
+                "default": "file",
+                "description": "%config.imageServer.fieldName%"
+              },
+              "extraParams": {
+                "type": "object",
+                "default": {},
+                "description": "%config.imageServer.extraParams%"
+              },
+              "responsePath": {
+                "type": "string",
+                "default": "url",
+                "description": "%config.imageServer.responsePath%"
+              }
+            }
+          },
+          "epytor.imageServerUrl": {
+            "order": 4,
+            "type": "string",
+            "default": "",
+            "description": "%config.imageServerUrl.description%",
+            "deprecationMessage": "%config.imageServerUrl.deprecation%"
+          },
+          "epytor.imageServerFieldName": {
+            "order": 5,
+            "type": "string",
+            "default": "file",
+            "description": "%config.imageServerFieldName.description%",
+            "deprecationMessage": "%config.imageServerFieldName.deprecation%"
+          },
+          "epytor.imageServerExtraParams": {
+            "order": 6,
+            "type": "string",
+            "default": "",
+            "description": "%config.imageServerExtraParams.description%",
+            "deprecationMessage": "%config.imageServerExtraParams.deprecation%"
+          },
+          "epytor.imageServerResponsePath": {
+            "order": 7,
+            "type": "string",
+            "default": "url",
+            "description": "%config.imageServerResponsePath.description%",
+            "deprecationMessage": "%config.imageServerResponsePath.deprecation%"
+          }
         }
       }
-    }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "node esbuild.mjs --production",

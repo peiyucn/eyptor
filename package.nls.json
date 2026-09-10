@@ -1,5 +1,6 @@
 {
   "customEditor.displayName": "WYSIWYG Markdown Editor",
+  "config.group.images": "epytor › Images",
   "command.switchToTextEditor.title": "EPYTOR OFF",
   "command.switchToPreview.title": "EPYTOR ON",
   "config.codeBlockMaxHeight.description": "Maximum display height of code blocks in pixels. A scrollbar appears when content exceeds this height.",
