@@ -57,7 +57,6 @@ import { resolvePathSuggestionRequest } from "./utils/pathSuggestionRequests";
 import { setImageUriMap, remapImageUri, showGlobalLightbox } from "./components/imageView";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
 import { initViewportLedger } from "./utils/viewportLedger";
-import { captureHistory, restoreHistory } from "./utils/historySnapshot";
 import { initFindBar } from "./components/findBar";
 import { initToc } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
@@ -687,29 +686,10 @@ let _hasUnsavedChanges = false;
 /** 停手多久后推送一次：打字期间不序列化，停手才付这笔钱 */
 const CONTENT_PUSH_IDLE_MS = 400;
 
-/** 快照里的文档 JSON 上限（字符）：超过则放弃恢复（内容仍按 Markdown 走） */
-const MAX_SNAPSHOT_DOC_CHARS = 1_200_000;
-
 let _pushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function pushContentNow(): void {
-    const markdown = getMarkdownForSave();
-    // 编辑器快照：文档 JSON（校验用，保证历史位置可对齐）+ 撤销/重做历史。
-    // 只在推送点构建（停手 400ms），不在打字期间付这份成本。
-    let snapshot: { doc?: string; history?: string } | undefined;
-    const view = getEditorView();
-    if (view) {
-        try {
-            const doc = JSON.stringify(view.state.doc.toJSON());
-            if (doc.length <= MAX_SNAPSHOT_DOC_CHARS) {
-                const history = captureHistory(view.state);
-                snapshot = { doc, ...(history ? { history: JSON.stringify(history) } : {}) };
-            }
-        } catch {
-            snapshot = undefined; // 快照失败不影响内容推送
-        }
-    }
-    notifyUnsavedContent(markdown, snapshot);
+    notifyUnsavedContent(getMarkdownForSave());
 }
 
 /**
@@ -928,22 +908,6 @@ async function handleEditorLifecycleMessage(
         if (msg.serializationMode) { setSerializationMode(msg.serializationMode); }
     }
     await initEditor(container, msg.content);
-
-    // 撤销/重做快照恢复（销毁重建架构）：仅当重建出的文档与快照逐位一致才注入，
-    // 否则保持空历史——Markdown 往返（规范化、图片 URI 重写）可能改变结构，位置错了
-    // 会让撤销落到错误位置，宁可不恢复也不能冒险。
-    if (msg.type === "init" && msg.restore?.doc && msg.restore.history) {
-        const view = getEditorView();
-        if (view) {
-            try {
-                if (JSON.stringify(view.state.doc.toJSON()) === msg.restore.doc) {
-                    restoreHistory(view.state, (tr) => view.dispatch(tr), msg.restore.history);
-                }
-            } catch {
-                // 校验失败：保持空历史（与销毁重建的默认行为一致）
-            }
-        }
-    }
     // 还原折叠状态：服务两个真实场景——① 同一个 webview 内的编辑器实例被重建（revert、
     // 外部写盘采纳）；② webview 整体重建（窗口重载、关标签重开）时从 webview state 取回。
     // 保活下切标签不需要它（实例根本没销毁）。折叠会改变布局，必须在定位滚动之前恢复。

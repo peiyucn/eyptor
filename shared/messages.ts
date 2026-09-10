@@ -26,7 +26,7 @@ export type ToExtensionMessage =
     | { type: "ready" }
     | { type: "markDirty" }
     /** webview 主动推来的未落盘内容副本（停手 400ms / blur / pagehide；扩展在 webview 重建时用它恢复内容、问不到 webview 时用它兜底保存） */
-    | { type: "unsavedContent"; content: string; doc?: string; history?: string }
+    | { type: "unsavedContent"; content: string }
     | { type: "contentResponse"; content: string }
     | { type: "frontmatterUpdate"; frontmatter: string }
     | { type: "openUrl"; url: string }
@@ -46,7 +46,7 @@ export type ToExtensionMessage =
  * lineMap 在 init/revert 中为可选：Extension 始终发送，但 WebView 侧用 `?? []` 兜底以防万一。
  */
 export type ToWebviewMessage =
-    | { type: "init"; content: string; restore?: { doc?: string; history?: string }; active?: boolean; serializationMode?: "clean" | "compatible"; lineMap?: number[]; lineEndMap?: number[]; scrollToLine?: number; frontmatter?: string; imageUriMap?: Record<string, string> }
+    | { type: "init"; content: string; active?: boolean; serializationMode?: "clean" | "compatible"; lineMap?: number[]; lineEndMap?: number[]; scrollToLine?: number; frontmatter?: string; imageUriMap?: Record<string, string> }
     | { type: "revert"; content: string; lineMap?: number[]; lineEndMap?: number[]; frontmatter?: string; imageUriMap?: Record<string, string> }
     | { type: "panelActiveState"; active: boolean }
     | { type: "requestContent" }

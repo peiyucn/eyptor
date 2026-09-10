@@ -88,8 +88,6 @@ export class MarkdownEditorProvider
      *      （见 _requestContent）。
      */
     private readonly _pushedContent = new Map<string, string>();
-    /** 编辑器快照（文档 JSON + 撤销/重做历史）：webview 重建时注入，保住撤销历史 */
-    private readonly _pushedSnapshots = new Map<string, { markdown: string; doc?: string; history?: string }>();
     /**
      * 面板是否处于激活（onDidChangeViewState 维护）。
      * 它**不是**「webview 还在不在」的判据（保活下一直在），而是「要不要等它回话」的保守闸门：
@@ -362,7 +360,6 @@ export class MarkdownEditorProvider
             this._initializedPanels.delete(uriKey);
             this._panelActive.delete(uriKey);
             this._pushedContent.delete(uriKey);
-            this._pushedSnapshots.delete(uriKey);
             this._wordCounts.delete(uriKey);
             this._fallbackWarnedUris.delete(uriKey);
             // 兜底结算未完成的拉取（面板已销毁，用内存内容）
@@ -521,7 +518,6 @@ export class MarkdownEditorProvider
                         });
                         this._webviewDirty.set(uriKey, false);
                         this._pushedContent.delete(uriKey);
-                        this._pushedSnapshots.delete(uriKey);
                         if (decision.keepUserContent) {
                             // 用户有未落盘编辑：保留用户内容，并通知 VS Code 脏状态
                             // （回归：此前静默置脏，VS Code 认为干净，关窗不提示丢编辑）
@@ -581,12 +577,6 @@ export class MarkdownEditorProvider
                     this._pushedContent.delete(uriKey);
                     this._webviewDirty.set(uriKey, false);
                 }
-                // 撤销/重做快照：内容与快照由同一次推送写入，webview 侧还会比对文档
-                // JSON 逐位一致后才注入；不匹配（Markdown 规范化/图片 URI 差异）则保持空历史。
-                const snapshot = this._pushedSnapshots.get(uriKey);
-                const restore = snapshot?.doc
-                    ? { doc: snapshot.doc, ...(snapshot.history ? { history: snapshot.history } : {}) }
-                    : undefined;
                 const displayContent = this._prepareContentForDisplay(initContent, document, webviewPanel, uriKey);
                 // 消费 pending navigation（切换预览 / 全局搜索首次打开时设置）
                 const scrollToLine = this._consumePendingNavigation(document.uri.fsPath)
@@ -602,7 +592,6 @@ export class MarkdownEditorProvider
                     // 运行期配置随 init 下发（回归 F1：webview 不再用启动快照重置，
                     // revert 不会把用户中途改的序列化模式静默回滚）
                     serializationMode: sanitizeSerializationMode(cfg.get("serializationMode", "clean")),
-                    ...(restore ? { restore } : {}),
                     ...(scrollToLine !== undefined ? { scrollToLine } : {}),
                 });
                 break;
@@ -618,11 +607,6 @@ export class MarkdownEditorProvider
                 // 内容副本推送（停手 400ms / blur / pagehide）：存副本 + 置脏；webview 重建时
                 // 用它恢复内容，保存问不到 webview 时用它兜底（不再等拉取）
                 this._pushedContent.set(uriKey, message.content);
-                this._pushedSnapshots.set(uriKey, {
-                    markdown: message.content,
-                    ...(message.doc ? { doc: message.doc } : {}),
-                    ...(message.history ? { history: message.history } : {}),
-                });
                 this._webviewDirty.set(uriKey, true);
                 break;
             }
@@ -923,7 +907,6 @@ export class MarkdownEditorProvider
         const uriKey = document.uri.toString();
         this._webviewDirty.set(uriKey, false);
         this._pushedContent.delete(uriKey);
-        this._pushedSnapshots.delete(uriKey);
         const panel = this._webviewPanels.get(uriKey);
         if (panel) {
             const revertContent = document.getText();
