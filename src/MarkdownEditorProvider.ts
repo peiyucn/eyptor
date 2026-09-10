@@ -80,6 +80,8 @@ export class MarkdownEditorProvider
      * （VS Code 报「编辑器无响应，文件可能已用旧内容保存」），并且会丢编辑。
      */
     private readonly _pushedContent = new Map<string, string>();
+    /** 面板是否处于激活（onDidChangeViewState 维护）：非激活时保存直接用推送副本，绝不等待拉取 */
+    private readonly _panelActive = new Map<string, boolean>();
 
     // 图片 webviewUri → relPath 映射（key: docUri.toString()）
     private readonly _imageUriMaps = new Map<string, Map<string, string>>();
@@ -340,6 +342,8 @@ export class MarkdownEditorProvider
             this._webviewPanels.delete(uriKey);
             this._imageUriMaps.delete(uriKey);
             this._initializedPanels.delete(uriKey);
+            this._panelActive.delete(uriKey);
+            this._pushedContent.delete(uriKey);
             this._wordCounts.delete(uriKey);
             this._fallbackWarnedUris.delete(uriKey);
             // 兜底结算未完成的拉取（面板已销毁，用内存内容）
@@ -359,6 +363,7 @@ export class MarkdownEditorProvider
             // 焦点真相同步：面板激活态变化推送给 webview（多 webview 焦点互抢的
             // 根因修复——webview 内 window.focus()/view.focus() 无法判断自己是否
             // 当前激活文档，后台 webview 迟到的 focus 会抢走焦点致当前文档无法输入）
+            this._panelActive.set(uriKey, p.active);
             try {
                 p.webview.postMessage({ type: "panelActiveState", active: p.active });
             } catch {
@@ -815,8 +820,9 @@ export class MarkdownEditorProvider
     private _requestContent(document: MarkdownDocument, uriKey: string): Promise<string> {
         const panel = this._webviewPanels.get(uriKey);
         const pushed = this._pushedContent.get(uriKey);
-        // 面板不可见（失活/销毁中）：webview 可能已经不在，直接用它失活前推来的内容
-        if (pushed !== undefined && (!panel || !panel.visible)) {
+        // 面板非激活（失活/销毁中）：webview 可能已经不在，直接用它推来的副本——
+        // 等待拉取只会超时，VS Code 会报「编辑器无响应，文件可能已用旧内容保存」
+        if (pushed !== undefined && this._panelActive.get(uriKey) !== true) {
             return Promise.resolve(pushed);
         }
         if (!panel) {

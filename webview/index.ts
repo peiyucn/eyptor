@@ -407,6 +407,7 @@ async function initEditor(
         () => {
             // 文档变更轻量通知（序列化已在保存时拉取，这里只做 UI 刷新 + 脏标记）
             _hasUnsavedChanges = true; // 同步置位：失活兜底推送不依赖下面的防抖
+            scheduleContentPush(); // 主动推送（节流）：扩展侧始终持有近实时副本
             if (_docChangedTimer) clearTimeout(_docChangedTimer);
             _docChangedTimer = setTimeout(() => {
                 notifyMarkDirty(); // 通知 Extension 内容已变（自动保存防抖到点后拉取）
@@ -680,9 +681,35 @@ notifyReady();
  */
 let _hasUnsavedChanges = false;
 
+/** 主动推送节流间隔：扩展侧持有的副本最多落后这么多 */
+const CONTENT_PUSH_THROTTLE_MS = 400;
+
+let _pushTimer: ReturnType<typeof setTimeout> | null = null;
+let _pushPending = false;
+
+function pushContentNow(): void {
+    notifyUnsavedContent(getMarkdownForSave());
+}
+
+/**
+ * 变更后主动推送内容给扩展（前沿立即推一次 + 400ms 节流尾部再推一次）。
+ * 根因：宿主销毁 webview 的时机早于扩展能拉取的时机（实测连 blur/pagehide 都来不及），
+ * 而 VS Code 随后保存时又会等一个已经不存在的 webview → 超时后用旧内容落盘并报
+ * 「编辑器无响应」。唯一稳的办法是**扩展侧始终握着近实时副本**。
+ */
+function scheduleContentPush(): void {
+    if (_pushTimer === null) { pushContentNow(); }
+    else { _pushPending = true; }
+    if (_pushTimer !== null) { clearTimeout(_pushTimer); }
+    _pushTimer = setTimeout(() => {
+        _pushTimer = null;
+        if (_pushPending) { _pushPending = false; pushContentNow(); }
+    }, CONTENT_PUSH_THROTTLE_MS);
+}
+
 function flushUnsavedContent(): void {
     if (!_hasUnsavedChanges) { return; }
-    notifyUnsavedContent(getMarkdownForSave());
+    pushContentNow();
 }
 
 window.addEventListener("blur", flushUnsavedContent);
