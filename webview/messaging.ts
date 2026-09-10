@@ -22,8 +22,11 @@ export function notifyMarkDirty(): void {
     vscode.postMessage({ type: "markDirty" });
 }
 
-export function notifyUnsavedContent(content: string): void {
-    vscode.postMessage({ type: "unsavedContent", content });
+export function notifyUnsavedContent(
+    content: string,
+    snapshot?: { doc?: string; history?: string },
+): void {
+    vscode.postMessage({ type: "unsavedContent", content, ...(snapshot ?? {}) });
 }
 
 export function notifyContentResponse(content: string): void {
