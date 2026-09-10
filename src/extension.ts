@@ -12,7 +12,7 @@ const CONFIG_BROADCASTS: ReadonlyArray<{
     message: (value: unknown) => ToWebviewMessage;
 }> = [
     {
-        section: "epytor.markdown.serializationMode",
+        section: "epytor.serializationMode",
         message: (value) => ({ type: "setSerializationMode", mode: sanitizeSerializationMode(value) }),
     },
     {

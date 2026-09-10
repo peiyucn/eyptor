@@ -562,7 +562,7 @@ export class MarkdownEditorProvider
                     active: webviewPanel.active,
                     // 运行期配置随 init 下发（回归 F1：webview 不再用启动快照重置，
                     // revert 不会把用户中途改的序列化模式静默回滚）
-                    serializationMode: sanitizeSerializationMode(cfg.get("markdown.serializationMode", "clean")),
+                    serializationMode: sanitizeSerializationMode(cfg.get("serializationMode", "clean")),
                     ...(scrollToLine !== undefined ? { scrollToLine } : {}),
                 });
                 break;
@@ -948,7 +948,7 @@ export class MarkdownEditorProvider
         const lang = vscode.env.language.toLowerCase();
         const isMac = process.platform === 'darwin';
         const translations = lang.startsWith('zh') ? ZH_CN_WEBVIEW : {};
-        const serializationMode = sanitizeSerializationMode(cfg.get("markdown.serializationMode", "clean"));
+        const serializationMode = sanitizeSerializationMode(cfg.get("serializationMode", "clean"));
         const i18nScript = `window.__i18n=${JSON.stringify({ translations, isMac, serializationMode })};`;
 
         return `<!DOCTYPE html>

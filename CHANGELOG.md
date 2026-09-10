@@ -9,7 +9,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 ### Features
 
-- **Clean Markdown serialization mode** (`epytor.markdown.serializationMode`: `clean` / `compatible`) — minimizes unnecessary escaping and redundant table breaks; default `clean` (#15, thanks @dongjha)
+- **Clean Markdown serialization mode** (`epytor.serializationMode`: `clean` / `compatible`) — minimizes unnecessary escaping and redundant table breaks; default `clean` (#15, thanks @dongjha)
 - **Source ↔ preview keeps your place** — switching between the WYSIWYG editor and the text/preview tab returns to the same position, from any entry point (menu, shortcut, command palette, search results)
 - **Table grid picker**: an 8×8 grid on the insert-table button, any rows × columns
 - **Regular-expression search** in the find bar (`.*` toggle) with invalid-pattern feedback and zero-width match protection

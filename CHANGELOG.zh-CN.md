@@ -9,7 +9,7 @@
 
 ### 功能
 
-* **Clean Markdown 保存模式**（`epytor.markdown.serializationMode`：`clean` / `compatible`）——减少多余转义与表格占位换行，默认 `clean`（#15，感谢 @dongjha）
+* **Clean Markdown 保存模式**（`epytor.serializationMode`：`clean` / `compatible`）——减少多余转义与表格占位换行，默认 `clean`（#15，感谢 @dongjha）
 * **源码 ↔ 预览保持位置**——在所见即所得与文本/预览标签之间切换后回到原处，任何入口（菜单、快捷键、命令面板、搜索结果）都适用
 * **表格网格选择器**：插入表格按钮弹出 8×8 网格，任意行列插入
 * **查找栏正则搜索**（`.*` 开关）：无效正则错误提示 + 零宽匹配防护

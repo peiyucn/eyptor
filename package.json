@@ -104,18 +104,18 @@
           "minimum": 400,
           "description": "%config.editorMaxWidth.description%"
         },
-        "epytor.markdown.serializationMode": {
+        "epytor.serializationMode": {
           "type": "string",
           "enum": [
             "clean",
             "compatible"
           ],
           "enumDescriptions": [
-            "%config.markdown.serializationMode.clean%",
-            "%config.markdown.serializationMode.compatible%"
+            "%config.serializationMode.clean%",
+            "%config.serializationMode.compatible%"
           ],
           "default": "clean",
-          "description": "%config.markdown.serializationMode.description%"
+          "description": "%config.serializationMode.description%"
         },
         "epytor.tableWrapMode": {
           "type": "string",

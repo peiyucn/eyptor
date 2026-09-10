@@ -45,7 +45,7 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 | `epytor.imageServerFieldName` | `"file"` | Form field name for the image file in the upload request |
 | `epytor.imageServerExtraParams` | `""` | Extra upload request parameters as a JSON object string, e.g. `{"token":"xxx"}` |
 | `epytor.imageServerResponsePath` | `"url"` | Dot-notation path to extract the image URL from the upload response JSON, e.g. `data.url` |
-| `epytor.markdown.serializationMode` | `"clean"` | Markdown save mode: `clean` / `compatible` |
+| `epytor.serializationMode` | `"clean"` | Markdown save mode: `clean` / `compatible` |
 
 > Auto save uses the built-in VS Code setting `files.autoSave` (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`). EPYTOR no longer ships its own auto-save setting.
 
