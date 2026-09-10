@@ -13,9 +13,9 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Source ↔ preview keeps your place** — switching between the WYSIWYG editor and the text/preview tab returns to the same position, from any entry point (menu, shortcut, command palette, search results)
 - **Table grid picker**: an 8×8 grid on the insert-table button, any rows × columns
 - **Regular-expression search** in the find bar (`.*` toggle) with invalid-pattern feedback and zero-width match protection
-- **Heading sticky title (multi-level) with sibling folding** — the document itself is never modified
+- **Heading sticky title** (up to three levels, pinned as soon as the heading reaches the top) **with sibling folding** — the document itself is never modified
 - **Table wrap modes** (`epytor.tableWrapMode`: `wrap` / `nowrap`) plus Shift+Enter soft breaks inside cells
-- **Editable frontmatter panel** — edit key/value rows in place; lists, comments and blank lines are preserved
+- **Editable frontmatter panel** — add, edit and remove key/value rows in place
 - **Toolbar overflow menu** — buttons collapse into a "⋯" menu on narrow windows
 - **Mermaid preview zoom** (0.2×–3×, with reset and horizontal scroll)
 - **Loading indicator** while a Markdown editor is opening or rebuilding
@@ -24,15 +24,15 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 - **Opening or returning to a Markdown tab no longer flashes** — the content no longer appears, disappears and reappears
 - **Coming back to a tab restores your scroll position and your folded headings**
-- **Sticky heading switching matches the built-in editor**: up to three levels, pinned as soon as the heading touches
-- **TOC panel open/close reflows the sticky heading and toolbar immediately**
 - **`.markdown` files get the same menu and `Ctrl/Cmd+Shift+M` shortcut as `.md`**
 - **List keyboard behavior follows the official defaults**: Backspace on an empty item deletes it, on a non-empty item merges it into the previous one, and numbering reflows automatically
 - **Auto save follows the built-in VS Code `files.autoSave`** (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`); `epytor.autoSave` and `epytor.autoSaveDelay` are gone
 - **Table cell padding, line spacing and the row/column selection toolbar** are unified with the rest of the editor
-- **Toolbar overflow "⋯" no longer overlaps buttons**
 - **Failures are no longer silent**: image upload, image rename, save and switch failures explain what went wrong, and several messages that stayed English in a Chinese UI are translated
-- **Switching back to a tab restarts undo/redo history** — document content, scroll position and folded headings are restored; the undo stack is not
+- **Settings are grouped** into *epytor* (editor) and *epytor › Images*, and **`epytor.editorMaxWidth` / `epytor.codeBlockMaxHeight` apply immediately** — no need to reopen the tab
+- **Image server settings are merged into one `epytor.imageServer` object** (`url` / `fieldName` / `extraParams` / `responsePath`), and `extraParams` is now a real JSON object. Migrating is recommended: `epytor.imageServerUrl`, `imageServerFieldName`, `imageServerExtraParams` and `imageServerResponsePath` still work as a fallback but are marked deprecated
+- **`epytor.markdown.serializationMode` was renamed to `epytor.serializationMode`** (the old key was never released)
+- **Four settings were removed**: `epytor.defaultMode` (use the built-in **Reopen Editor With… → Configure default editor**), `epytor.fontFamily` (the editor now follows your VS Code editor font), `epytor.imageSelectionColor` (the selection frame follows the VS Code theme colour) and `epytor.debugMode` along with the `epytor.toggleDebugMode` command
 
 ### Performance
 
@@ -44,29 +44,16 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 ### Bug fixes
 
-- **"The editor is not responding; the file was saved with possibly outdated content" no longer appears** — it used to show up even with several Markdown files open and no edits at all
-- **Unsaved edits are no longer lost when you switch tabs**, and a restored tab shows what you last typed
 - **External writes are no longer overwritten by auto save** — files changed by scripts or AI assistants keep their content
-- **No more whole-window input stutter or flashing** while a Markdown page was open (other webviews flickered too)
 - **Explorer clicks no longer make tabs flash**, and switching documents no longer leaves the editor unable to receive input
-- **Source ↔ preview**: the cursor no longer jumps back to line 1 or to the wrong block, no duplicate tab is created, the view no longer stops at the top of the file, and large files no longer lose their position when switching back
-- **Sticky heading**: no longer disappears entirely, is clickable again (the first heading included)
-- **TOC**: the target heading is no longer hidden behind the sticky title, no sticky bar is left behind, and folded state is no longer shared between identically named headings or across documents
-- **Documents no longer open scrolled to the first heading** (frontmatter pushed out of view)
-- **Shift+Enter inside a table cell no longer turns the content into a paragraph**, and soft breaks survive save/reload
+- **Source ↔ preview**: the cursor no longer jumps back to line 1 or to the wrong block, and large files no longer lose their position when switching back
 - **Images**: paths with spaces or parentheses no longer break or get mangled on save, an image title is no longer swallowed into the path (which caused 404s), rename failures are reported instead of silent, Windows reserved names are rejected, and upload failures, timeouts and oversized files are reported
 - **Global search**: clicking a non-Markdown result no longer jumps to the top of the file or scrolls other Markdown documents
 - **Your "Open With" choice for `.md` files is no longer silently removed**
-- **Configuration changes (serialization mode, debug mode) are no longer reverted** by an external write
 - **Find bar**: a closed find bar no longer runs the previous search, and invalid patterns are reported
 - **Path and language autocomplete**: keyboard navigation keeps its highlight
-- **Code blocks keep their syntax highlighting**
-- **Inline code at the end of a block** keeps the code style (path completion for `./` `@/` stays usable); ArrowRight exits with an in/out indicator
 - **Editor focus restored** when switching back from another file (cursor visible but input dead)
-- **No false "unsaved" dot** — neither on the first frame nor when merely moving the cursor
-- **Status bar word count updates**, and headings inside blockquotes show up in the TOC
-- **Mermaid zoom baseline**: zooms relative to the original rendered size instead of the container width
-- **Security**: external links are limited to http/https/mailto, workspace image paths and path links can no longer escape the workspace, and upload errors no longer echo the server response body
+- **Security**: external links are limited to http/https/mailto; image paths, the image gallery listing and path links can no longer escape the workspace; image-server settings injected by a workspace are never used for uploads (the image is saved locally and a notice is shown) and a plain-http image server is flagged once; upload errors no longer echo the server response body
 - **Milkdown** upgraded 7.22.0 → 7.22.1 (inline-code mark fix and a dompurify security update)
 
 ## [1.1.6] - 2026-08-06
