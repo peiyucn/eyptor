@@ -51,21 +51,38 @@ body {
     to { opacity: 1; }
 }
 
-.epytor-loading-spinner {
-    width: 22px;
-    height: 22px;
-    border: 2px solid color-mix(in srgb, var(--vscode-editor-foreground) 22%, transparent);
-    border-top-color: var(--vscode-focusBorder, #007acc);
-    border-radius: 50%;
-    animation: epytor-spin 0.8s linear infinite;
+/* 3×3 点阵波：逐点错相位呼吸，比转圈更贴合编辑器气质 */
+.epytor-dots {
+    display: grid;
+    grid-template-columns: repeat(3, 6px);
+    grid-auto-rows: 6px;
+    gap: 5px;
 }
 
-@keyframes epytor-spin {
-    to { transform: rotate(360deg); }
+.epytor-dots i {
+    border-radius: 50%;
+    background: var(--vscode-focusBorder, #007acc);
+    opacity: 0.22;
+    animation: epytor-dot 1.2s ease-in-out infinite;
+}
+
+.epytor-dots i:nth-child(1) { animation-delay: 0s; }
+.epytor-dots i:nth-child(2) { animation-delay: 0.1s; }
+.epytor-dots i:nth-child(3) { animation-delay: 0.2s; }
+.epytor-dots i:nth-child(4) { animation-delay: 0.1s; }
+.epytor-dots i:nth-child(5) { animation-delay: 0.2s; }
+.epytor-dots i:nth-child(6) { animation-delay: 0.3s; }
+.epytor-dots i:nth-child(7) { animation-delay: 0.2s; }
+.epytor-dots i:nth-child(8) { animation-delay: 0.3s; }
+.epytor-dots i:nth-child(9) { animation-delay: 0.4s; }
+
+@keyframes epytor-dot {
+    0%, 65%, 100% { opacity: 0.22; transform: scale(0.8); }
+    32% { opacity: 1; transform: scale(1.15); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .epytor-loading-spinner { animation: none; }
+    .epytor-dots i { animation: none; opacity: 0.55; }
 }
 
 /* 编辑器容器 */
