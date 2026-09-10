@@ -359,6 +359,14 @@ export class MarkdownEditorProvider
                 // panel 已销毁（切换/关闭竞态），忽略
             }
             if (!p.active) {
+                // retainContextWhenHidden:false：面板失活后宿主会销毁 webview。未落盘的
+                // 编辑必须在此之前拉取写盘——否则重建时只能拿到旧内容（切走即丢编辑）。
+                // 拉取式保存自带超时兜底（CONTENT_REQUEST_TIMEOUT_MS），webview 已被
+                // 销毁时回退内存内容，不会悬挂。
+                if (this._webviewDirty.get(uriKey) === true) {
+                    const cts = new vscode.CancellationTokenSource();
+                    void this.saveCustomDocument(document, cts.token).finally(() => cts.dispose());
+                }
                 // 状态栏跟随激活面板（回归 E9：此前用 setTimeout(0) 延迟判定，
                 // 现在统一由 _refreshStatusBar 按「任一 active 面板」取数，
                 // 同期另一面板的激活事件会随后再次刷新，事件循环内自洽）
