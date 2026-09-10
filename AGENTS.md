@@ -8,9 +8,19 @@
 
 ```
 src/extension.ts                         — 扩展入口，注册 CustomEditorProvider
+src/MarkdownDocument.ts                  — 文档模型（内容、脏标记、保存原语）
 src/MarkdownEditorProvider.ts            — Provider 核心（消息路由、自动保存、revert、文件监听、frontmatter 更新）
 src/utils/getNonce.ts                    — CSP nonce 生成
 src/utils/imageService.ts               — 图片本地保存（MD5 去重）+ 服务器上传
+src/utils/contentTransform.ts            — 磁盘内容 → 编辑器显示（表格 <br> 等）
+src/utils/lineMap.ts                     — 预览 ↔ 源码行号映射
+src/utils/pathGuard.ts                   — 路径越界防护（工作区边界）
+src/utils/safeBasename.ts                — 文件名净化（Windows 保留名/非法字符）
+src/utils/webviewConfigSanitize.ts       — 注入 WebView 前的配置值净化（安全）
+src/utils/externalChangeDecision.ts      — 外部写盘采纳判定（看 webview 是否有未保存编辑）
+src/utils/contentRequestCoordinator.ts   — 保存时向 webview 拉取内容的生命周期
+shared/messages.ts                       — Extension ↔ WebView 消息类型契约（唯一真源）
+shared/constants.ts / shared/tableWrap.ts — 双端共享常量
 src/i18n/webviewTranslations.ts         — WebView 翻译数据
 webview/index.ts                         — WebView 入口（消息路由、DOM 事件委托、frontmatter 可编辑面板、品牌标识注入）
 webview/editor.ts                        — CrepeBuilder 入口（Milkdown 7.22.1 + Crepe 原生功能注册、buildTopBar 定制、序列化配置）
@@ -20,6 +30,16 @@ webview/i18n/index.ts                    — t() / kbd() 翻译函数
 webview/ui/icons.ts                      — SVG 图标
 webview/ui/tooltip.ts                    — Tooltip 组件
 webview/utils/themeBus.ts               — Mermaid/CodeMirror 深浅主题统一事件总线
+webview/utils/viewportFreeze.ts          — 宿主折叠态排版冻结（切回不闪/不重排的根因修复）
+webview/utils/markdownSerializer.ts      — Markdown 序列化（Clean 模式、表格 <br>）
+webview/utils/minimalDiff.ts             — 保存时的最小行改动（唯一锚点 + 有界 LCS）
+webview/utils/findMatches.ts             — 查找栏匹配（大小写/正则/零宽防护/条数封顶）
+webview/utils/headingFold.ts             — 折叠状态纯逻辑（键稳定性、范围校验）
+webview/utils/headingSticky.ts           — 吸顶几何纯逻辑（对齐内置编辑器口径）
+webview/utils/pendingRequest.ts          — 请求生命周期（超时清理，防悬挂）
+webview/utils/pathSuggestionRequests.ts  — 路径补全请求注册表（id + pending + 超时）
+webview/utils/userInteraction.ts         — 用户交互 epoch（区分程序化滚动与用户滚动）
+webview/softBreakKeymap.ts               — 表格/代码块内 Shift+Enter 换行键位
 webview/headingFoldPlugin.ts             — 标题折叠插件（Decoration，不修改文档）
 webview/headingStickyPlugin.ts           — 标题吸顶条（滚动跟随 + 推挤过渡）
 webview/components/toc/index.ts         — 目录（TOC）面板（吸底工具栏下方、可固定、可拖拽宽度）
@@ -29,6 +49,11 @@ webview/components/pathLink/            — 路径链接自动补全
 webview/components/tableGridPicker/     — 表格网格选择器（顶栏表格按钮弹出 8×8 网格）
 webview/components/topBarOverflow/      — 工具栏溢出菜单（窄窗口按钮收进 ⋯ 面板）
 webview/components/mermaidZoom/         — Mermaid 预览缩放（0.2–3× + 控制条）
+webview/components/frontmatterPanel/     — Frontmatter 面板（key/value 行编辑）
+webview/components/codeBlockEnhance/     — 代码块增强（全屏、语言、复制）
+webview/components/imagePicker/          — 图片来源选择
+webview/components/topBar/               — 顶栏按钮装饰与元数据
+webview/vendor/                          — vendor 的上游 feature（latex / virtual-cursor）
 docs/specs/                              — 功能 spec 文档（2026-09-04-* 为本批 v1.2 功能）
 docs/checklists/                         — 手测清单
 docs/roadmap.md                          — 项目路线图（面向用户的功能规划）
