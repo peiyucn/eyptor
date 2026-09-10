@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { TINY_REAL_ATTRIBUTE } from "../utils/viewportLedger";
 
 const styleCss = readFileSync(
     path.resolve(process.cwd(), "webview/style.css"),
@@ -98,6 +99,13 @@ describe("WebView 样式", () => {
 
     it("codeBlockMaxHeight 注入的 CSS 变量 应该 有消费规则（回归：零消费方=死配置）", () => {
         expect(styleCss).toContain("var(--code-block-max-height)");
+    });
+
+    it("折叠期顶栏宽度钉定 应该 在真实小窗口下释放（回归 A6：用户真缩到 300×150 时顶栏溢出）", () => {
+        expect(styleCss).toContain("@media (width: 300px) and (height: 150px)");
+        // 选择器与 JS 常量同源：viewportLedger 改属性名时这条会红
+        expect(styleCss).toContain(`html:not([${TINY_REAL_ATTRIBUTE}]) .milkdown-top-bar`);
+        expect(styleCss).toContain("var(--epytor-last-body-width, 100%)");
     });
 
     it("重建期加载点阵 应该 已移除（中间态只留主题背景，对齐官方预览观感）", () => {

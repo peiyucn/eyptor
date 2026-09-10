@@ -8,7 +8,7 @@ import type { Ctx } from "@milkdown/kit/ctx";
 import { computeOverflow, type TopBarMeasuredItem } from "@/utils/topBarOverflow";
 import { applyTooltip } from "@/ui/tooltip";
 import { t } from "@/i18n";
-import { shouldSkipViewportWork } from "@/utils/viewportLedger";
+import { isHostCollapsedViewport } from "@/utils/viewportLedger";
 
 export interface TopBarButtonMeta {
     key: string;
@@ -293,9 +293,11 @@ export function initTopBarOverflow(host: TopBarOverflowHost): { dispose(): void 
     };
 
     /** 宿主折叠态（切到非 webview 标签）视口是假的 300×150：此刻测量会把按钮
-     *  收进「⋯」，切回来再展开——顶栏可见闪动。折叠期跳过，恢复尺寸的 resize 会重测 */
+     *  收进「⋯」，切回来再展开——顶栏可见闪动。折叠期跳过，恢复尺寸的 resize 会重测。
+     *  用户真把编辑区缩到 300×150 时**不**跳过（被摘挂的 webview 收不到输入，收到输入即真实
+     *  小窗口）：那时 300px 是真的，必须重测，否则按钮保持上次真实宽度的排版而溢出（回归 A6）。 */
     const scheduleUnlessCollapsed = (): void => {
-        if (shouldSkipViewportWork()) return;
+        if (isHostCollapsedViewport()) return;
         schedule();
     };
 

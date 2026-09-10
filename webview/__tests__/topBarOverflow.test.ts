@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computeOverflow, type TopBarMeasuredItem } from "../utils/topBarOverflow";
 import { initTopBarOverflow } from "../components/topBarOverflow";
+import { IFRAME_DEFAULT_HEIGHT, IFRAME_DEFAULT_WIDTH, TINY_REAL_ATTRIBUTE } from "../utils/viewportLedger";
+
+/** 改写 jsdom 视口尺寸（只读属性需 defineProperty） */
+function setViewport(width: number, height: number): void {
+    Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: height, configurable: true });
+}
 
 function makeItems(widths: number[]): TopBarMeasuredItem[] {
     return widths.map((width, index) => ({ key: `item-${index}`, width }));
@@ -86,6 +93,8 @@ describe("initTopBarOverflow 生命周期", () => {
     afterEach(() => {
         vi.unstubAllGlobals();
         vi.restoreAllMocks();
+        document.documentElement.removeAttribute(TINY_REAL_ATTRIBUTE);
+        setViewport(1024, 768);
         document.body.innerHTML = "";
     });
 
@@ -104,6 +113,41 @@ describe("initTopBarOverflow 生命周期", () => {
         // 这次 resize 会把已 dispose 的实例再测一次
         expect(getTopBarEl).toHaveBeenCalledTimes(measured);
         expect(observerDisconnects).toBe(1);
+    });
+
+    it("真实小窗口（用户在 300×150 下操作过） 应该 照常测量（回归 A6）", () => {
+        const getTopBarEl = vi.fn(() => null);
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        // 折叠读数 + 用户输入标记 = 用户真把编辑区缩到了这个尺寸
+        document.documentElement.setAttribute(TINY_REAL_ATTRIBUTE, "");
+
+        const ctl = initTopBarOverflow({ getTopBarEl, runItem: vi.fn() });
+        flushRaf();
+        const measured = getTopBarEl.mock.calls.length;
+        expect(measured).toBeGreaterThan(0);
+
+        window.dispatchEvent(new Event("resize"));
+        flushRaf();
+
+        // 不测量的话按钮会保持上一次真实宽度的排版，在实际 285px 宽的顶栏里溢出
+        expect(getTopBarEl).toHaveBeenCalledTimes(measured + 1);
+        ctl.dispose();
+    });
+
+    it("宿主折叠读数（没有任何用户输入） 应该 跳过测量（顶栏不闪）", () => {
+        const getTopBarEl = vi.fn(() => null);
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+
+        const ctl = initTopBarOverflow({ getTopBarEl, runItem: vi.fn() });
+        flushRaf();
+        const measured = getTopBarEl.mock.calls.length;
+        expect(measured).toBeGreaterThan(0);
+
+        window.dispatchEvent(new Event("resize"));
+        flushRaf();
+
+        expect(getTopBarEl).toHaveBeenCalledTimes(measured);
+        ctl.dispose();
     });
 
     it("dispose 移除的 resize 处理器 应该 与注册的是同一引用", () => {

@@ -93,6 +93,8 @@ let _topBarOverflowCtl: { dispose(): void } | null = null;
 // 正文、不冻结版式**（隐藏/冻结过的几版都会在折叠窗口里给出「非正文」的画面，比不干预更
 // 刺眼）。折叠期只治三类与正文版式无关的副作用——滚动锚定、滚动条、顶栏宽度，见
 // style.css 的折叠媒体查询；这里初始化的是它们的数据来源。
+// 用户真把编辑区缩到恰好 300×150 时不算折叠（折叠读数下的用户输入 = 真实小窗口，见
+// utils/viewportLedger.ts）：顶栏不再钉宽、记账照常（目录/吸顶仍按读数跳过）。
 initViewportLedger();
 
 let currentEditor: Editor | null = null;

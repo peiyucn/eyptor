@@ -3,9 +3,13 @@ import {
     IFRAME_DEFAULT_HEIGHT,
     IFRAME_DEFAULT_WIDTH,
     LAST_BODY_WIDTH_VAR,
+    TINY_REAL_ATTRIBUTE,
     initViewportLedger,
     isCollapsedViewport,
+    isHostCollapsedViewport,
+    isRealTinyViewport,
     nextLastBodyWidth,
+    nextTinyReal,
     shouldSkipViewportWork,
 } from "../utils/viewportLedger";
 
@@ -110,6 +114,33 @@ describe("nextLastBodyWidth", () => {
     it("滚动条出现导致的宽度变化 应该 照样入账（同一视口、更窄的 body）", () => {
         expect(nextLastBodyWidth(846, real, 831)).toBe(831);
     });
+
+    it("真实小窗口（用户真在 300×150 下操作过） 应该 照样入账", () => {
+        expect(nextLastBodyWidth(831, { width: 300, height: 150 }, 285, true)).toBe(285);
+    });
+});
+
+/**
+ * 「真实小窗口」判定（纯函数，回归 A6）：折叠读数下的用户输入 = 用户真在这个尺寸下用。
+ * **不看计时**——宿主折叠态会一直持续到用户切回来，任何时间阈值都会在折叠期就打上标记。
+ */
+describe("nextTinyReal", () => {
+    const tiny = { width: IFRAME_DEFAULT_WIDTH, height: IFRAME_DEFAULT_HEIGHT };
+    const real = { width: 846, height: 677 };
+
+    it("折叠读数下有用户输入 应该 认定为真实小窗口", () => {
+        expect(nextTinyReal(false, tiny, true)).toBe(true);
+    });
+
+    it("折叠读数下没有输入 应该 保持原判定（宿主折叠期间只有尺寸变化）", () => {
+        expect(nextTinyReal(false, tiny, false)).toBe(false);
+        expect(nextTinyReal(true, tiny, false)).toBe(true);
+    });
+
+    it("视口离开折叠读数 应该 清除标记（下一次宿主折叠仍按折叠处理）", () => {
+        expect(nextTinyReal(true, real, false)).toBe(false);
+        expect(nextTinyReal(true, real, true)).toBe(false);
+    });
 });
 
 /**
@@ -170,5 +201,78 @@ describe("initViewportLedger", () => {
         vi.stubGlobal("ResizeObserver", undefined);
         expect(() => initViewportLedger()).not.toThrow();
         expect(cssVarValue()).toBe("831px");
+    });
+});
+
+/**
+ * 「真实小窗口」接线（回归 A6）：宿主摘挂与用户真把编辑区缩到 300×150 读数完全相同，
+ * 分界只能靠用户输入——被摘挂的 webview 收不到任何输入事件。
+ */
+describe("真实小窗口标记接线", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        document.documentElement.removeAttribute(TINY_REAL_ATTRIBUTE);
+        document.documentElement.style.removeProperty(LAST_BODY_WIDTH_VAR);
+        setViewport(846, 677);
+        stubBodyWidth(831);
+        installFakeResizeObserver();
+        initViewportLedger();
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+        document.documentElement.removeAttribute(TINY_REAL_ATTRIBUTE);
+        document.documentElement.style.removeProperty(LAST_BODY_WIDTH_VAR);
+        setViewport(1024, 768);
+    });
+
+    it.each(["pointerdown", "wheel", "keydown", "touchstart"])(
+        "折叠尺寸下收到 %s 应该 认定真实小窗口、解除折叠判定并按真实宽度记账",
+        (type) => {
+            setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+            stubBodyWidth(285);
+            expect(isHostCollapsedViewport()).toBe(true);
+
+            window.dispatchEvent(new Event(type));
+
+            expect(isRealTinyViewport()).toBe(true);
+            // 作用范围（用户口径）：标记只影响顶栏钉定与记账——目录/吸顶共用的
+            // shouldSkipViewportWork() 仍按读数走（真实小窗口下保持原状）
+            expect(isHostCollapsedViewport()).toBe(false);
+            expect(shouldSkipViewportWork()).toBe(true);
+            expect(cssVarValue()).toBe("285px");
+        },
+    );
+
+    it("真实尺寸下用户输入 应该 不打标记", () => {
+        window.dispatchEvent(new Event("pointerdown"));
+        expect(isRealTinyViewport()).toBe(false);
+    });
+
+    it("折叠读数下只有尺寸/焦点事件（没有用户输入） 应该 不打标记（宿主折叠不误判）", () => {
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        stubBodyWidth(285);
+        window.dispatchEvent(new Event("resize"));
+        window.dispatchEvent(new Event("focus"));
+        window.dispatchEvent(new Event("blur"));
+
+        expect(isRealTinyViewport()).toBe(false);
+        expect(isHostCollapsedViewport()).toBe(true);
+        expect(shouldSkipViewportWork()).toBe(true);
+        expect(cssVarValue()).toBe("831px"); // 假读数没有入账
+    });
+
+    it("离开折叠尺寸 应该 清除标记（下一次宿主折叠仍按折叠处理）", () => {
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        window.dispatchEvent(new Event("keydown"));
+        expect(isRealTinyViewport()).toBe(true);
+
+        setViewport(846, 677);
+        window.dispatchEvent(new Event("resize"));
+        expect(isRealTinyViewport()).toBe(false);
+
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        expect(isHostCollapsedViewport()).toBe(true);
     });
 });
