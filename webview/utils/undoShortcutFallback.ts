@@ -1,18 +1,14 @@
 /**
- * IME 场景的撤销/重做兜底路由。
+ * IME 场景的撤销/重做兜底路由 + 组合状态残留修复。
  *
- * 背景（用户实测）：英文输入 Ctrl+Z 正常，中文输入后 Ctrl+Z 无效。ProseMirror 在
- * `view.composing` 为 true 时会直接忽略所有 keydown（不在组合输入期间处理键盘）；若 IME
- * 提交后组合标记没有及时清掉，后续 Ctrl+Z 就会被一直吞掉——文档里中文已进历史（命令
- * 直调可撤），只是键盘事件到不了。
+ * 根因（用户实测 + 排查）：中文能进文档并保存，但撤销不了（连顶栏按钮也不行）。
+ * 部分 IME（VS Code WebView + Windows）提交后 compositionend 未送达/未处理，ProseMirror
+ * 会一直认为处于组合输入：组合状态下它不重绘文档 DOM——撤销命令即使执行了画面也不更新；
+ * 键盘事件则被组合守卫直接忽略。英文不经过组合，所以一切正常。
  *
- * 最小干预：
- * - 只在事件明确不属于输入法组合（event.isComposing === false）时考虑接管；
- * - 编辑器内且组合标记正常（composing=false）时不插手——交给 ProseMirror 自己的 keymap
- *   （它会先 forceFlush 未落盘的 DOM 变更，处理时机最正确）；
- * - 组合标记卡住（composing=true 但按键非组合），或焦点在编辑器 DOM 之外（切回后活跃
- *   元素在 body/顶栏）时，把 Mod-z / Mod-y / Shift-Mod-z 直接路由到历史命令；
- * - 查找框、frontmatter 输入框、代码块（有自己的撤销栈）一律不接管。
+ * 修复：检测到组合标记卡住时，先合成一次 compositionend，让 ProseMirror 走它自己的收尾
+ * 流程（清标记 + flush + 重绘），再执行撤销/重做；键盘与编辑器外 UI 点击两个入口都覆盖。
+ * 正常路径、代码块、输入框不干预。
  */
 import { redo, undo } from "@milkdown/kit/prose/history";
 import type { EditorView } from "@milkdown/kit/prose/view";
@@ -25,7 +21,28 @@ export interface UndoShortcutDeps {
     isActive: () => boolean;
 }
 
+/** 结束卡住的组合状态（合成 compositionend，走 ProseMirror 自己的收尾流程并重绘） */
+export function endStaleComposition(view: EditorView): void {
+    if (!view.composing) { return; }
+    try {
+        view.dom.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
+    } catch {
+        const input = (view as unknown as { input?: { composing?: boolean } }).input;
+        if (input) { input.composing = false; }
+    }
+}
+
 export function initUndoShortcutFallback(deps: UndoShortcutDeps): void {
+    // 编辑器外 UI（顶栏撤销/重做按钮等）：按下时先解组合。按钮 mousedown 会
+    // preventDefault 不夺焦，编辑器不会 blur，卡住的组合态不会自己结束。
+    window.addEventListener("pointerdown", (event) => {
+        const view = deps.getView();
+        if (!view || !view.composing || !deps.isActive()) { return; }
+        const target = event.target;
+        if (target instanceof Node && view.dom.contains(target)) { return; }
+        endStaleComposition(view);
+    }, true);
+
     window.addEventListener("keydown", (event) => {
         if (!(event.ctrlKey || event.metaKey) || event.altKey) { return; }
         if (event.isComposing) { return; }
@@ -38,9 +55,10 @@ export function initUndoShortcutFallback(deps: UndoShortcutDeps): void {
         const view = deps.getView();
         if (!view || !deps.isActive()) { return; }
         const insideEditor = target instanceof Node && view.dom.contains(target);
-        // 正常路径（编辑器内、组合标记未卡住）交给 ProseMirror：它会先 forceFlush
-        // 尚未并入 state 的 DOM 变更，绕过它可能撤到旧状态。
+        // 正常路径（编辑器内、组合标记正常）交给 ProseMirror：它会先 forceFlush，
+        // 绕过它可能撤到旧状态。
         if (insideEditor && !view.composing) { return; }
+        if (view.composing) { endStaleComposition(view); }
         const handled = isUndo
             ? undo(view.state, view.dispatch, view)
             : redo(view.state, view.dispatch, view);

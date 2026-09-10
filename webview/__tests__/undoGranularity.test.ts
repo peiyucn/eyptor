@@ -50,6 +50,7 @@ describe("撤销粒度与 IME 兜底", () => {
         const ev = new KeyboardEvent("keydown", { key: "z", code: "KeyZ", ctrlKey: true, bubbles: true, cancelable: true });
         view.dom.dispatchEvent(ev);
         expect(ev.defaultPrevented).toBe(true);
+        expect(view.composing).toBe(false);
         expect(view.state.doc.textContent).toBe("base");
         destroyEditor(); root.remove();
     }, 60000);
