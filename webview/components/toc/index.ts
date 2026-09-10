@@ -7,7 +7,7 @@ import { t } from "@/i18n";
 import { IconPin, IconChevronRight, IconChevronDown, IconChevronsUp, IconChevronsDown } from "@/ui/icons";
 import { getWebviewState, setWebviewState } from "@/messaging";
 import { buildHeadingIndex } from "../../utils/headingFold";
-import { shouldSkipViewportWork } from "../../utils/viewportFreeze";
+import { shouldSkipViewportWork } from "../../utils/viewportLedger";
 
 interface HeadingEntry {
     level: number;

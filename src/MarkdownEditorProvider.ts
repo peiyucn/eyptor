@@ -178,35 +178,22 @@ export class MarkdownEditorProvider
             provider,
             {
                 webviewOptions: {
-                    // ⚠️ 对照实验（临时改动，不是正式架构，未定案）：这里由 false 改为 true。
+                    // 正式架构（已定案）：**保活**——切到别的标签不销毁 webview、不重建，
+                    // 撤销历史与标题折叠状态都留着。用户已明确：丢撤销历史的销毁重建方案
+                    // 不考虑，这里不再有第二个选项。
                     //
-                    // 实验组 = 保活（retainContextWhenHidden:true）+ 摘掉**整套**折叠期机制：
-                    // webview/index.ts 不再调用 initViewportFreeze()（不冻结），style.css 删除
-                    // 折叠期媒体查询与冻结类规则（不隐藏、不钉宽）。三个文件同属这一组改动，
-                    // 不做取舍——本组要验证的正是「保活但完全不介入折叠期」这一种组合。
+                    // 代价与取舍（真机实测）：保留上下文时，宿主重新显示 webview 会先把容器
+                    // 设为 visible、再测量尺寸——中间 130–170ms iframe 只有 Chromium 默认的
+                    // 300×150。这期间正文会真实地按 300px 重排一次再排回来，**不干预正文
+                    // 版式**：隐藏正文、冻结版式那几版都在折叠窗口里给出「非正文」的画面
+                    // （空白 / 裁切条 / 会动的空白），比正文自己重排更刺眼（真机对照结论）。
                     //
-                    // 预测（来源：真机调查）——此前四个保活变体（隐藏正文 / 不隐藏 / 冻结+不
-                    // 隐藏 / 冻结+显示点阵）都比 1.1.6 刺眼，因为它们在折叠窗口里给出的都是
-                    // 「非正文」的画面（空白 / 裁切条 / 会动的空白）；而 1.1.6 给的是「完整但
-                    // 窄排的正文 → 跳正」的两段式。把折叠期机制整套摘掉后，画面序列应回落到
-                    // 1.1.6 那种两段式。
+                    // 折叠期只保留三条几何中性守卫——禁用滚动锚定、抑制滚动条、钉定顶栏宽度，
+                    // 见 webview/style.css 的 @media (width:300px) and (height:150px)；折叠的
+                    // 记账与识别见 webview/utils/viewportLedger.ts。
                     //
-                    // 对照产物：releases/epytor-vscode-1.2.0-{destroy,retainA,retainA2-nofreeze,
-                    // retainA3-novis,retainA4-loading,noloading}.vsix（本组为
-                    // releases/epytor-vscode-1.2.0-retainA5-nofreeze-nohide.vsix）。
-                    //
-                    // 正式架构（实验的对照基准 = 上面那个 false 的理由，结论出来后按结论恢复）：
-                    // 与官方内置预览同架构——切到别的标签时销毁 webview，切回来重建。
-                    // 根因（实测）：保留上下文时，宿主重新显示 webview 会先把容器设为
-                    // visible、再测量尺寸——中间约 130ms iframe 只有 Chromium 默认的
-                    // 300×150，这期间无论画什么（空白 / 正文被裁切）都与最终画面不同，
-                    // 用户看到的就是「闪」。销毁重建则不同：新 iframe 出生时容器已是
-                    // 正确尺寸，它从来不会以 300×150 画过一帧。
-                    //
-                    // 代价（本实验组会在切回时重新吃到）：保留上下文时，切回不再重建 Milkdown，
-                    // 但折叠期会真实重排一次（本组不再冻结/隐藏画面）；而放弃销毁重建的代价
-                    // 原本是——切回时重建 Milkdown（长文档 1s+）、撤销历史与标题折叠状态丢失，
-                    // 滚动位置由 webview state 恢复（见 webview/index.ts）。
+                    // 不可退回销毁重建的原因：切回时要重建 Milkdown（长文档 1s+），撤销历史与
+                    // 标题折叠状态丢失，滚动位置只能由 webview state 恢复（见 webview/index.ts）。
                     retainContextWhenHidden: true,
                 },
                 supportsMultipleEditorsPerDocument: false,
@@ -388,9 +375,8 @@ export class MarkdownEditorProvider
                 // panel 已销毁（切换/关闭竞态），忽略
             }
             if (!p.active) {
-                // [对照实验：retainContextWhenHidden 现为 true，面板失活**不再**销毁 webview。
-                //  这条拉取写盘保留不动：webview 仍会因关闭标签/“重新打开方式”重建，且失活时
-                //  先落盘未保存编辑本身无害。]
+                // 保活架构下失活**不销毁** webview，但这条拉取写盘保留：webview 仍会因
+                // 关闭标签 /「重新打开方式」重建，失活时先落盘未保存编辑本身无害。
                 // 未落盘的编辑必须在 webview 可能消失之前拉取写盘——否则重建时只能拿到旧内容
                 // （切走即丢编辑）。拉取式保存自带超时兜底（CONTENT_REQUEST_TIMEOUT_MS），
                 // webview 已被销毁时回退内存内容，不会悬挂。
@@ -555,8 +541,8 @@ export class MarkdownEditorProvider
             case "ready": {
                 // 标记面板已初始化，onDidChangeViewState 此后才会处理 pending navigation
                 this._initializedPanels.add(uriKey);
-                // 未落盘编辑优先：[对照实验：retainContextWhenHidden 现为 true，切标签不再
-                //  销毁 webview；这条路径仍是关闭标签/重开（真的重建）时的兜底。]
+                // 未落盘编辑优先：保活架构下切标签不销毁 webview，这条路径覆盖的是关闭标签 /
+                // 重开（webview 真的重建）时的兜底。
                 // _markDirty 只通知 VS Code「变了」、并不把内容拷进文档——webview 重建时若
                 // 此刻有未保存改动，必须用 webview 推来的副本重建，否则新实例拿到旧内容
                 // （编辑丢失，脏标记却还在，用户下次保存会把旧内容写回磁盘）。

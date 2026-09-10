@@ -30,7 +30,7 @@ webview/i18n/index.ts                    — t() / kbd() 翻译函数
 webview/ui/icons.ts                      — SVG 图标
 webview/ui/tooltip.ts                    — Tooltip 组件
 webview/utils/themeBus.ts               — Mermaid/CodeMirror 深浅主题统一事件总线
-webview/utils/viewportFreeze.ts          — 宿主折叠态排版冻结（切回不闪/不重排的根因修复）
+webview/utils/viewportLedger.ts          — 折叠态视口记账（折叠判定 + 真实 body 宽度 → CSS 变量，供折叠期几何守卫）
 webview/utils/markdownSerializer.ts      — Markdown 序列化（Clean 模式、表格 <br>）
 webview/utils/minimalDiff.ts             — 保存时的最小行改动（唯一锚点 + 有界 LCS）
 webview/utils/findMatches.ts             — 查找栏匹配（大小写/正则/零宽防护/条数封顶）

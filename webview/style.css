@@ -3,8 +3,7 @@
     box-sizing: border-box;
 }
 
-/* 视口单位统一走变量：灯箱、图片选择器、目录高度共用一处定义
-   （[对照实验] 折叠期冻结已停用，这里不再有折叠态的整体覆盖） */
+/* 视口单位统一走变量：灯箱、图片选择器、目录高度共用一处定义 */
 :root {
     --epytor-vw: 100vw;
     --epytor-vh: 100vh;
@@ -159,6 +158,41 @@ body {
     padding: 52px 48px 80px;
     min-height: var(--epytor-vh);
     outline: none;
+}
+
+/* ─── 折叠期几何守卫（见 utils/viewportLedger.ts） ─────────────────────────
+   宿主切到非 webview 标签时把 webview 容器摘出布局，iframe 回落到 Chromium 默认的
+   300×150；保活架构下正文会真实地按 300px 重排一次再排回来——这是渲染器的自然行为，
+   不隐藏正文、不冻结版式（隐藏/冻结过的几版在折叠窗口里给出的是「非正文」画面，比
+   不干预更刺眼）。这里只治三类**与正文版式无关**的副作用，正文照常显示。 */
+@media (width: 300px) and (height: 150px) {
+    /* 1. 滚动锚定：视口从真实尺寸缩到 300×150 时，浏览器为了「可见内容不动」会把滚动
+       位置就地修正（实测同一位置 scrollY 1500 → 1773）；宿主放回真实尺寸后内容就停在
+       错位处，用户看到内容跳一下。折叠期禁用锚定，滚动位置保持原值。 */
+    :root {
+        overflow-anchor: none;
+    }
+
+    /* 2. 滚动条：折叠期视口只有 300px 宽，内容溢出会让滚动条出现/消失，正文可用宽度
+       跟着变一个滚动条宽；切回真实尺寸再变回来 → 正文横向位移一个滚动条宽。折叠期
+       不画滚动条（Firefox 走 scrollbar-width，Chromium/WebKit 走 ::-webkit-scrollbar）。 */
+    html {
+        scrollbar-width: none;
+    }
+    html::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+    }
+
+    /* 3. 顶栏宽度：顶栏 fixed + left/right:0，宽度跟随视口；折叠期视口只有 300px，按钮会
+       收进「⋯」溢出菜单，切回真实尺寸再展开 → 顶栏闪一下。这里用 JS 记账的真实宽度
+       （--epytor-last-body-width，见 utils/viewportLedger.ts）钉住宽度，按钮数量与位置
+       在折叠期不变。变量缺失时回退 100%，即按当前视口布局（折叠判定仍只看视口恰为
+       300×150；用户真把编辑区缩到该尺寸时，顶栏按上一次真实宽度钉住——极窄窗口的已知
+       取舍，换折叠帧的稳定）。 */
+    .milkdown-top-bar {
+        width: var(--epytor-last-body-width, 100%);
+    }
 }
 
 /* Milkdown 根容器 */

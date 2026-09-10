@@ -56,6 +56,7 @@ import { dispatchImagePathResolved } from "./components/imageView/imgPathComplet
 import { resolvePathSuggestionRequest } from "./utils/pathSuggestionRequests";
 import { setImageUriMap, remapImageUri, showGlobalLightbox } from "./components/imageView";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
+import { initViewportLedger } from "./utils/viewportLedger";
 import { initFindBar } from "./components/findBar";
 import { initToc } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
@@ -84,12 +85,15 @@ const INITIAL_VIEWPORT_LINE_REPORT_DELAY_MS = 600;
 
 let _topBarOverflowCtl: { dispose(): void } | null = null;
 
-// [对照实验] 折叠期排版冻结在此**停用**（原先的 initViewportFreeze() 调用与 import 均已
-// 摘掉）——本组是「保活 + 完全不介入折叠期」：既不冻结也不隐藏，宿主折叠/恢复时按真实
-// 视口自然重排（预测观感回落 1.1.6 两段式）。utils/viewportFreeze.ts 与其单测保留：
-// shouldSkipViewportWork / isViewportFrozen 仍被吸顶条、目录、顶栏引用，不初始化时冻结态
-// 恒为 false，退化语义即「只有真视口恰为 300×150 时才跳过视口工作」（可接受的对照态）。
-// 结论出来后按结论决定恢复调用或删除整个模块。
+// 折叠态视口记账（见 utils/viewportLedger.ts）——折叠期几何守卫的数据来源。
+//
+// 正式架构（已定案）：webview **保活**（retainContextWhenHidden: true，见
+// src/MarkdownEditorProvider.ts）——切到别的标签不销毁、不重建，撤销历史与折叠状态都留着。
+// 代价是折叠期正文会真实地按 300×150 重排一次再排回来：这是渲染器的自然行为，**不隐藏
+// 正文、不冻结版式**（隐藏/冻结过的几版都会在折叠窗口里给出「非正文」的画面，比不干预更
+// 刺眼）。折叠期只治三类与正文版式无关的副作用——滚动锚定、滚动条、顶栏宽度，见
+// style.css 的折叠媒体查询；这里初始化的是它们的数据来源。
+initViewportLedger();
 
 let currentEditor: Editor | null = null;
 let currentLineMap: number[] = [];

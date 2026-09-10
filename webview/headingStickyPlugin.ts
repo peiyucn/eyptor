@@ -15,7 +15,7 @@ import { IconChevronDown, IconChevronRight } from "./ui/icons";
 import { applyTooltip, hideTooltip } from "./ui/tooltip";
 import { t } from "./i18n";
 import { headingFoldPluginKey, type HeadingFoldMeta } from "./headingFoldPlugin";
-import { shouldSkipViewportWork } from "./utils/viewportFreeze";
+import { shouldSkipViewportWork } from "./utils/viewportLedger";
 import { buildHeadingIndex, type HeadingIndexEntry } from "./utils/headingFold";
 import { computeStickyRows, STICKY_MAX_ROWS, STICKY_ROW_HEIGHT_PX } from "./utils/headingSticky";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
@@ -314,7 +314,7 @@ export const headingStickyPlugin = $prose(() =>
 
             const scheduleUpdate = () => {
                 // 宿主折叠态（切到非 webview 标签）：此刻按假的 300×150 重建缓存会
-                // 让吸顶条按错误位置摆放；折叠期不重算，解冻后的 resize/滚动会补上
+                // 让吸顶条按错误位置摆放；折叠期不重算，恢复尺寸后的 resize/滚动会补上
                 if (shouldSkipViewportWork()) return;
                 if (rafId !== null) return;
                 rafId = requestAnimationFrame(updateSticky);
