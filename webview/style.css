@@ -162,14 +162,17 @@ body {
 
 /* ─── 折叠期几何守卫（见 utils/viewportLedger.ts） ─────────────────────────
    宿主切到非 webview 标签时把 webview 容器摘出布局，iframe 回落到 Chromium 默认的
-   300×150；保活架构下正文会真实地按 300px 重排一次再排回来——这是渲染器的自然行为，
-   不隐藏正文、不冻结版式（隐藏/冻结过的几版在折叠窗口里给出的是「非正文」画面，比
-   不干预更刺眼）。这里只治折叠带来的副作用，正文照常显示。
+   300×150；保活架构下 webview 不重建，所以这个假视口会真实地重排一次正文。切回时
+   宿主先放回 iframe 尺寸、后把新尺寸传到渲染进程（实测差 ~65ms），那几帧里屏幕上是
+   折叠期自己画的那块画面——不干预就是「正文按 300px 折行的小框」，用户看得见。
+   这里治两件事：正文版式钉在真实宽度（第 4 条）、固定 UI 折叠期不画（第 5 条）。
+   不隐藏正文本身（整块隐藏会让切回瞬间变成一片空白，比小框更刺眼）。
 
-   判据是 <html> 上的 data-epytor-host-collapsed（JS 记账写入），**不是媒体查询**：
-   Chromium 的媒体查询按窗口缩放后的尺寸求值，带 window.zoomLevel 的机器上
-   `(width: 300px)` 在 window.innerWidth=300 时并不匹配，整块守卫会静默失效
-   （实测见 viewportLedger.ts 的 HOST_COLLAPSED_ATTRIBUTE 注释）。
+   判据是 <html> 上的 data-epytor-host-collapsed（JS 记账写入），**不是媒体查询**。
+   注意这不是「按用户设置做特判」——判据读的是 window.innerWidth/innerHeight 恰为
+   300×150，与用户缩放无关；旧写法错在 Chromium 的媒体查询按窗口缩放后的尺寸求值，
+   于是 `@media (width: 300px)` 在 innerWidth=300 时不匹配，整块守卫生效与否取决于
+   用户恰好有没有设 window.zoomLevel——那才是把用户设置耦合进来的写法，已弃用。
    该属性已排除「用户在 300×150 下真操作过」的情形（isHostCollapsedViewport）。 */
 html[data-epytor-host-collapsed] {
     /* 1. 滚动锚定：视口从真实尺寸缩到 300×150 时，浏览器为了「可见内容不动」会把滚动
@@ -196,19 +199,7 @@ html[data-epytor-host-collapsed] .milkdown-top-bar {
     width: var(--epytor-last-body-width, 100%);
 }
 
-/* 4. 合成器守卫（回归 bc528e3 实测）：宿主切回时重新挂载 webview，合成器要重建
-   图层；backdrop-filter 的模糊要求先捕获背景再模糊，首帧因此被推迟约 2 帧——
-   那几帧里旧的小尺寸画面就多停留一会儿，用户偶尔能看清「小画面」。折叠期顶栏/
-   目录/浮动工具栏后面就是正文与底色，有无模糊肉眼无差，但首帧能立刻画出来。 */
-html[data-epytor-host-collapsed] .milkdown-top-bar,
-html[data-epytor-host-collapsed] .milkdown-toolbar,
-html[data-epytor-host-collapsed] .toc-panel,
-html[data-epytor-host-collapsed] .toc-toggle-tab {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-}
-
-/* 5. 正文版式：折叠期把 body 宽度钉在上次真实宽度（--epytor-last-body-width），
+/* 4. 正文版式：折叠期把 body 宽度钉在上次真实宽度（--epytor-last-body-width），
    正文不再按 300px 重排。宿主放回真实尺寸时，那一帧里的旧画面与新画面是同一份
    版式，用户看到的只是右侧被补齐，而不是「正文重新折行」——这就是切标签「闪」
    的主体现。实测（_poc/TEMP/ime/flash-lab.mjs）：不加这条时折叠期 h1 由 647×46
@@ -219,20 +210,29 @@ html[data-epytor-host-collapsed] body {
     overflow-x: clip;
 }
 
-/* 6. 折叠期不画固定 UI，正文照常显示。
-   宿主切回时是先放回 iframe 尺寸、后把新尺寸传到 webview 渲染进程（实测差 ~65ms）。这段
-   窗口里 webview 自己还在按 300×150 渲染，而 iframe 已经占满编辑区——屏幕上就是那块
-   300×150 的旧画面。已经试过两种极端，都不合适：
+/* 5. 折叠期这些固定 UI 既不画、也不用模糊。
+   为什么"不画"：宿主切回时是先放回 iframe 尺寸、后把新尺寸传到 webview 渲染进程
+   （实测差 ~65ms）。这段窗口里 webview 自己还在按 300×150 渲染，而 iframe 已经占满
+   编辑区——屏幕上就是那块 300×150 的旧画面。两种极端都试过，都不合适：
      · 原样显示（含顶栏）：裁切边界正好切在顶栏按钮和标题字形中间，像坏掉的「一个小框」；
      · 整块隐藏：那 80–160ms 变成一片空白，用户反馈「整个页面闪一次」。
-   取中间：固定 UI（顶栏/目录/浮动工具栏）折叠期不画——它们的裁切最像坏掉；正文照常显示，
-   因为第 5 条已把版式钉在真实宽度，裁切出来的就是终稿同位置的内容，看上去只是「还没画完」，
-   而不是「先空一下再出现」。 */
+   取中间：固定 UI 折叠期不画（它们的裁切最像坏掉），正文照常显示——第 4 条已把版式钉在
+   真实宽度，裁切出来的就是终稿同位置的内容，看上去只是「还没画完」。
+   列表含挂到 <body> 的固定浮层（溢出菜单 / 更多按钮 / 查找栏 / 提示条）——它们同为
+   `position: fixed`，折叠期同样会被裁成半块，且顶栏那排按钮正是最像「坏掉的小框」的形态。
+   为什么"不用模糊"：宿主切回要重建合成器图层，backdrop-filter 让首帧推迟约 2 帧
+   （回归 bc528e3 实测），那几帧里旧画面会多停留一会儿。 */
 html[data-epytor-host-collapsed] .milkdown-top-bar,
 html[data-epytor-host-collapsed] .milkdown-toolbar,
 html[data-epytor-host-collapsed] .toc-panel,
-html[data-epytor-host-collapsed] .toc-toggle-tab {
+html[data-epytor-host-collapsed] .toc-toggle-tab,
+html[data-epytor-host-collapsed] .epytor-topbar-more-btn,
+html[data-epytor-host-collapsed] .epytor-topbar-overflow-menu,
+html[data-epytor-host-collapsed] .find-bar,
+html[data-epytor-host-collapsed] .epytor-notice {
     visibility: hidden;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 /* Milkdown 根容器 */

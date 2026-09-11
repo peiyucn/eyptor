@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { undo } from "@milkdown/kit/prose/history";
+import type { EditorView } from "@milkdown/kit/prose/view";
 import { createEditor, destroyEditor, getEditorView } from "../editor";
 
 if (typeof (window as unknown as Record<string, unknown>).IntersectionObserver === "undefined") {
@@ -17,6 +19,20 @@ async function mount(markdown: string): Promise<HTMLElement> {
     document.body.appendChild(root);
     await createEditor(root, markdown, () => {});
     return root;
+}
+
+/**
+ * 一次事务里两步：先插入拼音、再原地替换成候选词。
+ * **必须放在同一个事务里**——分成两次 dispatch 时每步各自单步，区间换算的映射路径
+ * 根本走不到，那样的用例在任何版本都绿（钉不住回归）。单事务里中间文档比最终文档长
+ * （nihao=5 → 你好=2），旧实现把中间步的 newEnd 当最终坐标用会越过文档末尾，
+ * nodesBetween 抛 TypeError，异常从 appendTransaction 冒到 applyTransaction，
+ * **整条事务（含撤销）被打掉**。
+ */
+function composeInOneTransaction(view: EditorView, at: number, pinyin: string, hanzi: string): void {
+    const tr = view.state.tr.insertText(pinyin, at);
+    tr.replaceWith(at, at + pinyin.length, view.state.schema.text(hanzi));
+    view.dispatch(tr);
 }
 
 describe("列表 spread 规范化", () => {
@@ -40,14 +56,38 @@ describe("列表 spread 规范化", () => {
         destroyEditor(); root.remove();
     }, 60000);
 
-    it("多步变更（中间步骤让文档先变长） 应该 不抛错", async () => {
-        const root = await mount("- a\n- b");
-        const view = getEditorView()!;
-        const tr = view.state.tr.insertText("nihao", 3);
-        view.dispatch(tr);
-        // 第二步把拼音替换成候选词：中间文档比最终文档长，区间换算必须落在最终坐标
-        view.dispatch(view.state.tr.replaceWith(3, 8, view.state.schema.text("你好")));
-        expect(view.state.doc.textContent).toBe("你好ab");
-        destroyEditor(); root.remove();
-    }, 60000);
+    describe("单事务多步（输入法提交形态）", () => {
+        it("段落内 应该 不抛错且区间落在最终坐标", async () => {
+            const root = await mount("hello");
+            const view = getEditorView()!;
+            composeInOneTransaction(view, 6, "nihao", "你好");
+            expect(view.state.doc.textContent).toBe("hello你好");
+            destroyEditor(); root.remove();
+        }, 60000);
+
+        it("段落内 应该 一次撤销回到初始（回归：撤销「没反应」）", async () => {
+            const root = await mount("hello");
+            const view = getEditorView()!;
+            composeInOneTransaction(view, 6, "nihao", "你好");
+            expect(view.state.doc.textContent).toBe("hello你好");
+            expect(undo(view.state, (tr) => view.dispatch(tr))).toBe(true);
+            expect(view.state.doc.textContent).toBe("hello");
+            destroyEditor(); root.remove();
+        }, 60000);
+
+        it("列表项内 应该 不抛错", async () => {
+            const root = await mount("- hello\n- b");
+            const view = getEditorView()!;
+            // 位置从文档结构推导（1 列表开 + 1 项开 + 1 段落开 + 段落文本长），
+            // 保证替换范围完全落在该项段落内，不跨项边界
+            const item = view.state.doc.firstChild!.firstChild!;
+            const at = 3 + item.firstChild!.content.size;
+            composeInOneTransaction(view, at, "nihao", "你好");
+            expect(view.state.doc.textContent).toBe("hello你好b");
+            // 列表结构未被破坏：仍是两项
+            expect(view.state.doc.firstChild!.childCount).toBe(2);
+            expect(view.state.doc.firstChild!.firstChild!.textContent).toBe("hello你好");
+            destroyEditor(); root.remove();
+        }, 60000);
+    });
 });

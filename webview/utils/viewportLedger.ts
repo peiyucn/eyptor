@@ -1,29 +1,31 @@
 /**
- * 折叠态视口记账（折叠期几何守卫的数据来源，见 style.css 的折叠媒体查询）。
+ * 折叠态视口记账（折叠期几何守卫的数据来源，见 style.css 的「折叠期几何守卫」一节）。
  *
  * 背景（真实 VS Code 1.136 实测）：切到非 webview 标签时，宿主把 webview 容器摘出布局，
  * iframe 失去 `width/height: 100%` 的尺寸约束、回落到 Chromium 的 iframe 默认尺寸
  * **300×150**；切回来再放回真实尺寸。保活架构（`retainContextWhenHidden: true`，见
  * src/MarkdownEditorProvider.ts）下 webview 不重建，所以这个 300×150 的假视口会真实地
  * 重排一次正文、再排回来；切回那一帧里旧画面就与新画面不同，用户看到「闪」。
- * style.css 的折叠媒体查询因此把 body 宽度钉在上次真实宽度（第 5 条，不隐藏正文、
- * 也不冻结渲染，只是让版式不随假视口变化）。
+ * style.css 的折叠期守卫因此把 body 宽度钉在上次真实宽度（第 4 条）并让固定 UI 在折叠期
+ * 不画（第 5 条，正文照常显示）——版式不随假视口变化，那 80–160ms 里屏幕上是终稿同位置的
+ * 正文裁切。
  *
  * 本模块只做三件事，都不改变正文版式：
  *   1. 识别折叠读数（视口恰为 300×150，且用户没在这个尺寸下操作过）：供视口驱动的 UI 逻辑
- *      「此刻别按假尺寸测量」；
+ *      「此刻别按假尺寸测量」，并把结论写成 HOST_COLLAPSED_ATTRIBUTE 交给 CSS；
  *   2. 把**折叠期外**实测到的真实 body 宽度记成 CSS 变量（--epytor-last-body-width），
- *      供折叠媒体查询钉住顶栏宽度——顶栏 fixed + left/right:0，宽度跟随视口，不钉住时
+ *      供折叠期守卫钉住顶栏与正文宽度——顶栏 fixed + left/right:0，宽度跟随视口，不钉住时
  *      折叠帧里按钮会收进「⋯」、切回再展开，用户看到顶栏闪一下；
  *   3. 区分「宿主摘挂」与「用户真把编辑区缩到 300×150」——两种情形读数完全相同，分界只能靠
  *      **用户输入**：被宿主摘挂的 webview 收不到任何输入事件，用户真在小窗口里点/滚/敲键才
  *      收得到。折叠读数下收到 pointerdown / wheel / keydown / touchstart 即认定「真实小窗口」
- *      （<html> 上的 TINY_REAL_ATTRIBUTE）：顶栏不再按上次真实宽度钉住（style.css）、记账也不再
- *      跳过（isHostCollapsedViewport）；尺寸离开 300×150 即清除标记（下一次宿主折叠仍按折叠
+ *      （<html> 上的 TINY_REAL_ATTRIBUTE）：顶栏不再按上次真实宽度钉住、记账也不再跳过
+ *      （isHostCollapsedViewport 会因此为 false，CSS 消费的 HOST_COLLAPSED_ATTRIBUTE
+ *      随之移除）；尺寸离开 300×150 即清除标记（下一次宿主折叠仍按折叠
  *      处理）。**不用计时**——宿主折叠态会一直持续到用户切回来，计时阈值必然在折叠期就被打上
  *      标记（回归：切回来「出现-消失-再出现」）。
  *      作用范围（用户口径）：标记只影响**顶栏钉定与记账**；目录自动显隐与吸顶几何仍按
- *      shouldSkipViewportWork()（只看读数）跳过，不隐藏正文、不冻结版式。
+ *      shouldSkipViewportWork()（只看读数）跳过。
  *
  * 宽度基准必须用 ResizeObserver 维护、不能只看 resize 事件：纵向滚动条出现/消失会改变
  * body 宽度但不触发 resize，基准陈旧会让钉住的宽度与真实宽度差一个滚动条。
@@ -31,7 +33,7 @@
 export const IFRAME_DEFAULT_WIDTH = 300;
 export const IFRAME_DEFAULT_HEIGHT = 150;
 
-/** 真实 body 宽度（px）写入的 CSS 变量名（style.css 折叠媒体查询消费） */
+/** 真实 body 宽度（px）写入的 CSS 变量名（style.css 折叠期守卫消费） */
 export const LAST_BODY_WIDTH_VAR = "--epytor-last-body-width";
 
 /**
@@ -49,7 +51,7 @@ export const LAST_BODY_WIDTH_VAR = "--epytor-last-body-width";
  */
 export const HOST_COLLAPSED_ATTRIBUTE = "data-epytor-host-collapsed";
 
-/** 「真实小窗口」标记属性（挂在 <html> 上；style.css 折叠媒体查询据此释放顶栏钉定） */
+/** 「真实小窗口」标记属性（挂在 <html> 上；style.css 据此区分同一读数的两种来源） */
 export const TINY_REAL_ATTRIBUTE = "data-epytor-tiny-real";
 
 /** 折叠读数下能证明「宿主没摘挂」的用户输入（摘挂的 webview 收不到任何输入事件） */
@@ -152,13 +154,14 @@ function sync(): void {
     document.documentElement.style.setProperty(LAST_BODY_WIDTH_VAR, `${next}px`);
 }
 
-/** 把「宿主折叠中」判定同步成 <html> 属性（CSS 几何守卫的唯一真源，见属性注释） */
+/** 把「宿主折叠中」判定同步成 <html> 属性（CSS 几何守卫的唯一真源，见属性注释）。
+ *  只在判定变化时写 DOM——记账的 ResizeObserver 会在每次正文尺寸变化时回调（含输入时）。 */
 function syncHostCollapsedAttribute(): void {
-    if (isHostCollapsedViewport()) {
-        document.documentElement.setAttribute(HOST_COLLAPSED_ATTRIBUTE, "");
-    } else {
-        document.documentElement.removeAttribute(HOST_COLLAPSED_ATTRIBUTE);
-    }
+    const collapsed = isHostCollapsedViewport();
+    const root = document.documentElement;
+    if (collapsed === root.hasAttribute(HOST_COLLAPSED_ATTRIBUTE)) { return; }
+    if (collapsed) { root.setAttribute(HOST_COLLAPSED_ATTRIBUTE, ""); }
+    else { root.removeAttribute(HOST_COLLAPSED_ATTRIBUTE); }
 }
 
 /** 折叠读数下的用户输入：认定真实小窗口，解除顶栏钉定（CSS）并按真实几何记一次账 */

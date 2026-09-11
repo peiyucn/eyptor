@@ -159,28 +159,39 @@ const listSpreadNormalizePlugin = $prose((ctx) => {
                     if (to > maxTo) maxTo = to;
                 });
             });
+            // 兜底钳制 + 捕获：本插件的异常会从 appendTransaction 冒到
+            // EditorState.applyTransaction，静默打掉**整条事务**（历史教训：撤销因此
+            // 「没反应」）。区间换算已是精确的，这里只是防线——规范化失败远不如
+            // 用户编辑/撤销失效严重，所以宁可整段跳过。
+            const docSize = newState.doc.content.size;
+            minFrom = Math.max(0, Math.min(minFrom, docSize));
+            maxTo = Math.max(0, Math.min(maxTo, docSize));
             if (minFrom > maxTo) return null;
             const tr = newState.tr;
             let changed = false;
-            newState.doc.nodesBetween(minFrom, maxTo, (node, pos) => {
-                if (node.type !== schema.nodes.bullet_list && node.type !== schema.nodes.ordered_list)
-                    return;
-                let listNeedsSpread = false;
-                let offset = 1;
-                node.forEach((item) => {
-                    const itemNeedsSpread = item.childCount > 1;
-                    if (item.attrs.spread !== itemNeedsSpread) {
-                        tr.setNodeMarkup(pos + offset, undefined, { ...item.attrs, spread: itemNeedsSpread });
+            try {
+                newState.doc.nodesBetween(minFrom, maxTo, (node, pos) => {
+                    if (node.type !== schema.nodes.bullet_list && node.type !== schema.nodes.ordered_list)
+                        return;
+                    let listNeedsSpread = false;
+                    let offset = 1;
+                    node.forEach((item) => {
+                        const itemNeedsSpread = item.childCount > 1;
+                        if (item.attrs.spread !== itemNeedsSpread) {
+                            tr.setNodeMarkup(pos + offset, undefined, { ...item.attrs, spread: itemNeedsSpread });
+                            changed = true;
+                        }
+                        if (itemNeedsSpread) listNeedsSpread = true;
+                        offset += item.nodeSize;
+                    });
+                    if (node.attrs.spread !== listNeedsSpread) {
+                        tr.setNodeMarkup(pos, undefined, { ...node.attrs, spread: listNeedsSpread });
                         changed = true;
                     }
-                    if (itemNeedsSpread) listNeedsSpread = true;
-                    offset += item.nodeSize;
                 });
-                if (node.attrs.spread !== listNeedsSpread) {
-                    tr.setNodeMarkup(pos, undefined, { ...node.attrs, spread: listNeedsSpread });
-                    changed = true;
-                }
-            });
+            } catch {
+                return null; // 规范化是 best-effort：绝不因为属性整理而打掉用户事务
+            }
             return changed ? tr : null;
         },
     });

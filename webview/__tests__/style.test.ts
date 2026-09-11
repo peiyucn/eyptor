@@ -16,6 +16,33 @@ const headingCss = readFileSync(
     "utf-8",
 );
 
+/** 去掉 CSS 注释（规则匹配必须跳过注释里的花括号/逗号） */
+function stripComments(css: string): string {
+    return css.replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+/** 折叠期几何守卫那一段 CSS（从注释标题到 Milkdown 根容器之前） */
+function foldBlockCss(): string {
+    const start = styleCss.indexOf("折叠期几何守卫");
+    expect(start).toBeGreaterThanOrEqual(0);
+    return styleCss.slice(start, styleCss.indexOf("/* Milkdown 根容器 */", start));
+}
+
+/**
+ * 找出满足条件的规则（选择器列表包含给定选择器），返回完整选择器集合与声明体。
+ * 让断言看行为（覆盖了哪些元素、声明了什么），而不是在整段 CSS 里找字符串。
+ * `bodyIncludes` 用于在多个同选择器规则中挑出目标那条（例如钉宽度 vs 隐藏）。
+ */
+function findRule(selector: string, bodyIncludes?: string): { selectors: string[]; body: string } | null {
+    for (const m of stripComments(styleCss).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selectors = m[1].split(",").map((s) => s.trim().replace(/\s+/g, " "));
+        if (!selectors.includes(selector)) { continue; }
+        if (bodyIncludes && !m[2].includes(bodyIncludes)) { continue; }
+        return { selectors, body: m[2] };
+    }
+    return null;
+}
+
 describe("WebView 样式", () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -112,34 +139,47 @@ describe("WebView 样式", () => {
     });
 
     it("折叠期 应该 关闭顶栏/目录/浮动工具栏模糊（回归：合成器重建图层推迟首帧，小画面偶发可见）", () => {
-        const start = styleCss.indexOf("折叠期几何守卫");
-        expect(start).toBeGreaterThanOrEqual(0);
-        const foldBlock = styleCss.slice(start, styleCss.indexOf("/* Milkdown 根容器 */", start));
+        const foldBlock = foldBlockCss();
         expect(foldBlock).toContain("backdrop-filter: none !important");
-        expect(foldBlock).toContain(".milkdown-top-bar");
-        expect(foldBlock).toContain(".milkdown-toolbar");
-        expect(foldBlock).toContain(".toc-panel");
-        expect(foldBlock).toContain(".toc-toggle-tab");
     });
 
     it("折叠期正文版式 应该 钉住上次真实宽度（回归：折叠期按 300px 重排，切回那一帧整篇重新折行）", () => {
-        const start = styleCss.indexOf("折叠期几何守卫");
-        const foldBlock = styleCss.slice(start, styleCss.indexOf("/* Milkdown 根容器 */", start));
+        const foldBlock = foldBlockCss();
         expect(foldBlock).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] body {`);
         expect(foldBlock).toContain("width: var(--epytor-last-body-width, 100%)");
         expect(foldBlock).toContain("overflow-x: clip");
     });
 
+    /**
+     * 折叠期「不画固定 UI」的行为级断言：解析出该规则的**选择器集合与声明体**，
+     * 断言覆盖哪些元素、声明了什么——而不是在整段 CSS 里找字符串
+     * （字符串断言删掉整条规则也会绿，且改换行/顺序就误红）。
+     */
     it("折叠期 应该 不画固定 UI、但保留正文（回归：整块隐藏会变成「整个页面闪一次」）", () => {
-        const start = styleCss.indexOf("折叠期几何守卫");
-        const foldBlock = styleCss.slice(start, styleCss.indexOf("/* Milkdown 根容器 */", start));
-        // 固定 UI 折叠期不画：裁切边界落在顶栏按钮/标题字形中间最像坏掉
-        expect(foldBlock).toMatch(new RegExp(`html\\[${HOST_COLLAPSED_ATTRIBUTE}\\] \\.milkdown-top-bar,\\s*\\n`));
-        expect(foldBlock).toMatch(new RegExp(`html\\[${HOST_COLLAPSED_ATTRIBUTE}\\] \\.milkdown-toolbar,\\s*\\n`));
-        // 正文必须留着：整块 visibility:hidden 会让切回时先空一下（用户反馈「整个页面闪一次」）
-        expect(foldBlock).not.toContain("body > * {");
-        // 必须保留布局：display:none 会真的重排并破坏滚动位置
-        expect(foldBlock).not.toMatch(/display:\s*none/);
+        const rule = findRule(`html[${HOST_COLLAPSED_ATTRIBUTE}] .milkdown-top-bar`, "visibility: hidden");
+        expect(rule).not.toBeNull();
+        // 声明体：隐藏但保留布局（display:none 会真的重排并破坏滚动位置）
+        expect(rule!.body).toContain("visibility: hidden");
+        expect(rule!.body).not.toMatch(/display:\s*none/);
+        // 选择器集合：顶栏、浮动工具栏、目录、以及挂 body 的固定浮层都要覆盖
+        for (const sel of [
+            ".milkdown-top-bar",
+            ".milkdown-toolbar",
+            ".toc-panel",
+            ".toc-toggle-tab",
+            ".epytor-topbar-more-btn",
+            ".epytor-topbar-overflow-menu",
+            ".find-bar",
+            ".epytor-notice",
+        ]) {
+            expect(rule!.selectors).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] ${sel}`);
+        }
+        // 正文必须留着：整块隐藏（body 直接子元素全隐）会让切回时先空一下
+        const hidden = [...stripComments(styleCss).matchAll(/([^{}]+)\{([^}]*visibility:\s*hidden[^}]*)\}/g)]
+            .map((m) => m[1].split(",").map((s) => s.trim().replace(/\s+/g, " ")))
+            .flat()
+            .filter((sel) => sel.includes(`[${HOST_COLLAPSED_ATTRIBUTE}]`));
+        expect(hidden.some((sel) => /\bbody\s*>\s*\*/.test(sel) || sel.endsWith("body"))).toBe(false);
     });
 
     it("重建期加载点阵 应该 已移除（中间态只留主题背景，对齐官方预览观感）", () => {

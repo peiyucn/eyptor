@@ -146,7 +146,7 @@ describe("nextTinyReal", () => {
 
 /**
  * 接线：初始化即建立基准，此后由 ResizeObserver 跟踪（窗口缩放、滚动条出现/消失）。
- * 记账结果写进 CSS 变量 --epytor-last-body-width，供折叠媒体查询钉顶栏宽度。
+ * 记账结果写进 CSS 变量 --epytor-last-body-width，供折叠期守卫钉顶栏与正文宽度。
  */
 describe("initViewportLedger", () => {
     beforeEach(() => {
@@ -229,9 +229,25 @@ describe("initViewportLedger", () => {
      * 求值媒体查询，用户 window.zoomLevel = 0.17 的机器上 innerWidth=300 却 mq=false，
      * 整块守卫静默失效（折叠期照样按 300px 重排 → 切回时「小框」始终可见）。
      */
+    /**
+     * 折叠读数下用户真的操作了（= 真实小窗口）→ 属性必须立刻消失、并按真实宽度记账。
+     * 这条覆盖属性与「真实小窗口」判定的耦合：两者同时成立会把真实可见的 300px 编辑区
+     * 的固定 UI 藏起来（用户真缩到 300×150 时顶栏会消失）。
+     */
+    it("折叠读数下用户操作（真实小窗口） 应该 立刻移除属性并按真实几何记账", () => {
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        stubBodyWidth(285);
+        window.dispatchEvent(new Event("resize"));
+        expect(document.documentElement.hasAttribute(HOST_COLLAPSED_ATTRIBUTE)).toBe(true);
+        expect(cssVarValue()).toBe(""); // 折叠读数不入账
+
+        window.dispatchEvent(new MouseEvent("pointerdown"));
+        expect(document.documentElement.hasAttribute(TINY_REAL_ATTRIBUTE)).toBe(true);
+        expect(document.documentElement.hasAttribute(HOST_COLLAPSED_ATTRIBUTE)).toBe(false);
+        expect(cssVarValue()).toBe("285px"); // 这个 300×150 是真的，照常记账
+    });
+
     it("折叠进入/恢复 应该 同步 data-epytor-host-collapsed（含真实小窗口不置位）", () => {
-        installFakeResizeObserver();
-        initViewportLedger();
         setViewport(1200, 800);
         window.dispatchEvent(new Event("resize"));
         expect(document.documentElement.hasAttribute(HOST_COLLAPSED_ATTRIBUTE)).toBe(false);
