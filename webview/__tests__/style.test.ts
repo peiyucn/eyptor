@@ -105,7 +105,6 @@ describe("WebView 样式", () => {
         // 判据与 JS 常量同源：viewportLedger 改属性名时这条会红
         expect(styleCss).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] .milkdown-top-bar`);
         expect(styleCss).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] body {`);
-        expect(styleCss).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] body > * {`);
         expect(styleCss).toContain("var(--epytor-last-body-width, 100%)");
         // 精确尺寸的媒体查询在 window.zoomLevel ≠ 0 时不匹配（实测 innerWidth=300 却 mq=false），
         // 会让整块守卫静默失效——禁止再退回这种写法
@@ -131,13 +130,16 @@ describe("WebView 样式", () => {
         expect(foldBlock).toContain("overflow-x: clip");
     });
 
-    it("折叠期 应该 不画内容只留底色（回归：切回瞬间 300×150 旧画面就是「一个小框」）", () => {
+    it("折叠期 应该 不画固定 UI、但保留正文（回归：整块隐藏会变成「整个页面闪一次」）", () => {
         const start = styleCss.indexOf("折叠期几何守卫");
         const foldBlock = styleCss.slice(start, styleCss.indexOf("/* Milkdown 根容器 */", start));
-        expect(foldBlock).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] body > * {`);
-        expect(foldBlock).toContain("visibility: hidden");
+        // 固定 UI 折叠期不画：裁切边界落在顶栏按钮/标题字形中间最像坏掉
+        expect(foldBlock).toMatch(new RegExp(`html\\[${HOST_COLLAPSED_ATTRIBUTE}\\] \\.milkdown-top-bar,\\s*\\n`));
+        expect(foldBlock).toMatch(new RegExp(`html\\[${HOST_COLLAPSED_ATTRIBUTE}\\] \\.milkdown-toolbar,\\s*\\n`));
+        // 正文必须留着：整块 visibility:hidden 会让切回时先空一下（用户反馈「整个页面闪一次」）
+        expect(foldBlock).not.toContain("body > * {");
         // 必须保留布局：display:none 会真的重排并破坏滚动位置
-        expect(foldBlock).not.toMatch(/body > \* \{[^}]*display:/);
+        expect(foldBlock).not.toMatch(/display:\s*none/);
     });
 
     it("重建期加载点阵 应该 已移除（中间态只留主题背景，对齐官方预览观感）", () => {
