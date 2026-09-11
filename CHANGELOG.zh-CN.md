@@ -27,8 +27,9 @@
 * **列表键盘行为对齐官方默认**：空项行首 Backspace 删除该项、非空项行首 Backspace 并入上一项，编号自动重排
 * **自动保存跟随 VS Code 内置 `files.autoSave`**（`off` / `afterDelay` / `onFocusChange` / `onWindowChange`）；`epytor.autoSave` 与 `epytor.autoSaveDelay` 已移除
 * **表格单元格内边距、行距与行列选中工具栏**与编辑器其余部分统一
-* **列表排版重做**：标记（圆点 / 序号 / 复选框）与同行文字居中对齐；列表项之间不再空出一整行；每级嵌套缩进 55px → 28px
-* **引用块与表格单元格的上下留白改为对称**（此前分别差 10px / 4px，看着别扭）
+* **全文统一到一套排版尺度**：行高一个值（正文 / 列表项 / 引用块 / 表格单元格同源），相邻块之间只有一个间距（10.5px），标题与分隔线取同一尺度的 2× 档。改造前同一份文档里相邻块的净空有 2.8 / 4 / 4 / 4 / 18.2 / 21px 六种，标题的上下间距还随标题字号缩放（h1 与下文隔 11.2px、h6 只隔 5.0px）
+* **列表**：标记（圆点 / 序号 / 复选框）与同行文字居中对齐；项间距与段间距一致；每级嵌套缩进 55px → 27px
+* **引用块与表格单元格**：上下留白相等，且等于全文的块间距
 * **失败不再静默**：图片上传、图片重命名、保存与切换失败都会说明原因；中文界面下若干仍显示英文的提示已翻译
 * **设置面板分组**：*epytor*（编辑器）与 *epytor › 图片*；**`epytor.editorMaxWidth` / `epytor.codeBlockMaxHeight` 改完立即生效**，不必重开标签页
 * **图床设置合并为 `epytor.imageServer` 对象**（`url` / `fieldName` / `extraParams` / `responsePath`），`extraParams` 改为真正的 JSON 对象。建议迁移：`epytor.imageServerUrl`、`imageServerFieldName`、`imageServerExtraParams`、`imageServerResponsePath` 仍可用（作为兜底），但已标记弃用

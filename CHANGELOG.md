@@ -27,8 +27,9 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **List keyboard behavior follows the official defaults**: Backspace on an empty item deletes it, on a non-empty item merges it into the previous one, and numbering reflows automatically
 - **Auto save follows the built-in VS Code `files.autoSave`** (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`); `epytor.autoSave` and `epytor.autoSaveDelay` are gone
 - **Table cell padding, line spacing and the row/column selection toolbar** are unified with the rest of the editor
-- **List typography reworked**: markers (bullet / number / checkbox) are centred on the text of their own line, items are no longer separated by a whole blank line, and each nesting level indents 28px instead of 55px
-- **Blockquotes and table cells now have equal top and bottom padding** (they differed by 10px / 4px before)
+- **The whole document now uses one spacing scale**: a single line height (shared by paragraphs, list items, blockquotes and table cells) and a single gap between adjacent blocks (10.5px), with headings and rules taking the 2× step of the same scale. Before, the gap between adjacent blocks came in six different values (2.8 / 4 / 4 / 4 / 18.2 / 21px) and heading spacing scaled with the heading's own font size (h1 to its next block 11.2px, h6 only 5.0px)
+- **Lists**: markers (bullet / number / checkbox) are centred on the text of their own line, item spacing matches paragraph spacing, and each nesting level indents 27px instead of 55px
+- **Blockquotes and table cells** now have equal top and bottom padding, equal to the document-wide block gap
 - **Failures are no longer silent**: image upload, image rename, save and switch failures explain what went wrong, and several messages that stayed English in a Chinese UI are translated
 - **Settings are grouped** into *epytor* (editor) and *epytor › Images*, and **`epytor.editorMaxWidth` / `epytor.codeBlockMaxHeight` apply immediately** — no need to reopen the tab
 - **Image server settings are merged into one `epytor.imageServer` object** (`url` / `fieldName` / `extraParams` / `responsePath`), and `extraParams` is now a real JSON object. Migrating is recommended: `epytor.imageServerUrl`, `imageServerFieldName`, `imageServerExtraParams` and `imageServerResponsePath` still work as a fallback but are marked deprecated

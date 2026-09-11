@@ -361,36 +361,71 @@ html[data-epytor-host-collapsed] .epytor-notice {
     word-wrap: break-word;
 }
 
-/* ─── 排版尺度变量（列表 / 引用块 / 表格三节的数值来源，改一处即可统一） ─── */
+/* ─── 排版尺度：全文垂直间距的唯一来源 ──────────────────────────────────
+   一个标准，不分元素——**行高一个值、块间距一个值**，其余全部由这两个派生。
+   改造前同一份文档里相邻块的净空实测（真实 dist + Chromium，2026-09-11）：
+   列表项之间 2.8px、引用块之间 4px、表格上下 4px、代码块上下 4px、
+   段落之间 18.2px、分隔线上下 21px——十几种间距没有任何两处相同；标题的上下间距
+   还随标题字号缩放（h1 → 正文 11.2px，h6 → 正文 5.0px）。同一份文档里出现这么多
+   互不相干的数字，就是「列表的行间距、表格的间距、普通行的行间距各是一套」的来源。
+   现在只有两档：块间距（相邻块的唯一净空）与它的 2× 档（标题、分隔线）。
+   单位用 rem（= 编辑器字号）而不是 em：em 在标题里会跟着标题字号变，间距就不再统一。 */
 .milkdown {
-    /* 段间距：上一段末行 → 下一段首行的净空总量 */
-    --epytor-paragraph-gap: 1.3em;
-    /* 列表项行高：标记盒与首行行盒必须同源，否则标记会落在同行文字的中轴之外 */
-    --epytor-list-line-height: 1.5;
-    /* 标记列宽 + 标记与文字的间距（嵌套缩进的步长 = 两者之和） */
-    --epytor-list-marker-width: 1.5em;
-    --epytor-list-marker-gap: 0.45em;
+    /* 行高：正文 / 列表项 / 表格单元格 / 引用块内的段落同源 */
+    --epytor-line-height: 1.5;
+    /* 块间距 = 半个行高：文档流里任意两个相邻块之间唯一的净空值 */
+    --epytor-block-gap: 0.75rem;
+    /* 容器内边距（引用块上下、表格单元格四边）= 块间距 */
+    --epytor-container-pad: var(--epytor-block-gap);
+    /* 标题与分隔线：同一尺度上的 2× 档 */
+    --epytor-section-gap: calc(var(--epytor-block-gap) * 2);
+    /* 列表标记列宽 + 标记与文字的间距（嵌套缩进的步长 = 两者之和） */
+    --epytor-list-marker-width: 1.5rem;
+    --epytor-list-marker-gap: 0.45rem;
 }
 
-/* 段落：段间距全部由**下**内边距表达，上内边距必须为 0。
-   Crepe 主题给 p 留了隐式的 `padding: 4px 0`（`.milkdown .ProseMirror p`）：它把每段首行
-   向下顶 4px，于是「容器上下留白」到处不等——实测（真实 dist 产物 + Chromium，2026-09-11）：
-   引用块 上 12px / 下 22px；表格单元格 上 12.5px / 下 8.5px；列表标记比同行文字中心高 3.3px。
-   这里显式接管四边，不留隐式来源；间距总量与接管前一致（4px + 1em = 18px ≈ 1.3em）。
-   回归：此前 0.4em 时回车后的间距明显小于行距（用户反馈「行距与回车间距不一致」）。 */
+/* 行高一处定死：此前 body 给 1.6、上游主题给 p 给 1.5，同一页里两套行距 */
+.milkdown .ProseMirror {
+    line-height: var(--epytor-line-height);
+}
+
+/* 统一垂直节奏：所有块只用 margin-bottom 表达与下一块的间距，margin-top 一律 0。
+   相邻 margin 折叠成较大者，所以标题的 2× 档不会被前一块的 1× 档削掉。
+   段落与列表项的上内边距必须为 0——上游主题给 p 留了隐式的 `padding: 4px 0`，
+   它把每段首行向下顶 4px，于是「容器上下留白」到处不等（引用块 上 12px / 下 22px、
+   单元格 上 12.5px / 下 8.5px、列表标记比同行文字中心高 3.3px）。 */
+.milkdown .ProseMirror p,
+.milkdown .ProseMirror ul,
+.milkdown .ProseMirror ol,
+.milkdown .ProseMirror pre,
+.milkdown .ProseMirror blockquote,
+.milkdown .ProseMirror hr,
+.milkdown .ProseMirror .milkdown-table-block,
+.milkdown .ProseMirror .milkdown-code-block,
+.milkdown .ProseMirror .milkdown-image-block {
+    margin: 0 0 var(--epytor-block-gap);
+}
+
 .milkdown .ProseMirror p {
-    margin: 0;
-    padding: 0 0 var(--epytor-paragraph-gap);
+    padding: 0;
 }
 
-/* 表格单元格：末段贴底——上下留白都等于单元格自身的内边距，视觉对称
-   （回归：段落自带的上内边距 4px 让上留白 12.5px、下留白 8.5px） */
-.milkdown .ProseMirror td > p:last-child,
-.milkdown .ProseMirror th > p:last-child {
-    padding-bottom: 0;
+/* 容器（引用块 / 表格单元格）内的首末块贴边：容器留白只由容器自己的内边距决定，
+   否则首块/末块会把外层节奏又叠一层，上下立刻不等 */
+.milkdown .ProseMirror blockquote > *:first-child,
+.milkdown .ProseMirror td > *:first-child,
+.milkdown .ProseMirror th > *:first-child {
+    margin-top: 0;
+}
+.milkdown .ProseMirror blockquote > *:last-child,
+.milkdown .ProseMirror td > *:last-child,
+.milkdown .ProseMirror th > *:last-child {
+    margin-bottom: 0;
 }
 
-/* 标题：逐级明确尺寸，六级等差递减 */
+/* 标题：逐级明确尺寸，六级等差递减；上下间距取排版尺度里的 2× / 1× 档
+   （回归：上游把上下间距写成 0.8em/0.4em，em 在标题里按标题自己的字号算，
+   于是 h1 与下文隔 11.2px、h6 只隔 5.0px，同一份文档里标题的呼吸感各不相同） */
 .milkdown .ProseMirror h1,
 .milkdown .ProseMirror h2,
 .milkdown .ProseMirror h3,
@@ -400,8 +435,8 @@ html[data-epytor-host-collapsed] .epytor-notice {
     color: var(--vscode-editor-foreground);
     font-weight: 600;
     line-height: 1.3;
-    margin-top: 0.8em;
-    margin-bottom: 0.4em;
+    padding: 0;
+    margin: var(--epytor-section-gap) 0 var(--epytor-block-gap);
 }
 
 .milkdown .ProseMirror h1 {
@@ -481,6 +516,8 @@ html[data-epytor-host-collapsed] .epytor-notice {
     border-radius: 6px;
     border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2));
     padding: 0 14px 14px !important;
+    /* 与相邻块的间距走排版尺度（上游给的是 4px，与段落、列表各不相同） */
+    margin: 0 0 var(--epytor-block-gap);
 }
 
 /* 标题栏 */
@@ -700,7 +737,6 @@ html[data-epytor-host-collapsed] .epytor-notice {
     border-radius: 6px;
     padding: 1em;
     overflow-x: auto;
-    margin: 0 0 1em;
 }
 
 .milkdown .ProseMirror pre code {
@@ -713,7 +749,8 @@ html[data-epytor-host-collapsed] .epytor-notice {
 .milkdown .ProseMirror blockquote {
     background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
     border-radius: 6px;
-    padding: 8px 12px 8px 36px !important;
+    /* 上下内边距 = 块间距（排版尺度），左右留给引号条与呼吸 */
+    padding: var(--epytor-container-pad) 12px var(--epytor-container-pad) 36px !important;
     color: var(--vscode-editor-foreground);
     border: none !important;
 }
@@ -721,14 +758,6 @@ html[data-epytor-host-collapsed] .epytor-notice {
     background: var(--vscode-editor-foreground) !important;
     opacity: 0.15;
     left: 8px !important;
-}
-/* 首/末段贴边：留白只由块自身的对称内边距（上 8px / 下 8px）决定。
-   回归：段落自带 1em 下内边距且首行被上内边距顶开 → 实测上 12px、下 22px，看着别扭 */
-.milkdown .ProseMirror blockquote > p:first-child {
-    padding-top: 0;
-}
-.milkdown .ProseMirror blockquote > p:last-child {
-    padding-bottom: 0;
 }
 
 /* ── 列表（Crepe list-item NodeView，div 结构非原生 ul/ol）──
@@ -742,16 +771,25 @@ html[data-epytor-host-collapsed] .epytor-notice {
    ③ 缩进过大：标记列 24px + gap 10px = 34px，嵌套再叠 1.5em(21px)，每级步长 55px。 */
 .milkdown .milkdown-list-item-block {
     padding-left: 0 !important;
-    margin: 0.2em 0 !important;
+    /* 列表项就是块：与相邻块的间距取同一个块间距（改造前是 0.2em 叠在段落的 1em 上，
+       相邻项净空 20.8px ≈ 一整行，跟段间距又不一样） */
+    margin: 0 0 var(--epytor-block-gap) !important;
+}
+/* 列表的最后一项不在自己身上再留一份——列表与下文的间距由 ul/ol 的块间距给 */
+.milkdown .ProseMirror ul > .milkdown-list-item-block:last-child,
+.milkdown .ProseMirror ol > .milkdown-list-item-block:last-child {
+    margin-bottom: 0 !important;
 }
 
-/* ② 列表项内的段落不留段间距——项间距交给列表项自身的外边距，行高与标记盒同源 */
+/* ② 列表项内的段落不留段间距——项间距交给列表项自身的外边距（同一个块间距），
+   行高与标记盒同源（容器的首末块贴边由上面的容器规则统一负责） */
 .milkdown .ProseMirror .milkdown-list-item-block p {
+    margin-bottom: 0;
     padding: 0;
-    line-height: var(--epytor-list-line-height);
+    line-height: var(--epytor-line-height);
 }
 
-/* ③ 标记列收窄；嵌套不再叠加额外 padding-left，每级步长正好一个标记列（55px → 28px） */
+/* ③ 标记列收窄；嵌套不再叠加额外 padding-left，每级步长正好一个标记列（55px → 27px） */
 .milkdown .milkdown-list-item-block li .label-wrapper {
     width: var(--epytor-list-marker-width);
 }
@@ -762,7 +800,7 @@ html[data-epytor-host-collapsed] .epytor-notice {
     padding-left: 0 !important;
 }
 
-/* ① 标记盒与首行行盒等高：两者都取 --epytor-list-line-height，且 .list-item 是
+/* ① 标记盒与首行行盒等高：两者都取同一个行高，且 .list-item 是
    align-items: flex-start（顶对齐）→ 标记中心 = 首行文字中心。
    回归：官方 .label 固定 32px，直接删掉会让任务项行高塌陷、光标轻微上移 */
 .milkdown .milkdown-list-item-block > .list-item {
@@ -770,7 +808,7 @@ html[data-epytor-host-collapsed] .epytor-notice {
 }
 .milkdown .milkdown-list-item-block li .label-wrapper,
 .milkdown .milkdown-list-item-block li .label-wrapper .label {
-    height: calc(var(--epytor-list-line-height) * 1em);
+    height: calc(var(--epytor-line-height) * 1em);
     padding: 0;
 }
 
@@ -796,11 +834,12 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     cursor: pointer;
 }
 
-/* 水平分割线 */
+/* 水平分割线：上下取排版尺度里的 2× 档（分隔线的作用就是断开段落） */
 .milkdown .ProseMirror hr {
     border: none;
     border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
-    margin: 1.5em 0;
+    padding: 0;
+    margin: var(--epytor-section-gap) 0;
 }
 
 /* 删除线 */
@@ -1114,11 +1153,12 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     white-space: var(--epytor-table-white-space, normal);
     overflow-wrap: break-word;
 }
-/* 单元格内边距：官方为 4px 16px（上下与左右差 4 倍，用户反馈「四边内边距不同」）。
-   官方样式是运行时注入的 <style>，同特异性下后注入者胜 → 用 !important 确保生效 */
+/* 单元格内边距：四边都取容器内边距（= 块间距）。官方为 4px 16px（上下与左右差 4 倍），
+   且上游段落自带 4px 上内边距，实测上 12.5px / 下 8.5px。官方样式是运行时注入的
+   <style>，同特异性下后注入者胜 → 用 !important 确保生效 */
 .milkdown .milkdown-table-block th,
 .milkdown .milkdown-table-block td {
-    padding: 8px !important;
+    padding: var(--epytor-container-pad) !important;
 }
 
 /* 行列手柄与整行/整列选中工具栏：对齐编辑器浮层风格。
