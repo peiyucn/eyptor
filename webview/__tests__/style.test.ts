@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { HOST_COLLAPSED_ATTRIBUTE, TINY_REAL_ATTRIBUTE } from "../utils/viewportLedger";
+import { HOST_COLLAPSED_ATTRIBUTE } from "../utils/viewportLedger";
 
 const styleCss = readFileSync(
     path.resolve(process.cwd(), "webview/style.css"),
