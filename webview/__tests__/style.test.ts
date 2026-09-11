@@ -127,6 +127,16 @@ describe("WebView 样式", () => {
         expect(foldBlock).toContain("overflow-x: clip");
     });
 
+    it("折叠期 应该 不画内容只留底色（回归：切回瞬间 300×150 旧画面就是「一个小框」）", () => {
+        const start = styleCss.indexOf("@media (width: 300px) and (height: 150px)");
+        const foldBlock = styleCss.slice(start, styleCss.indexOf("\n}", start));
+        expect(foldBlock).toContain(`html:not([${TINY_REAL_ATTRIBUTE}]) body > * {`);
+        expect(foldBlock).toContain("visibility: hidden");
+        // 必须保留布局：display:none 会真的重排并破坏滚动位置
+        expect(foldBlock).toMatch(new RegExp(`html:not\\(\\[${TINY_REAL_ATTRIBUTE}\\]\\) body > \\* \\{[^}]*\\}`));
+        expect(foldBlock).not.toMatch(/body > \* \{[^}]*display:/);
+    });
+
     it("重建期加载点阵 应该 已移除（中间态只留主题背景，对齐官方预览观感）", () => {
         expect(styleCss).not.toContain("epytor-loading");
         expect(styleCss).not.toContain("epytor-matrix");

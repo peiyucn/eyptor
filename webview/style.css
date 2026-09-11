@@ -220,6 +220,19 @@ body {
         width: var(--epytor-last-body-width, 100%);
         overflow-x: clip;
     }
+
+    /* 6. 折叠期不画内容，只留底色。
+       为什么第 5 条不够：宿主切回时是先放回 iframe 尺寸、后把新尺寸传到 webview 渲染进程
+       （实测差 ~65ms）。这段窗口里 webview 自己还在按 300×150 渲染，而 iframe 已经占满
+       编辑区——屏幕上就是「左上角一个 300×150 的小框」；第 5 条只保证框里的内容版式正确，
+       框本身照样看得见（用户实测反馈：仍能明显看到一个小框闪出来）。
+       折叠期把内容整体设为 visibility: hidden（保留布局，不做 display: none——那会真的
+       重排并破坏滚动位置），旧画面就只剩一层底色；底色与宿主编辑区同色
+       （--vscode-editor-background，html/body 同源），那一帧因此完全看不见。
+       切回时媒体查询立即失效、内容立刻恢复可见，首帧即第 5 条保证的正确版式。 */
+    html:not([data-epytor-tiny-real]) body > * {
+        visibility: hidden;
+    }
 }
 
 /* Milkdown 根容器 */
