@@ -75,7 +75,7 @@ docs/tech-debt.md                        — 技术债务清单（面向开发�
 * **开发**：日常改动在 `dev`；`main` 只接受发布合并
 * **验证**：本地一键 `pnpm run verify`（= typecheck + test + 生产构建）；push 前必须通过
 * **提交**：逐项提交，中文描述 + 英文类型前缀（feat:/fix:/refactor:/chore:/docs:）；禁止多任务混一个 commit；不确定的事直接说"不确定"，禁止编造事实性信息
-* **推送**：日常目标 `dev`；`git push/fetch` 需要代理 127.0.0.1:7897
+* **推送**：日常目标 `dev`
 * **合并**：dev → main（`--no-ff` 带发布说明）
 * **发布**：按下方「发布流程」执行——**第 0 步（阶段零）是「发布确认」硬门禁，不可逆对外发布动作执行前须 owner 当次明确确认**；确认后才走阶段一～阶段四
 * **运维**：依赖升级统一手动（security updates 与 dependabot.yml 关闭）；收到警报 → 判断影响面（运行时/产物依赖才影响用户）→ 手动升级 → 影响用户的按发布流程发版
@@ -150,7 +150,7 @@ docs/tech-debt.md                        — 技术债务清单（面向开发�
 
 * 仓库：https://github.com/peiyucn/epytor
 * 非 Bug 功能的讨论引导至 [Discussions](https://github.com/peiyucn/epytor/discussions)
-* GitHub 操作一律走 `gh` CLI（已登录 peiyucn）；`gh api` 直连、`git push/fetch` 需要代理 127.0.0.1:7897；向上游提 issue 的注意事项见[上游限制](#上游限制)
+* GitHub 操作一律走 `gh` CLI（已登录 peiyucn）；向上游提 issue 的注意事项见[上游限制](#上游限制)
 
 ## 项目专属章节
 
