@@ -19,6 +19,7 @@ import type { EditorView } from "@milkdown/kit/prose/view";
 import type { Node as ProseNode } from "@milkdown/kit/prose/model";
 import { keymap } from "@milkdown/kit/prose/keymap";
 import { closeHistory } from "@milkdown/kit/prose/history";
+import type { StepMap } from "@milkdown/kit/prose/transform";
 import { Plugin, NodeSelection, TextSelection } from "@milkdown/kit/prose/state";
 import { CellSelection } from "@milkdown/kit/prose/tables";
 import { $prose, getMarkdown } from "@milkdown/kit/utils";
@@ -137,18 +138,27 @@ const listSpreadNormalizePlugin = $prose((ctx) => {
     const schema = ctx.get(schemaCtx);
     return new Plugin({
         appendTransaction(transactions, _oldState, newState) {
-            if (!transactions.some((tr) => tr.docChanged)) return null;
-            let minFrom = newState.doc.content.size;
-            let maxTo = 0;
+            // 变更区间必须换算到「最终文档」坐标。每步 StepMap 给出的 newStart/newEnd 是
+            // 「该步之后」的位置；多步事务里中间步骤可能让文档先变长再变短（中文输入法提交
+            // 就是典型：先插入拼音、再替换成候选词），直接把这些位置用在最终文档上会越过
+            // 文档末尾——nodesBetween 读到 undefined 抛 TypeError，整条事务（包括撤销）被
+            // 打掉。回归：中文输入后 Ctrl+Z 与顶栏撤销按钮双双「没反应」。
+            const maps: StepMap[] = [];
             for (const tr of transactions) {
                 if (!tr.docChanged) continue;
-                for (const step of tr.steps) {
-                    step.getMap().forEach((_os, _oe, newStart, newEnd) => {
-                        if (newStart < minFrom) minFrom = newStart;
-                        if (newEnd > maxTo) maxTo = newEnd;
-                    });
-                }
+                for (const step of tr.steps) { maps.push(step.getMap()); }
             }
+            if (!maps.length) return null;
+            let minFrom = newState.doc.content.size;
+            let maxTo = 0;
+            maps.forEach((map, i) => {
+                map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+                    const from = mapThrough(maps, i + 1, newStart, 1);
+                    const to = mapThrough(maps, i + 1, newEnd, -1);
+                    if (from < minFrom) minFrom = from;
+                    if (to > maxTo) maxTo = to;
+                });
+            });
             if (minFrom > maxTo) return null;
             const tr = newState.tr;
             let changed = false;
@@ -175,6 +185,13 @@ const listSpreadNormalizePlugin = $prose((ctx) => {
         },
     });
 });
+
+/** 把位置依次穿过 maps[start..] 映射到最终文档坐标 */
+function mapThrough(maps: readonly StepMap[], start: number, pos: number, assoc: number): number {
+    let result = pos;
+    for (let i = start; i < maps.length; i++) { result = maps[i].map(result, assoc); }
+    return result;
+}
 
 // ─── 表格单元格点击修正 ──────────────────────────────────────────────────────
 
@@ -562,16 +579,15 @@ export async function createEditor(
 
     // 撤销粒度：每次输入一步（默认 500ms 合并窗会把连续输入并成一次撤销，
     // 用户无法预知一次 Ctrl+Z 撤掉多少）。IME 组合内部仍按组合 ID 合并——
-    // 一段候选提交 = 一步，不会撤到拼音中间态。
+    // 一段候选提交 = 一步，不会撤到拼音中间态；新一段候选（组合 ID 变化）
+    // 与前一次输入各自成步，撤销不会连带撤掉上一步。
     crepe.editor.use($prose(() => {
         let prevComposition: unknown = null;
         return new Plugin({
             filterTransaction(tr) {
                 if (!tr.docChanged) { return true; }
                 const composition = tr.getMeta("composition") ?? null;
-                const startsNewComposition = prevComposition !== null
-                    && composition !== null && composition !== prevComposition;
-                if (composition === null || startsNewComposition) { closeHistory(tr); }
+                if (composition === null || composition !== prevComposition) { closeHistory(tr); }
                 prevComposition = composition;
                 return true;
             },

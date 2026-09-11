@@ -57,7 +57,6 @@ import { resolvePathSuggestionRequest } from "./utils/pathSuggestionRequests";
 import { setImageUriMap, remapImageUri, showGlobalLightbox } from "./components/imageView";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
 import { initViewportLedger } from "./utils/viewportLedger";
-import { initUndoShortcutFallback } from "./utils/undoShortcutFallback";
 import { initFindBar } from "./components/findBar";
 import { initToc } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
@@ -757,8 +756,6 @@ window.addEventListener('scroll', () => {
 // #61489 同类问题：webviews stealing focus when not last focused）
 let _isActivePanel = true;
 
-// IME 组合标记卡住/焦点不在编辑器 DOM 时的撤销/重做兜底（见 utils/undoShortcutFallback.ts）
-initUndoShortcutFallback({ getView: getEditorView, isActive: () => _isActivePanel });
 const restoreEditorFocus = () => {
     if (!_isActivePanel) return; // 非激活面板不抢焦点
     requestAnimationFrame(() => {
