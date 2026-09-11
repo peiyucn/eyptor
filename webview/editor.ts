@@ -50,6 +50,14 @@ import { defaultHighlightStyle, syntaxHighlighting, LanguageDescription, type La
 import { languages as allCodeLanguages } from "@codemirror/language-data";
 import { onThemeChange, isDarkTheme } from "./utils/themeBus";
 import { changeRangeInFinalDoc, normalizeListSpread } from "./utils/listSpread";
+import {
+    beginClick,
+    consumeCellClickTarget,
+    createCellClickState,
+    decideCellSelection,
+    endClick,
+    markDragged,
+} from "./utils/cellClickState";
 import { observeCmEditorCount } from "./utils/cmThemeObserver";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
 import { t } from "./i18n";
@@ -148,19 +156,10 @@ const listSpreadNormalizePlugin = $prose((ctx) => {
 });
 
 // ─── 表格单元格点击修正 ──────────────────────────────────────────────────────
-
-/** 跨格拖选结束后清掉「上次整格选区」的延迟：等后续 click 事件走完再判定是否为新建选区 */
-const CELL_SELECTION_CLEAR_DELAY_MS = 200;
+// 状态机与转移函数在 utils/cellClickState.ts（回归：9 个可变标志散在三个回调里互相读写）。
 
 const cellClickFixPlugin = $prose(() => {
-    let pendingClickPos: number | null = null;
-    let cellClickTarget: number | null = null; // 表格单击位置，不受 mouseup 清理影响
-    let clickIsPlain = true;
-    let wasCrossCell = false;
-    let lastGoodCellSelection: CellSelection | null = null;
-    let multiSelectCount = 0;
-    let lastMouseX = 0;
-    let lastMouseY = 0;
+    const cell = createCellClickState();
     let capturedView: EditorView | null = null;
 
     return new Plugin({
@@ -172,39 +171,25 @@ const cellClickFixPlugin = $prose(() => {
             handleDOMEvents: {
                 mousedown: (view, event) => {
                     if (event.button !== 0 || event.detail !== 1 || event.shiftKey || event.ctrlKey || event.metaKey) {
-                        pendingClickPos = null;
+                        beginClick(cell, null);
                         return false;
                     }
-                    const cell = (event.target as Element).closest("td, th");
-                    if (!cell) { pendingClickPos = null; return false; }
-                    const pos = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                    pendingClickPos = pos ? pos.pos : null;
-                    cellClickTarget = pos ? pos.pos : null;
-                    clickIsPlain = true;
-                    wasCrossCell = false;
-                    lastGoodCellSelection = null;
-                    lastMouseX = event.clientX;
-                    lastMouseY = event.clientY;
+                    if (!(event.target as Element).closest("td, th")) {
+                        beginClick(cell, null);
+                        return false;
+                    }
+                    const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                    beginClick(cell, at ? { pos: at.pos, x: event.clientX, y: event.clientY } : null);
 
-                    const onMove = (mv: MouseEvent) => {
-                        lastMouseX = mv.clientX;
-                        lastMouseY = mv.clientY;
-                        if (Math.abs(mv.clientX - event.clientX) + Math.abs(mv.clientY - event.clientY) > 4) clickIsPlain = false;
-                    };
+                    const originX = event.clientX;
+                    const originY = event.clientY;
+                    const onMove = (mv: MouseEvent) => markDragged(cell, mv.clientX, mv.clientY, originX, originY);
                     document.addEventListener("mousemove", onMove, true);
 
                     const cleanup = () => {
                         document.removeEventListener("mouseup", cleanup, true);
                         document.removeEventListener("mousemove", onMove, true);
-                        if (wasCrossCell) {
-                            pendingClickPos = null;
-                            clickIsPlain = true;
-                            wasCrossCell = false;
-                            const savedCellSel = lastGoodCellSelection;
-                            setTimeout(() => { if (lastGoodCellSelection === savedCellSel) lastGoodCellSelection = null; }, CELL_SELECTION_CLEAR_DELAY_MS);
-                        } else {
-                            Promise.resolve().then(() => { pendingClickPos = null; clickIsPlain = true; });
-                        }
+                        endClick(cell);
                     };
                     document.addEventListener("mouseup", cleanup, true);
                     return false;
@@ -220,8 +205,7 @@ const cellClickFixPlugin = $prose(() => {
                         const t = $pos.node(d).type.name;
                         if (t === "table_cell" || t === "table_header") {
                             // 在 Crepe rAF 内被拦截；再套一层 rAF 补 TextSelection
-                            const clickPos = cellClickTarget;
-                            cellClickTarget = null;
+                            const clickPos = consumeCellClickTarget(cell);
                             requestAnimationFrame(() => {
                                 const v = capturedView;
                                 if (!v) return;
@@ -230,56 +214,65 @@ const cellClickFixPlugin = $prose(() => {
                                 try {
                                     const p = Math.min(clickPos ?? tr.selection.from, v.state.doc.content.size);
                                     v.dispatch(v.state.tr.setSelection(TextSelection.near(v.state.doc.resolve(p))));
-                                } catch { /* cellClickTarget 位置无效，不修正选区 */ }
+                                } catch { /* 单击位置无效，不修正选区 */ }
                             });
                             return false;
                         }
                     }
                 } catch { /* 非表格节点内的 $pos 遍历，忽略 */ }
             }
-            if (!lastGoodCellSelection) return true;
+            if (!cell.lastGoodCellSelection) return true;
             if (state.selection instanceof CellSelection && !(tr.selection instanceof CellSelection)) {
                 return false;
             }
             return true;
         },
         appendTransaction(_trs, _oldState, newState) {
-            if (pendingClickPos === null) return null;
+            if (cell.pendingClickPos === null) return null;
             const sel = newState.selection;
-            const $pos = newState.doc.resolve(Math.min(pendingClickPos, newState.doc.content.size));
+            if (!(sel instanceof CellSelection)) { return null; }
+            if (sel.isRowSelection() || sel.isColSelection()) { return null; }
 
-            // 单格 CellSelection → 转 TextSelection
-            if (sel instanceof CellSelection) {
-                if (sel.isRowSelection() || sel.isColSelection()) return null;
-                if (sel.$anchorCell.pos !== sel.$headCell.pos) {
-                    wasCrossCell = true;
-                    lastGoodCellSelection = sel;
-                    return null;
-                }
-                try {
-                    if (!clickIsPlain && capturedView) {
-                        const toCoords = capturedView.posAtCoords({ left: lastMouseX, top: lastMouseY });
-                        if (toCoords) {
-                            const headP = Math.min(toCoords.pos, newState.doc.content.size);
-                            try {
-                                const $a = newState.doc.resolve(Math.min(pendingClickPos, newState.doc.content.size));
-                                const $h = newState.doc.resolve(headP);
-                                let aCellStart = -1, hCellStart = -1;
-                                for (let d = $a.depth; d >= 0; d--) { if ($a.node(d).type.name === "table_cell" || $a.node(d).type.name === "table_header") { aCellStart = $a.start(d); break; } }
-                                for (let d = $h.depth; d >= 0; d--) { if ($h.node(d).type.name === "table_cell" || $h.node(d).type.name === "table_header") { hCellStart = $h.start(d); break; } }
-                                if (aCellStart !== hCellStart) return null;
-                            } catch { /* 单元格边界检测失败（文档结构变化），回退为单格光标 */ }
-                            return newState.tr.setSelection(TextSelection.create(newState.doc, headP, Math.min(pendingClickPos, newState.doc.content.size)));
-                        }
-                    }
-                    return newState.tr.setSelection(TextSelection.near($pos));
-                } catch { /* pos 无效（如节点刚被删除），不修正选区 */ return null; }
+            const decision = decideCellSelection(cell, {
+                isRowOrCol: false, // 上面已先行排除整行/整列
+                anchorCellPos: sel.$anchorCell.pos,
+                headCellPos: sel.$headCell.pos,
+            });
+            if (decision.kind === "rememberCrossCell") {
+                cell.lastGoodCellSelection = sel;
+                return null;
             }
 
-            return null;
+            const clickPos = cell.pendingClickPos;
+            const $pos = newState.doc.resolve(Math.min(clickPos, newState.doc.content.size));
+            try {
+                if (!cell.clickIsPlain && capturedView) {
+                    const toCoords = capturedView.posAtCoords({ left: cell.lastMouseX, top: cell.lastMouseY });
+                    if (toCoords) {
+                        const headP = Math.min(toCoords.pos, newState.doc.content.size);
+                        try {
+                            if (cellStartAt(newState.doc, clickPos) !== cellStartAt(newState.doc, headP)) { return null; }
+                        } catch { /* 单元格边界检测失败（文档结构变化），回退为单格光标 */ }
+                        return newState.tr.setSelection(
+                            TextSelection.create(newState.doc, headP, Math.min(clickPos, newState.doc.content.size)),
+                        );
+                    }
+                }
+                return newState.tr.setSelection(TextSelection.near($pos));
+            } catch { /* 位置无效（如节点刚被删除），不修正选区 */ return null; }
         },
     });
 });
+
+/** 位置所属单元格的起始坐标（-1 = 不在单元格内） */
+function cellStartAt(doc: ProseNode, pos: number): number {
+    const $pos = doc.resolve(Math.min(pos, doc.content.size));
+    for (let d = $pos.depth; d >= 0; d--) {
+        const name = $pos.node(d).type.name;
+        if (name === "table_cell" || name === "table_header") { return $pos.start(d); }
+    }
+    return -1;
+}
 
 // ─── 自定义视图组件 ─────────────────────────────────────────
 
