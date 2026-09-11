@@ -155,7 +155,7 @@ describe("WebView 样式", () => {
      * 断言覆盖哪些元素、声明了什么——而不是在整段 CSS 里找字符串
      * （字符串断言删掉整条规则也会绿，且改换行/顺序就误红）。
      */
-    it("折叠期 应该 不画固定 UI、但保留正文（回归：整块隐藏会变成「整个页面闪一次」）", () => {
+    it("折叠期 应该 不画固定 UI（回归：顶栏那排按钮被裁成半块，最像「坏掉的小框」）", () => {
         const rule = findRule(`html[${HOST_COLLAPSED_ATTRIBUTE}] .milkdown-top-bar`, "visibility: hidden");
         expect(rule).not.toBeNull();
         // 声明体：隐藏但保留布局（display:none 会真的重排并破坏滚动位置）
@@ -174,12 +174,6 @@ describe("WebView 样式", () => {
         ]) {
             expect(rule!.selectors).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] ${sel}`);
         }
-        // 正文必须留着：整块隐藏（body 直接子元素全隐）会让切回时先空一下
-        const hidden = [...stripComments(styleCss).matchAll(/([^{}]+)\{([^}]*visibility:\s*hidden[^}]*)\}/g)]
-            .map((m) => m[1].split(",").map((s) => s.trim().replace(/\s+/g, " ")))
-            .flat()
-            .filter((sel) => sel.includes(`[${HOST_COLLAPSED_ATTRIBUTE}]`));
-        expect(hidden.some((sel) => /\bbody\s*>\s*\*/.test(sel) || sel.endsWith("body"))).toBe(false);
     });
 
     it("重建期加载点阵 应该 已移除（中间态只留主题背景，对齐官方预览观感）", () => {
@@ -310,5 +304,17 @@ describe("WebView 样式", () => {
         expect(rule).not.toBeNull();
         expect(rule!.body).toMatch(/display:\s*block/);
         expect(rule!.body).toMatch(/height:\s*0\b/);
+    });
+
+    it("折叠期 应该 把正文归成纯背景（回归：那 300×150 里残留「孤零零一个目录面板」像渲染坏了）", () => {
+        const rule = findRule(`html[${HOST_COLLAPSED_ATTRIBUTE}] body`, "visibility: hidden");
+        expect(rule).not.toBeNull();
+        // 光靠 visibility 骗不住：子元素自己的 visibility:visible 会翻回来（实测目录面板就是这么
+        // 活下来的），必须再压一层 opacity
+        expect(rule!.body).toMatch(/opacity:\s*0\b/);
+        // body 归空后画布底色由 <html> 提供，所以 html 必须自己有底色
+        expect(stripComments(styleCss)).toMatch(/html,\s*body\s*\{[^}]*background-color/);
+        // 反面：不允许再出现「失焦/失活即归空」——那会让点侧边栏、点当前标签都闪一下（回归实测）
+        expect(styleCss).not.toContain("data-epytor-content-blank");
     });
 });

@@ -89,9 +89,8 @@ let _topBarOverflowCtl: { dispose(): void } | null = null;
 // 正式架构（已定案）：webview **保活**（retainContextWhenHidden: true，见
 // src/MarkdownEditorProvider.ts）——切到别的标签不销毁、不重建，撤销历史与折叠状态都留着。
 // 代价是折叠期视口会回落到宿主摘挂时的 300×150；折叠期几何守卫（style.css，判据是记账
-// 写下的 data-epytor-host-collapsed）把正文版式钉在真实宽度、并让固定 UI 在折叠期不画
-// （正文照常显示），否则切回那一帧会看到「左上角一个 300×150 的小框」。这里初始化的是
-// 它们的数据来源。
+// 写下的 data-epytor-host-collapsed）把正文版式钉在真实宽度、并让固定 UI 在折叠期不画，
+// 否则切回那一帧会看到「左上角一个 300×150 的小框」。这里初始化的是它们的数据来源。
 // 用户真把编辑区缩到恰好 300×150 时不算折叠（折叠读数下的用户输入 = 真实小窗口，见
 // utils/viewportLedger.ts）：顶栏不再钉宽、记账照常（目录/吸顶仍按读数跳过）。
 initViewportLedger();
