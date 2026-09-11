@@ -149,6 +149,9 @@ const listSpreadNormalizePlugin = $prose((ctx) => {
 
 // ─── 表格单元格点击修正 ──────────────────────────────────────────────────────
 
+/** 跨格拖选结束后清掉「上次整格选区」的延迟：等后续 click 事件走完再判定是否为新建选区 */
+const CELL_SELECTION_CLEAR_DELAY_MS = 200;
+
 const cellClickFixPlugin = $prose(() => {
     let pendingClickPos: number | null = null;
     let cellClickTarget: number | null = null; // 表格单击位置，不受 mouseup 清理影响
@@ -198,7 +201,7 @@ const cellClickFixPlugin = $prose(() => {
                             clickIsPlain = true;
                             wasCrossCell = false;
                             const savedCellSel = lastGoodCellSelection;
-                            setTimeout(() => { if (lastGoodCellSelection === savedCellSel) lastGoodCellSelection = null; }, 200);
+                            setTimeout(() => { if (lastGoodCellSelection === savedCellSel) lastGoodCellSelection = null; }, CELL_SELECTION_CLEAR_DELAY_MS);
                         } else {
                             Promise.resolve().then(() => { pendingClickPos = null; clickIsPlain = true; });
                         }

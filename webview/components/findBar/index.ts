@@ -13,6 +13,9 @@ declare namespace CSS {
     const highlights: Map<string, Highlight>;
 }
 
+/** 输入防抖：查找是逐键重算全部匹配，间隔太小会在长文档上拖慢输入 */
+const SEARCH_DEBOUNCE_MS = 150;
+
 export interface FindBarController {
     open(initialQuery?: string): void;
     close(): void;
@@ -203,7 +206,7 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
     // ── 事件绑定 ─────────────────────────────────────────
     input.addEventListener("input", () => {
         clearTimeout(debounceTimer);
-        debounceTimer = window.setTimeout(() => search(input.value), 150);
+        debounceTimer = window.setTimeout(() => search(input.value), SEARCH_DEBOUNCE_MS);
     });
 
     input.addEventListener("keydown", (e) => {
