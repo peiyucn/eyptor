@@ -34,6 +34,21 @@ export const IFRAME_DEFAULT_HEIGHT = 150;
 /** 真实 body 宽度（px）写入的 CSS 变量名（style.css 折叠媒体查询消费） */
 export const LAST_BODY_WIDTH_VAR = "--epytor-last-body-width";
 
+/**
+ * 「宿主折叠中」属性（挂在 <html> 上）：折叠期几何守卫的唯一真源（style.css 消费）。
+ *
+ * 为什么不用 `@media (width: 300px) and (height: 150px)`：Chromium 的媒体查询按**窗口缩放后**
+ * 的尺寸求值，而 `window.innerWidth` 报的是未缩放的 CSS px——两者会不一致。用户环境实测
+ * （window.zoomLevel = 0.17、devicePixelRatio 2.06）：
+ *     window.innerWidth/innerHeight = 300×150   （JS 判据成立）
+ *     matchMedia('(width: 300px) and (height: 150px)').matches = false
+ *     matchMedia('(max-width: 320px) and (max-height: 170px)').matches = true
+ * 即：媒体查询写的守卫在带缩放的机器上**整块失效**（回归：用户装了几版仍能看到「小框」——
+ * 折叠期正文照样按 300px 重排、顶栏照样收按钮）。改用 JS 记账判据后与 isHostCollapsedViewport()
+ * 同源，缩放、DPI 都不影响。
+ */
+export const HOST_COLLAPSED_ATTRIBUTE = "data-epytor-host-collapsed";
+
 /** 「真实小窗口」标记属性（挂在 <html> 上；style.css 折叠媒体查询据此释放顶栏钉定） */
 export const TINY_REAL_ATTRIBUTE = "data-epytor-tiny-real";
 
@@ -130,10 +145,20 @@ function readBodyWidth(): number {
 
 /** 记一次账并同步 CSS 变量（宽度没变时不写 DOM） */
 function sync(): void {
+    syncHostCollapsedAttribute();
     const next = nextLastBodyWidth(lastBodyWidth, readViewport(), readBodyWidth(), isRealTinyViewport());
     if (next === lastBodyWidth) { return; }
     lastBodyWidth = next;
     document.documentElement.style.setProperty(LAST_BODY_WIDTH_VAR, `${next}px`);
+}
+
+/** 把「宿主折叠中」判定同步成 <html> 属性（CSS 几何守卫的唯一真源，见属性注释） */
+function syncHostCollapsedAttribute(): void {
+    if (isHostCollapsedViewport()) {
+        document.documentElement.setAttribute(HOST_COLLAPSED_ATTRIBUTE, "");
+    } else {
+        document.documentElement.removeAttribute(HOST_COLLAPSED_ATTRIBUTE);
+    }
 }
 
 /** 折叠读数下的用户输入：认定真实小窗口，解除顶栏钉定（CSS）并按真实几何记一次账 */

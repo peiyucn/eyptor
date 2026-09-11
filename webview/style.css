@@ -164,75 +164,72 @@ body {
    宿主切到非 webview 标签时把 webview 容器摘出布局，iframe 回落到 Chromium 默认的
    300×150；保活架构下正文会真实地按 300px 重排一次再排回来——这是渲染器的自然行为，
    不隐藏正文、不冻结版式（隐藏/冻结过的几版在折叠窗口里给出的是「非正文」画面，比
-   不干预更刺眼）。这里只治折叠带来的副作用，正文照常显示。 */
-@media (width: 300px) and (height: 150px) {
+   不干预更刺眼）。这里只治折叠带来的副作用，正文照常显示。
+
+   判据是 <html> 上的 data-epytor-host-collapsed（JS 记账写入），**不是媒体查询**：
+   Chromium 的媒体查询按窗口缩放后的尺寸求值，带 window.zoomLevel 的机器上
+   `(width: 300px)` 在 window.innerWidth=300 时并不匹配，整块守卫会静默失效
+   （实测见 viewportLedger.ts 的 HOST_COLLAPSED_ATTRIBUTE 注释）。
+   该属性已排除「用户在 300×150 下真操作过」的情形（isHostCollapsedViewport）。 */
+html[data-epytor-host-collapsed] {
     /* 1. 滚动锚定：视口从真实尺寸缩到 300×150 时，浏览器为了「可见内容不动」会把滚动
        位置就地修正（实测同一位置 scrollY 1500 → 1773）；宿主放回真实尺寸后内容就停在
        错位处，用户看到内容跳一下。折叠期禁用锚定，滚动位置保持原值。 */
-    :root {
-        overflow-anchor: none;
-    }
+    overflow-anchor: none;
 
     /* 2. 滚动条：折叠期视口只有 300px 宽，内容溢出会让滚动条出现/消失，正文可用宽度
        跟着变一个滚动条宽；切回真实尺寸再变回来 → 正文横向位移一个滚动条宽。折叠期
        不画滚动条（Firefox 走 scrollbar-width，Chromium/WebKit 走 ::-webkit-scrollbar）。 */
-    html {
-        scrollbar-width: none;
-    }
-    html::-webkit-scrollbar {
-        width: 0;
-        height: 0;
-    }
+    scrollbar-width: none;
+}
+html[data-epytor-host-collapsed]::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
 
-    /* 3. 顶栏宽度：顶栏 fixed + left/right:0，宽度跟随视口；折叠期视口只有 300px，按钮会
-       收进「⋯」溢出菜单，切回真实尺寸再展开 → 顶栏闪一下。这里用 JS 记账的真实宽度
-       （--epytor-last-body-width，见 utils/viewportLedger.ts）钉住宽度，按钮数量与位置
-       在折叠期不变。变量缺失时回退 100%，即按当前视口布局。
-       html[data-epytor-tiny-real] = 用户在 300×150 下真的操作过（被宿主摘挂的 webview 收不到
-       输入）：此刻 300px 就是真实宽度，钉住反而让顶栏溢出——不钉，按当前视口布局
-       （回归 A6：用户真把编辑区缩到恰好 300×150 时，顶栏按钮溢出顶栏）。
-       注：上面第 1、2 条（滚动锚定 / 滚动条）不随该标记释放——标记只影响顶栏钉定与记账。 */
-    html:not([data-epytor-tiny-real]) .milkdown-top-bar {
-        width: var(--epytor-last-body-width, 100%);
-    }
+/* 3. 顶栏宽度：顶栏 fixed + left/right:0，宽度跟随视口；折叠期视口只有 300px，按钮会
+   收进「⋯」溢出菜单，切回真实尺寸再展开 → 顶栏闪一下。这里用 JS 记账的真实宽度
+   （--epytor-last-body-width，见 utils/viewportLedger.ts）钉住宽度，按钮数量与位置
+   在折叠期不变。变量缺失时回退 100%，即按当前视口布局。
+   注：第 1、2 条（滚动锚定 / 滚动条）不随「真实小窗口」情形释放——属性本身已排除它。 */
+html[data-epytor-host-collapsed] .milkdown-top-bar {
+    width: var(--epytor-last-body-width, 100%);
+}
 
-    /* 4. 合成器守卫（回归 bc528e3 实测）：宿主切回时重新挂载 webview，合成器要重建
-       图层；backdrop-filter 的模糊要求先捕获背景再模糊，首帧因此被推迟约 2 帧——
-       那几帧里旧的小尺寸画面就多停留一会儿，用户偶尔能看清「小画面」。折叠期顶栏/
-       目录/浮动工具栏后面就是正文与底色，有无模糊肉眼无差，但首帧能立刻画出来。 */
-    .milkdown-top-bar,
-    .milkdown-toolbar,
-    .toc-panel,
-    .toc-toggle-tab {
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-    }
+/* 4. 合成器守卫（回归 bc528e3 实测）：宿主切回时重新挂载 webview，合成器要重建
+   图层；backdrop-filter 的模糊要求先捕获背景再模糊，首帧因此被推迟约 2 帧——
+   那几帧里旧的小尺寸画面就多停留一会儿，用户偶尔能看清「小画面」。折叠期顶栏/
+   目录/浮动工具栏后面就是正文与底色，有无模糊肉眼无差，但首帧能立刻画出来。 */
+html[data-epytor-host-collapsed] .milkdown-top-bar,
+html[data-epytor-host-collapsed] .milkdown-toolbar,
+html[data-epytor-host-collapsed] .toc-panel,
+html[data-epytor-host-collapsed] .toc-toggle-tab {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
 
-    /* 5. 正文版式：折叠期把 body 宽度钉在上次真实宽度（--epytor-last-body-width），
-       正文不再按 300px 重排。宿主放回真实尺寸时，那一帧里的旧画面与新画面是同一份
-       版式，用户看到的只是右侧被补齐，而不是「正文重新折行」——这就是切标签「闪」
-       的主体现。实测（_poc/TEMP/ime/flash-lab.mjs）：不加这条时折叠期 h1 由 647×46
-       折成 204×156，切回瞬间整屏 14.8% 像素与终稿不同；加后折叠期版式与终稿逐项
-       相同。变量缺失（首次折叠早于任何真实测量）时回退 100%，即按当前视口布局。
-       html[data-epytor-tiny-real] = 用户在 300×150 下真操作过（同顶栏口径）：此刻
-       300px 就是真实宽度，钉住会让正文横向溢出——不钉。 */
-    html:not([data-epytor-tiny-real]) body {
-        width: var(--epytor-last-body-width, 100%);
-        overflow-x: clip;
-    }
+/* 5. 正文版式：折叠期把 body 宽度钉在上次真实宽度（--epytor-last-body-width），
+   正文不再按 300px 重排。宿主放回真实尺寸时，那一帧里的旧画面与新画面是同一份
+   版式，用户看到的只是右侧被补齐，而不是「正文重新折行」——这就是切标签「闪」
+   的主体现。实测（_poc/TEMP/ime/flash-lab.mjs）：不加这条时折叠期 h1 由 647×46
+   折成 204×156，切回瞬间整屏 14.8% 像素与终稿不同；加后折叠期版式与终稿逐项
+   相同。变量缺失（首次折叠早于任何真实测量）时回退 100%，即按当前视口布局。 */
+html[data-epytor-host-collapsed] body {
+    width: var(--epytor-last-body-width, 100%);
+    overflow-x: clip;
+}
 
-    /* 6. 折叠期不画内容，只留底色。
-       为什么第 5 条不够：宿主切回时是先放回 iframe 尺寸、后把新尺寸传到 webview 渲染进程
-       （实测差 ~65ms）。这段窗口里 webview 自己还在按 300×150 渲染，而 iframe 已经占满
-       编辑区——屏幕上就是「左上角一个 300×150 的小框」；第 5 条只保证框里的内容版式正确，
-       框本身照样看得见（用户实测反馈：仍能明显看到一个小框闪出来）。
-       折叠期把内容整体设为 visibility: hidden（保留布局，不做 display: none——那会真的
-       重排并破坏滚动位置），旧画面就只剩一层底色；底色与宿主编辑区同色
-       （--vscode-editor-background，html/body 同源），那一帧因此完全看不见。
-       切回时媒体查询立即失效、内容立刻恢复可见，首帧即第 5 条保证的正确版式。 */
-    html:not([data-epytor-tiny-real]) body > * {
-        visibility: hidden;
-    }
+/* 6. 折叠期不画内容，只留底色。
+   为什么第 5 条不够：宿主切回时是先放回 iframe 尺寸、后把新尺寸传到 webview 渲染进程
+   （实测差 ~65ms）。这段窗口里 webview 自己还在按 300×150 渲染，而 iframe 已经占满
+   编辑区——屏幕上就是「左上角一个 300×150 的小框」；第 5 条只保证框里的内容版式正确，
+   框本身照样看得见（用户实测反馈：仍能明显看到一个小框闪出来）。
+   折叠期把内容整体设为 visibility: hidden（保留布局，不做 display: none——那会真的
+   重排并破坏滚动位置），旧画面就只剩一层底色；底色与宿主编辑区同色
+   （--vscode-editor-background，html/body 同源），那一帧因此完全看不见。
+   切回时属性立即失效、内容立刻恢复可见，首帧即第 5 条保证的正确版式。 */
+html[data-epytor-host-collapsed] body > * {
+    visibility: hidden;
 }
 
 /* Milkdown 根容器 */

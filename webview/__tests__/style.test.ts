@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TINY_REAL_ATTRIBUTE } from "../utils/viewportLedger";
+import { HOST_COLLAPSED_ATTRIBUTE, TINY_REAL_ATTRIBUTE } from "../utils/viewportLedger";
 
 const styleCss = readFileSync(
     path.resolve(process.cwd(), "webview/style.css"),
@@ -101,17 +101,21 @@ describe("WebView 样式", () => {
         expect(styleCss).toContain("var(--code-block-max-height)");
     });
 
-    it("折叠期顶栏宽度钉定 应该 在真实小窗口下释放（回归 A6：用户真缩到 300×150 时顶栏溢出）", () => {
-        expect(styleCss).toContain("@media (width: 300px) and (height: 150px)");
-        // 选择器与 JS 常量同源：viewportLedger 改属性名时这条会红
-        expect(styleCss).toContain(`html:not([${TINY_REAL_ATTRIBUTE}]) .milkdown-top-bar`);
+    it("折叠期守卫 应该 由 JS 记账属性驱动，而不是精确尺寸媒体查询（回归：窗口缩放让媒体查询失效）", () => {
+        // 判据与 JS 常量同源：viewportLedger 改属性名时这条会红
+        expect(styleCss).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] .milkdown-top-bar`);
+        expect(styleCss).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] body {`);
+        expect(styleCss).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] body > * {`);
         expect(styleCss).toContain("var(--epytor-last-body-width, 100%)");
+        // 精确尺寸的媒体查询在 window.zoomLevel ≠ 0 时不匹配（实测 innerWidth=300 却 mq=false），
+        // 会让整块守卫静默失效——禁止再退回这种写法
+        expect(styleCss).not.toContain("@media (width: 300px) and (height: 150px)");
     });
 
     it("折叠期 应该 关闭顶栏/目录/浮动工具栏模糊（回归：合成器重建图层推迟首帧，小画面偶发可见）", () => {
-        const start = styleCss.indexOf("@media (width: 300px) and (height: 150px)");
+        const start = styleCss.indexOf("折叠期几何守卫");
         expect(start).toBeGreaterThanOrEqual(0);
-        const foldBlock = styleCss.slice(start, styleCss.indexOf("\n}", start));
+        const foldBlock = styleCss.slice(start, styleCss.indexOf("/* Milkdown 根容器 */", start));
         expect(foldBlock).toContain("backdrop-filter: none !important");
         expect(foldBlock).toContain(".milkdown-top-bar");
         expect(foldBlock).toContain(".milkdown-toolbar");
@@ -120,20 +124,19 @@ describe("WebView 样式", () => {
     });
 
     it("折叠期正文版式 应该 钉住上次真实宽度（回归：折叠期按 300px 重排，切回那一帧整篇重新折行）", () => {
-        const start = styleCss.indexOf("@media (width: 300px) and (height: 150px)");
-        const foldBlock = styleCss.slice(start, styleCss.indexOf("\n}", start));
-        expect(foldBlock).toContain(`html:not([${TINY_REAL_ATTRIBUTE}]) body {`);
+        const start = styleCss.indexOf("折叠期几何守卫");
+        const foldBlock = styleCss.slice(start, styleCss.indexOf("/* Milkdown 根容器 */", start));
+        expect(foldBlock).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] body {`);
         expect(foldBlock).toContain("width: var(--epytor-last-body-width, 100%)");
         expect(foldBlock).toContain("overflow-x: clip");
     });
 
     it("折叠期 应该 不画内容只留底色（回归：切回瞬间 300×150 旧画面就是「一个小框」）", () => {
-        const start = styleCss.indexOf("@media (width: 300px) and (height: 150px)");
-        const foldBlock = styleCss.slice(start, styleCss.indexOf("\n}", start));
-        expect(foldBlock).toContain(`html:not([${TINY_REAL_ATTRIBUTE}]) body > * {`);
+        const start = styleCss.indexOf("折叠期几何守卫");
+        const foldBlock = styleCss.slice(start, styleCss.indexOf("/* Milkdown 根容器 */", start));
+        expect(foldBlock).toContain(`html[${HOST_COLLAPSED_ATTRIBUTE}] body > * {`);
         expect(foldBlock).toContain("visibility: hidden");
         // 必须保留布局：display:none 会真的重排并破坏滚动位置
-        expect(foldBlock).toMatch(new RegExp(`html:not\\(\\[${TINY_REAL_ATTRIBUTE}\\]\\) body > \\* \\{[^}]*\\}`));
         expect(foldBlock).not.toMatch(/body > \* \{[^}]*display:/);
     });
 

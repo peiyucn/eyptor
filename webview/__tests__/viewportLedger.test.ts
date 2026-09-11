@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
+    HOST_COLLAPSED_ATTRIBUTE,
     IFRAME_DEFAULT_HEIGHT,
     IFRAME_DEFAULT_WIDTH,
     LAST_BODY_WIDTH_VAR,
@@ -220,6 +221,28 @@ describe("initViewportLedger", () => {
         stubBodyWidth(285);
         initViewportLedger();
         expect(cssVarValue()).toBe("");
+    });
+
+    /**
+     * 折叠判据必须是 JS 记账属性（style.css 几何守卫的唯一真源）。
+     * 回归：此前用 `@media (width: 300px) and (height: 150px)`，Chromium 按窗口缩放后的尺寸
+     * 求值媒体查询，用户 window.zoomLevel = 0.17 的机器上 innerWidth=300 却 mq=false，
+     * 整块守卫静默失效（折叠期照样按 300px 重排 → 切回时「小框」始终可见）。
+     */
+    it("折叠进入/恢复 应该 同步 data-epytor-host-collapsed（含真实小窗口不置位）", () => {
+        installFakeResizeObserver();
+        initViewportLedger();
+        setViewport(1200, 800);
+        window.dispatchEvent(new Event("resize"));
+        expect(document.documentElement.hasAttribute(HOST_COLLAPSED_ATTRIBUTE)).toBe(false);
+
+        setViewport(IFRAME_DEFAULT_WIDTH, IFRAME_DEFAULT_HEIGHT);
+        window.dispatchEvent(new Event("resize"));
+        expect(document.documentElement.hasAttribute(HOST_COLLAPSED_ATTRIBUTE)).toBe(true);
+
+        setViewport(846, 677);
+        window.dispatchEvent(new Event("resize"));
+        expect(document.documentElement.hasAttribute(HOST_COLLAPSED_ATTRIBUTE)).toBe(false);
     });
 
     it("ResizeObserver 不可用 应该 只记一次基准且不抛错", () => {
