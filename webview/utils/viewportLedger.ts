@@ -4,8 +4,10 @@
  * 背景（真实 VS Code 1.136 实测）：切到非 webview 标签时，宿主把 webview 容器摘出布局，
  * iframe 失去 `width/height: 100%` 的尺寸约束、回落到 Chromium 的 iframe 默认尺寸
  * **300×150**；切回来再放回真实尺寸。保活架构（`retainContextWhenHidden: true`，见
- * src/MarkdownEditorProvider.ts）下 webview 不重建，所以折叠期正文会真实地按 300px 重排
- * 一次再排回来——这是渲染器的自然行为，**不再用「隐藏正文 / 冻结版式」去干预**。
+ * src/MarkdownEditorProvider.ts）下 webview 不重建，所以这个 300×150 的假视口会真实地
+ * 重排一次正文、再排回来；切回那一帧里旧画面就与新画面不同，用户看到「闪」。
+ * style.css 的折叠媒体查询因此把 body 宽度钉在上次真实宽度（第 5 条，不隐藏正文、
+ * 也不冻结渲染，只是让版式不随假视口变化）。
  *
  * 本模块只做三件事，都不改变正文版式：
  *   1. 识别折叠读数（视口恰为 300×150，且用户没在这个尺寸下操作过）：供视口驱动的 UI 逻辑

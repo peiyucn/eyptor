@@ -119,6 +119,14 @@ describe("WebView 样式", () => {
         expect(foldBlock).toContain(".toc-toggle-tab");
     });
 
+    it("折叠期正文版式 应该 钉住上次真实宽度（回归：折叠期按 300px 重排，切回那一帧整篇重新折行）", () => {
+        const start = styleCss.indexOf("@media (width: 300px) and (height: 150px)");
+        const foldBlock = styleCss.slice(start, styleCss.indexOf("\n}", start));
+        expect(foldBlock).toContain(`html:not([${TINY_REAL_ATTRIBUTE}]) body {`);
+        expect(foldBlock).toContain("width: var(--epytor-last-body-width, 100%)");
+        expect(foldBlock).toContain("overflow-x: clip");
+    });
+
     it("重建期加载点阵 应该 已移除（中间态只留主题背景，对齐官方预览观感）", () => {
         expect(styleCss).not.toContain("epytor-loading");
         expect(styleCss).not.toContain("epytor-matrix");

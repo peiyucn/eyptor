@@ -164,7 +164,7 @@ body {
    宿主切到非 webview 标签时把 webview 容器摘出布局，iframe 回落到 Chromium 默认的
    300×150；保活架构下正文会真实地按 300px 重排一次再排回来——这是渲染器的自然行为，
    不隐藏正文、不冻结版式（隐藏/冻结过的几版在折叠窗口里给出的是「非正文」画面，比
-   不干预更刺眼）。这里只治三类**与正文版式无关**的副作用，正文照常显示。 */
+   不干预更刺眼）。这里只治折叠带来的副作用，正文照常显示。 */
 @media (width: 300px) and (height: 150px) {
     /* 1. 滚动锚定：视口从真实尺寸缩到 300×150 时，浏览器为了「可见内容不动」会把滚动
        位置就地修正（实测同一位置 scrollY 1500 → 1773）；宿主放回真实尺寸后内容就停在
@@ -206,6 +206,19 @@ body {
     .toc-toggle-tab {
         backdrop-filter: none !important;
         -webkit-backdrop-filter: none !important;
+    }
+
+    /* 5. 正文版式：折叠期把 body 宽度钉在上次真实宽度（--epytor-last-body-width），
+       正文不再按 300px 重排。宿主放回真实尺寸时，那一帧里的旧画面与新画面是同一份
+       版式，用户看到的只是右侧被补齐，而不是「正文重新折行」——这就是切标签「闪」
+       的主体现。实测（_poc/TEMP/ime/flash-lab.mjs）：不加这条时折叠期 h1 由 647×46
+       折成 204×156，切回瞬间整屏 14.8% 像素与终稿不同；加后折叠期版式与终稿逐项
+       相同。变量缺失（首次折叠早于任何真实测量）时回退 100%，即按当前视口布局。
+       html[data-epytor-tiny-real] = 用户在 300×150 下真操作过（同顶栏口径）：此刻
+       300px 就是真实宽度，钉住会让正文横向溢出——不钉。 */
+    html:not([data-epytor-tiny-real]) body {
+        width: var(--epytor-last-body-width, 100%);
+        overflow-x: clip;
     }
 }
 
