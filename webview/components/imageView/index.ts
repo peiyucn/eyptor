@@ -290,7 +290,6 @@ export function createImageView(
 
     // ── 加载中占位符 ──────────────────────────────────────────
     let imgErrored = false;
-    let imgLoaded = false;
     const loadingPlaceholder = document.createElement("div");
     loadingPlaceholder.className = "img-loading-placeholder";
     loadingPlaceholder.innerHTML = '<span class="img-loading-spinner"></span><span>Loading...</span>';
@@ -322,7 +321,6 @@ export function createImageView(
     });
 
     img.addEventListener("load", () => {
-        imgLoaded = true;
         imgNaturalH = img.naturalHeight;
         loadingPlaceholder.style.display = "none";
         if (imgErrored) {
@@ -622,7 +620,6 @@ export function createImageView(
             const newAlt = (updatedNode.attrs["alt"] as string) ?? "";
             if (rawSrc !== newSrc) {
                 rawSrc = newSrc;
-                imgLoaded = false;
                 imgErrored = false;
                 imgNaturalH = 0;
                 loadingPlaceholder.style.display = "flex";

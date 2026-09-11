@@ -61,10 +61,9 @@ import { initFindBar } from "./components/findBar";
 import { initToc } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
 import { editorViewCtx } from "@milkdown/kit/core";
-import { t } from "./i18n";
 import { createFrontmatterPanel, type FrontmatterPanelHandle } from "./components/frontmatterPanel";
 import { initTopBarOverflow } from "./components/topBarOverflow";
-import { enhanceCodeBlocks } from "./components/codeBlockEnhance";
+import { enhanceCodeBlocks, closeCodeBlockLightbox } from "./components/codeBlockEnhance";
 import { setupTopBarBrand, setupTopBarTooltips } from "./components/topBar/topBarDecorations";
 
 // ─── 语义常量（*_MS 命名；回归：超时/防抖裸数字散落各处理函数） ─────────────
@@ -315,10 +314,14 @@ let _docChangedTimer: ReturnType<typeof setTimeout> | null = null;
 let _tocRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 /** 上次 TOC 刷新的标题签名（标题结构未变则跳过重建） */
 let _lastTocSignature = "";
+/** 内容回推防抖 timer（未落盘内容主动回传，见 pushContentNow） */
+let _pushTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** 释放两个防抖 timer（编辑器销毁/重建前调用）——旧防抖回调会污染新文档：
+/** 释放随文档走的防抖 timer（编辑器销毁/重建前调用）——旧防抖回调会污染新文档：
  * 回归：revert 重建编辑器未清理 timer，≤300ms 后旧回调把已还原的文档标脏、
- * 旧 _tocRefreshTimer 对新 view 做多余全量刷新 */
+ * 旧 _tocRefreshTimer 对新 view 做多余全量刷新。
+ * `_pushTimer` 同理（同一类回归）：重建空窗内到期的推送走 getMarkdownForSave()，而此刻
+ * `_editor` 已是 null → 返回重建前的内容，扩展侧会把旧内容存进副本并标脏。 */
 function releaseDocTimers(): void {
     if (_docChangedTimer !== null) {
         clearTimeout(_docChangedTimer);
@@ -327,6 +330,10 @@ function releaseDocTimers(): void {
     if (_tocRefreshTimer !== null) {
         clearTimeout(_tocRefreshTimer);
         _tocRefreshTimer = null;
+    }
+    if (_pushTimer !== null) {
+        clearTimeout(_pushTimer);
+        _pushTimer = null;
     }
 }
 
@@ -395,6 +402,9 @@ async function initEditor(
     if (currentEditor) {
         destroyEditor();
         currentEditor = null;
+        // 先关掉可能仍开着的代码块全屏灯箱：它挂在 document.body 上，清 container.innerHTML
+        // 清不掉，旧文档的 CodeMirror DOM 会继续全屏遮挡新内容（document 级 Esc 监听也残留）
+        closeCodeBlockLightbox();
         container.innerHTML = "";
         releaseDocTimers();
         _topBarOverflowCtl?.dispose();
@@ -534,11 +544,6 @@ if (editorContainer) {
             },
         );
     });
-    // 保留快速上传 file input（供拖拽和粘贴复用）
-    const imgFileInput = document.createElement('input');
-    imgFileInput.type = 'file'; imgFileInput.accept = 'image/*';
-    imgFileInput.style.display = 'none';
-    document.body.appendChild(imgFileInput);
     document.addEventListener('epytor:openSettings', () => notifyOpenSettings());
     setupPathLink(editorContainer);
     initPathComplete(() => getEditorView());
@@ -685,8 +690,6 @@ let _hasUnsavedChanges = false;
 
 /** 停手多久后推送一次：打字期间不序列化，停手才付这笔钱 */
 const CONTENT_PUSH_IDLE_MS = 400;
-
-let _pushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function pushContentNow(): void {
     notifyUnsavedContent(getMarkdownForSave());

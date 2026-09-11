@@ -471,6 +471,16 @@ export async function createEditor(
         }
         if (lang.toLowerCase() !== "mermaid") return null;
         const key = `m-${++mermaidSeq}`;
+        // 键按「DOM 里是否还有对应节点」回收：在 mermaid 块里每敲一个字符上游就会用新的
+        // text.value 触发一次 renderPreview，旧键随之失去节点（apply 已替换 DOM）。原实现
+        // 只增不删，主题切换的 forEach 会对全部历史键各做一次 document.querySelector——
+        // 查询次数随编辑次数无界增长。这里顺手清掉查不到节点的键（保留仍有效的 =
+        // 文档里其他 mermaid 块，主题切换要重绘它们）。
+        for (const oldKey of mermaidCodeMap.keys()) {
+            if (oldKey !== key && !document.querySelector(`[data-mermaid-key="${oldKey}"]`)) {
+                mermaidCodeMap.delete(oldKey);
+            }
+        }
         mermaidCodeMap.set(key, code);
         apply(`<div data-mermaid-key="${key}"></div>`);
         const el = () => document.querySelector<HTMLElement>(`[data-mermaid-key="${key}"]`);

@@ -178,7 +178,7 @@ function onViewportResize(): void {
 
 /** 真实读数下的滚动：记录当前位置（折叠期是假读数，由滚动保护自行忽略） */
 function onScroll(): void {
-    recordScrollPosition(isCollapsedViewport(window.innerWidth, window.innerHeight) && !isRealTinyViewport());
+    recordScrollPosition(isHostCollapsedViewport());
 }
 
 /**

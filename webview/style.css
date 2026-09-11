@@ -354,14 +354,6 @@ html[data-epytor-host-collapsed] .epytor-notice {
     word-wrap: break-word;
 }
 
-/* 内联 HTML 渲染容器（DOMPurify 净化后只读显示） */
-.milkdown .ProseMirror .html-inline {
-    display: contents;
-}
-.milkdown .ProseMirror .html-inline [align="center"] {
-    text-align: center;
-}
-
 /* 段落：段间距 = 一个行距（1em 底部留白 + 行高上下各半的留白 = line-height × 1em）。
    回归：此前 0.4em，回车后的间距明显小于行距（用户反馈「行距与回车间距不一致」）；
    列表项内容同样是 <p>，因此列表与段落节奏自动一致。 */

@@ -9,6 +9,23 @@ import { t } from "@/i18n";
 
 const COPY_FEEDBACK_RESET_MS = 1500;
 
+/**
+ * 当前打开的全屏灯箱的关闭函数（null = 没有）。
+ *
+ * 回归：灯箱挂在 `document.body` 上，而重建路径（initEditor 的 destroyEditor → 清
+ * `#editor` innerHTML）清不掉它——用户在全屏状态下 revert / 切源码再切回 / 外部写盘采纳时，
+ * 旧文档的 CodeMirror DOM 会继续全屏遮挡新内容，document 级 Esc 监听也一并残留。
+ *
+ * **调用方是重建路径**（`webview/index.ts` 的 initEditor 里、清容器之前）——不是本函数的
+ * `enhanceCodeBlocks`：后者在模块顶层只跑一次（容器级事件委托，不随重建重入）。
+ */
+let closeOpenLightbox: (() => void) | null = null;
+
+/** 关闭仍然打开的全屏灯箱（编辑器重建前调用；无灯箱时为空操作） */
+export function closeCodeBlockLightbox(): void {
+    closeOpenLightbox?.();
+}
+
 export function enhanceCodeBlocks(container: HTMLElement): void {
     // ── 复制按钮：点击后弹 ✔ 提示 ────────────────────────────────────
     container.addEventListener('click', (e) => {
@@ -66,6 +83,7 @@ export function enhanceCodeBlocks(container: HTMLElement): void {
             if (previewPanel) body.appendChild(previewPanel);
 
             const close = () => {
+                if (closeOpenLightbox === close) { closeOpenLightbox = null; }
                 if (cmHost && cmEditor.parentElement !== cmHost) cmHost.appendChild(cmEditor);
                 if (previewPanel && previewPanel.parentElement !== block) block.appendChild(previewPanel);
                 if (document.body.contains(lb)) document.body.removeChild(lb);
@@ -74,6 +92,7 @@ export function enhanceCodeBlocks(container: HTMLElement): void {
             const onKey = (ke: KeyboardEvent) => {
                 if (ke.key === 'Escape') { ke.preventDefault(); close(); }
             };
+            closeOpenLightbox = close;
             document.addEventListener('keydown', onKey);
             lb.querySelector('.epytor-fs-close')!.addEventListener('mousedown', (me) => { me.preventDefault(); close(); });
             lb.addEventListener('mousedown', (me) => { if (me.target === lb) close(); });
