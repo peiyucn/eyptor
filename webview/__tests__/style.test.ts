@@ -260,4 +260,12 @@ describe("WebView 样式", () => {
         expect(rule!.body).toMatch(/display:\s*block/);
         expect(rule!.body).toMatch(/height:\s*0\b/);
     });
+
+    it("顶栏 应该 不使用 backdrop-filter（回归：常驻 fixed 元素 + 背景滤镜，切换标签时顶栏那一条还停在旧画面）", () => {
+        const rule = findRule(".milkdown .milkdown-top-bar", "background:");
+        expect(rule).not.toBeNull();
+        expect(rule!.body).not.toContain("backdrop-filter");
+        // 底色必须不透明，否则去掉模糊后正文会直接透出来
+        expect(rule!.body).not.toMatch(/background:[^;]*transparent/);
+    });
 });

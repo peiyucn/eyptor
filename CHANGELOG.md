@@ -29,6 +29,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Table cell padding, line spacing and the row/column selection toolbar** are unified with the rest of the editor
 - **List typography reworked**: markers (bullet / number / checkbox) are centred on the text of their own line, items are no longer separated by a whole blank line, and each nesting level indents 28px instead of 55px
 - **Blockquotes and table cells now have equal top and bottom padding** (they differed by 10px / 4px before)
+- **The toolbar has an opaque background** (the background blur is gone): the always-on fixed toolbar no longer forces the compositor to keep a backdrop-filter layer for it
 - **Failures are no longer silent**: image upload, image rename, save and switch failures explain what went wrong, and several messages that stayed English in a Chinese UI are translated
 - **Settings are grouped** into *epytor* (editor) and *epytor › Images*, and **`epytor.editorMaxWidth` / `epytor.codeBlockMaxHeight` apply immediately** — no need to reopen the tab
 - **Image server settings are merged into one `epytor.imageServer` object** (`url` / `fieldName` / `extraParams` / `responsePath`), and `extraParams` is now a real JSON object. Migrating is recommended: `epytor.imageServerUrl`, `imageServerFieldName`, `imageServerExtraParams` and `imageServerResponsePath` still work as a fallback but are marked deprecated

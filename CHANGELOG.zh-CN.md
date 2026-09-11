@@ -29,6 +29,7 @@
 * **表格单元格内边距、行距与行列选中工具栏**与编辑器其余部分统一
 * **列表排版重做**：标记（圆点 / 序号 / 复选框）与同行文字居中对齐；列表项之间不再空出一整行；每级嵌套缩进 55px → 28px
 * **引用块与表格单元格的上下留白改为对称**（此前分别差 10px / 4px，看着别扭）
+* **顶栏改用不透明底色**（不再使用背景模糊）：常驻的固定顶栏不再逼着合成器为它建一层背景滤镜
 * **失败不再静默**：图片上传、图片重命名、保存与切换失败都会说明原因；中文界面下若干仍显示英文的提示已翻译
 * **设置面板分组**：*epytor*（编辑器）与 *epytor › 图片*；**`epytor.editorMaxWidth` / `epytor.codeBlockMaxHeight` 改完立即生效**，不必重开标签页
 * **图床设置合并为 `epytor.imageServer` 对象**（`url` / `fieldName` / `extraParams` / `responsePath`），`extraParams` 改为真正的 JSON 对象。建议迁移：`epytor.imageServerUrl`、`imageServerFieldName`、`imageServerExtraParams`、`imageServerResponsePath` 仍可用（作为兜底），但已标记弃用

@@ -847,9 +847,12 @@ body.epytor-modifier-active .milkdown .ProseMirror a:hover {
     min-height: 36px;
     /* 右侧为溢出「⋯」按钮预留宽度（fixed 定位，不在 topBar 内） */
     padding: 0 40px 0 85px;
-    background: color-mix(in srgb, color-mix(in srgb, var(--vscode-editor-background) 93%, #808080) 85%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    /* 不透明底色、不用 backdrop-filter：顶栏是**常驻可见**的 fixed 元素里唯一一处背景滤镜，
+       它让合成器为整条顶栏建一个 backdrop root，每次重新上屏都要连背后的正文一起重做模糊。
+       回归（真机逐帧录屏 2026-09-11）：非 md ↔ md 切换的过渡帧里，编辑区其余部分已经到终稿，
+       唯独顶上这一条还停在旧画面（两轮录屏各命中一次）。底色本来就是 85% 不透明度、
+       背后只透出一点点，去掉模糊后观感基本不变。 */
+    background: color-mix(in srgb, var(--vscode-editor-background) 93%, #808080);
     border: none !important;
     flex-wrap: nowrap;
 }
