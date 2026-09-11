@@ -21,15 +21,19 @@
  *      收得到。折叠读数下收到 pointerdown / wheel / keydown / touchstart 即认定「真实小窗口」
  *      （<html> 上的 TINY_REAL_ATTRIBUTE）：顶栏不再按上次真实宽度钉住、记账也不再跳过
  *      （isHostCollapsedViewport 会因此为 false，CSS 消费的 HOST_COLLAPSED_ATTRIBUTE
- *      随之移除）；尺寸离开 300×150 即清除标记（下一次宿主折叠仍按折叠
- *      处理）。**不用计时**——宿主折叠态会一直持续到用户切回来，计时阈值必然在折叠期就被打上
- *      标记（回归：切回来「出现-消失-再出现」）。
- *      作用范围（用户口径）：标记只影响**顶栏钉定与记账**；目录自动显隐与吸顶几何仍按
- *      shouldSkipViewportWork()（只看读数）跳过。
+ *      随之移除）；尺寸离开 300×150 即清除标记（下一次宿主折叠仍按折叠处理）。**不用计时**
+ *      ——宿主折叠态会一直持续到用户切回来，计时阈值必然在折叠期就被打上标记
+ *      （回归：切回来「出现-消失-再出现」）。作用范围：标记只影响顶栏钉定与记账；
+ *      目录自动显隐与吸顶几何仍按 shouldSkipViewportWork()（只看读数）跳过。
+ *
+ * 折叠恢复时的滚动位置校正另见 utils/collapseScrollGuard.ts（本模块只负责把「此刻是否折叠」
+ * 告诉它）。
  *
  * 宽度基准必须用 ResizeObserver 维护、不能只看 resize 事件：纵向滚动条出现/消失会改变
  * body 宽度但不触发 resize，基准陈旧会让钉住的宽度与真实宽度差一个滚动条。
  */
+import { clearCollapsedEdge, recordScrollPosition, trackViewportResize } from "./collapseScrollGuard";
+
 export const IFRAME_DEFAULT_WIDTH = 300;
 export const IFRAME_DEFAULT_HEIGHT = 150;
 
@@ -56,15 +60,6 @@ export const TINY_REAL_ATTRIBUTE = "data-epytor-tiny-real";
 
 /** 折叠读数下能证明「宿主没摘挂」的用户输入（摘挂的 webview 收不到任何输入事件） */
 const REAL_INPUT_EVENTS = ["pointerdown", "wheel", "keydown", "touchstart"] as const;
-
-/** 最近一次「真实读数」下的滚动位置（px）；折叠恢复后据此校正浏览器锚定造成的偏移 */
-let lastRealScrollY = 0;
-/** 是否记录过真实读数（后台以折叠尺寸创建的 webview 不能把 0 当成用户位置校正回去） */
-let hasRealScrollRecord = false;
-/** 上一次 resize 读数是否为宿主折叠态（识别「进入折叠 / 恢复」的沿） */
-let wasHostCollapsed = false;
-/** 正在执行折叠恢复的位置校正：期间滚动事件不得覆盖锁存的期望位置 */
-let restoringScroll = false;
 
 /** 最近一次记账的真实 body 宽度（px；0 = 尚未记到基准） */
 let lastBodyWidth = 0;
@@ -96,8 +91,7 @@ export function nextTinyReal(
 
 /**
  * 此刻的折叠读数是否**确定**是宿主摘挂造成的（用户没在这个尺寸下操作过）。
- * 供「按这个读数干活会不会错」的两处消费方使用：顶栏钉定（style.css 的
- * html:not([data-epytor-tiny-real])）与记账（sync）。
+ * 供「按这个读数干活会不会错」的两处消费方使用：折叠期 CSS 守卫与记账（sync）。
  * 用户真把编辑区缩到 300×150 时为 false——这个尺寸是真的，必须按它重测/记账，否则顶栏按钮
  * 会保持上一次真实宽度的排版而溢出（回归 A6）。
  */
@@ -110,8 +104,8 @@ export function isHostCollapsedViewport(): boolean {
  * 调用点共用）。判据只看读数：视口恰为 300×150 就跳过。
  *
  * 为什么要跳过：宿主折叠期（切到非 webview 标签）视口读数是 300×150 假尺寸，按它测量会把
- * 顶栏按钮收进「⋯」、把目录误判成放不下、让吸顶条按错误宽度摆放；这些都发生在用户看不见的
- * 那一帧，屏幕切回来就表现为「闪一下」。恢复真实尺寸时的 resize / ResizeObserver 会重新触发。
+ * 顶栏按钮收进「⋯」、把目录误判成放不下、让吸顶条按错误宽度摆放；这些都发生在用户看不见
+ * 的那一帧，屏幕切回来就表现为「闪一下」。恢复真实尺寸时的 resize / ResizeObserver 会重新触发。
  *
  * 作用范围（用户口径 2026-09-11）：本判据**不**看「真实小窗口」标记——用户真把编辑区缩到
  * 300×150 时目录/吸顶仍按折叠跳过（保持原状）；顶栏钉定与记账另有 isHostCollapsedViewport()
@@ -145,85 +139,46 @@ function readBodyWidth(): number {
     return document.body?.getBoundingClientRect().width ?? 0;
 }
 
-/** 记一次账并同步 CSS 变量（宽度没变时不写 DOM） */
+/** 按判定结果写入/移除 <html> 属性；只在判定变化时动 DOM */
+function syncAttribute(attribute: string, on: boolean): void {
+    const root = document.documentElement;
+    if (on === root.hasAttribute(attribute)) { return; }
+    if (on) { root.setAttribute(attribute, ""); }
+    else { root.removeAttribute(attribute); }
+}
+
+/** 记一次账并同步 CSS 变量与折叠属性（都没变时不写 DOM） */
 function sync(): void {
-    syncHostCollapsedAttribute();
+    // 记账的 ResizeObserver 会在每次正文尺寸变化时回调（含输入时），所以这里必须廉价
+    syncAttribute(HOST_COLLAPSED_ATTRIBUTE, isHostCollapsedViewport());
     const next = nextLastBodyWidth(lastBodyWidth, readViewport(), readBodyWidth(), isRealTinyViewport());
     if (next === lastBodyWidth) { return; }
     lastBodyWidth = next;
     document.documentElement.style.setProperty(LAST_BODY_WIDTH_VAR, `${next}px`);
 }
 
-/** 把「宿主折叠中」判定同步成 <html> 属性（CSS 几何守卫的唯一真源，见属性注释）。
- *  只在判定变化时写 DOM——记账的 ResizeObserver 会在每次正文尺寸变化时回调（含输入时）。 */
-function syncHostCollapsedAttribute(): void {
-    const collapsed = isHostCollapsedViewport();
-    const root = document.documentElement;
-    if (collapsed === root.hasAttribute(HOST_COLLAPSED_ATTRIBUTE)) { return; }
-    if (collapsed) { root.setAttribute(HOST_COLLAPSED_ATTRIBUTE, ""); }
-    else { root.removeAttribute(HOST_COLLAPSED_ATTRIBUTE); }
-}
-
-/** 折叠读数下的用户输入：认定真实小窗口，解除顶栏钉定（CSS）并按真实几何记一次账 */
+/** 折叠读数下的用户输入：认定真实小窗口，解除折叠期守卫并按真实几何记一次账 */
 function onUserInput(): void {
-    if (!isCollapsedViewport(window.innerWidth, window.innerHeight)) { return; }
-    if (isRealTinyViewport()) { return; }
+    if (!isCollapsedViewport(window.innerWidth, window.innerHeight) || isRealTinyViewport()) { return; }
     document.documentElement.setAttribute(TINY_REAL_ATTRIBUTE, "");
     // 这个 300×150 是真的：尺寸离开时不应按「宿主折叠恢复」去校正滚动位置
-    wasHostCollapsed = false;
+    clearCollapsedEdge();
     sync();
 }
 
-/**
- * 真实读数下的滚动：持续记录当前位置（切走前最后一次滚动就是折叠恢复的期望位置）。
- * 折叠期屏幕上是别的编辑器、收不到用户滚动；校正期间（restoringScroll）也不记录，
- * 否则恢复帧的布局锚定调整会把期望位置污染成修正后的值。
- */
-function onScroll(): void {
-    if (restoringScroll) { return; }
-    if (isCollapsedViewport(window.innerWidth, window.innerHeight) && !isRealTinyViewport()) { return; }
-    lastRealScrollY = window.scrollY;
-    hasRealScrollRecord = true;
-}
-
-/**
- * 视口尺寸变化：离开折叠读数即清除标记；识别折叠的「进入 / 恢复」沿，
- * 恢复时把被浏览器滚动锚定挪走的位置校正回折叠前的值。
- *
- * 为什么需要校正：折叠期视口缩到 300×150 后正文按窄列重排，浏览器会做滚动锚定
- * 把位置「就地修正」（A6 实测同一位置 scrollY 1500 → 1773）；恢复真实尺寸时
- * 布局再次变化，锚定可能再修正一次。折叠期屏幕上是别的编辑器、收不到用户滚动，
- * 所以期望位置就是进入折叠前记下的值。两次 rAF：锚定调整可能晚于 resize 返回。
- */
+/** 视口尺寸变化：清除离开折叠读数的标记，交给滚动保护维护折叠沿，再记账 */
 function onViewportResize(): void {
     const marked = isRealTinyViewport();
     const next = nextTinyReal(marked, readViewport(), false);
-    if (next !== marked) {
-        if (next) { document.documentElement.setAttribute(TINY_REAL_ATTRIBUTE, ""); }
-        else { document.documentElement.removeAttribute(TINY_REAL_ATTRIBUTE); }
-    }
+    if (next !== marked) { syncAttribute(TINY_REAL_ATTRIBUTE, next); }
 
-    const collapsed = isCollapsedViewport(window.innerWidth, window.innerHeight) && !isRealTinyViewport();
-    if (wasHostCollapsed && !collapsed && hasRealScrollRecord) {
-        const expected = lastRealScrollY;
-        restoringScroll = true;
-        const restore = (): void => {
-            if (window.scrollY !== expected) { window.scrollTo(0, expected); }
-        };
-        requestAnimationFrame(() => {
-            restore();
-            requestAnimationFrame(() => {
-                restore();
-                restoringScroll = false;
-            });
-        });
-    } else if (!collapsed) {
-        lastRealScrollY = window.scrollY;
-        hasRealScrollRecord = true;
-    }
-    wasHostCollapsed = collapsed;
-
+    trackViewportResize(isHostCollapsedViewport());
     sync();
+}
+
+/** 真实读数下的滚动：记录当前位置（折叠期是假读数，由滚动保护自行忽略） */
+function onScroll(): void {
+    recordScrollPosition(isCollapsedViewport(window.innerWidth, window.innerHeight) && !isRealTinyViewport());
 }
 
 /**

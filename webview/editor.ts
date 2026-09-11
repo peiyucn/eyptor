@@ -19,7 +19,6 @@ import type { EditorView } from "@milkdown/kit/prose/view";
 import type { Node as ProseNode } from "@milkdown/kit/prose/model";
 import { keymap } from "@milkdown/kit/prose/keymap";
 import { closeHistory } from "@milkdown/kit/prose/history";
-import type { StepMap } from "@milkdown/kit/prose/transform";
 import { Plugin, NodeSelection, TextSelection } from "@milkdown/kit/prose/state";
 import { CellSelection } from "@milkdown/kit/prose/tables";
 import { $prose, getMarkdown } from "@milkdown/kit/utils";
@@ -50,6 +49,7 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { defaultHighlightStyle, syntaxHighlighting, LanguageDescription, type LanguageSupport } from "@codemirror/language";
 import { languages as allCodeLanguages } from "@codemirror/language-data";
 import { onThemeChange, isDarkTheme } from "./utils/themeBus";
+import { changeRangeInFinalDoc, normalizeListSpread } from "./utils/listSpread";
 import { observeCmEditorCount } from "./utils/cmThemeObserver";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
 import { t } from "./i18n";
@@ -133,76 +133,19 @@ const formatKeymapPlugin = $prose((ctx) =>
     }),
 );
 
-// 列表 spread 规范化：编辑后若列表项只含单个块级子节点，自动将 spread 重置为 false
+// 列表 spread 规范化：编辑后若列表项只含单个块级子节点，自动将 spread 重置为 false。
+// 区间换算与规范化本体在 utils/listSpread.ts（纯逻辑，可直测边界）。
 const listSpreadNormalizePlugin = $prose((ctx) => {
     const schema = ctx.get(schemaCtx);
     return new Plugin({
         appendTransaction(transactions, _oldState, newState) {
-            // 变更区间必须换算到「最终文档」坐标。每步 StepMap 给出的 newStart/newEnd 是
-            // 「该步之后」的位置；多步事务里中间步骤可能让文档先变长再变短（中文输入法提交
-            // 就是典型：先插入拼音、再替换成候选词），直接把这些位置用在最终文档上会越过
-            // 文档末尾——nodesBetween 读到 undefined 抛 TypeError，整条事务（包括撤销）被
-            // 打掉。回归：中文输入后 Ctrl+Z 与顶栏撤销按钮双双「没反应」。
-            const maps: StepMap[] = [];
-            for (const tr of transactions) {
-                if (!tr.docChanged) continue;
-                for (const step of tr.steps) { maps.push(step.getMap()); }
-            }
-            if (!maps.length) return null;
-            let minFrom = newState.doc.content.size;
-            let maxTo = 0;
-            maps.forEach((map, i) => {
-                map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
-                    const from = mapThrough(maps, i + 1, newStart, 1);
-                    const to = mapThrough(maps, i + 1, newEnd, -1);
-                    if (from < minFrom) minFrom = from;
-                    if (to > maxTo) maxTo = to;
-                });
-            });
-            // 兜底钳制 + 捕获：本插件的异常会从 appendTransaction 冒到
-            // EditorState.applyTransaction，静默打掉**整条事务**（历史教训：撤销因此
-            // 「没反应」）。区间换算已是精确的，这里只是防线——规范化失败远不如
-            // 用户编辑/撤销失效严重，所以宁可整段跳过。
-            const docSize = newState.doc.content.size;
-            minFrom = Math.max(0, Math.min(minFrom, docSize));
-            maxTo = Math.max(0, Math.min(maxTo, docSize));
-            if (minFrom > maxTo) return null;
+            const range = changeRangeInFinalDoc(transactions, newState.doc.content.size);
+            if (!range) { return null; }
             const tr = newState.tr;
-            let changed = false;
-            try {
-                newState.doc.nodesBetween(minFrom, maxTo, (node, pos) => {
-                    if (node.type !== schema.nodes.bullet_list && node.type !== schema.nodes.ordered_list)
-                        return;
-                    let listNeedsSpread = false;
-                    let offset = 1;
-                    node.forEach((item) => {
-                        const itemNeedsSpread = item.childCount > 1;
-                        if (item.attrs.spread !== itemNeedsSpread) {
-                            tr.setNodeMarkup(pos + offset, undefined, { ...item.attrs, spread: itemNeedsSpread });
-                            changed = true;
-                        }
-                        if (itemNeedsSpread) listNeedsSpread = true;
-                        offset += item.nodeSize;
-                    });
-                    if (node.attrs.spread !== listNeedsSpread) {
-                        tr.setNodeMarkup(pos, undefined, { ...node.attrs, spread: listNeedsSpread });
-                        changed = true;
-                    }
-                });
-            } catch {
-                return null; // 规范化是 best-effort：绝不因为属性整理而打掉用户事务
-            }
-            return changed ? tr : null;
+            return normalizeListSpread(newState.doc, schema, tr, range) ? tr : null;
         },
     });
 });
-
-/** 把位置依次穿过 maps[start..] 映射到最终文档坐标 */
-function mapThrough(maps: readonly StepMap[], start: number, pos: number, assoc: number): number {
-    let result = pos;
-    for (let i = start; i < maps.length; i++) { result = maps[i].map(result, assoc); }
-    return result;
-}
 
 // ─── 表格单元格点击修正 ──────────────────────────────────────────────────────
 
