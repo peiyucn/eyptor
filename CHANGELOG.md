@@ -27,6 +27,8 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **List keyboard behavior follows the official defaults**: Backspace on an empty item deletes it, on a non-empty item merges it into the previous one, and numbering reflows automatically
 - **Auto save follows the built-in VS Code `files.autoSave`** (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`); `epytor.autoSave` and `epytor.autoSaveDelay` are gone
 - **Table cell padding, line spacing and the row/column selection toolbar** are unified with the rest of the editor
+- **List typography reworked**: markers (bullet / number / checkbox) are centred on the text of their own line, items are no longer separated by a whole blank line, and each nesting level indents 28px instead of 55px
+- **Blockquotes and table cells now have equal top and bottom padding** (they differed by 10px / 4px before)
 - **Failures are no longer silent**: image upload, image rename, save and switch failures explain what went wrong, and several messages that stayed English in a Chinese UI are translated
 - **Settings are grouped** into *epytor* (editor) and *epytor › Images*, and **`epytor.editorMaxWidth` / `epytor.codeBlockMaxHeight` apply immediately** — no need to reopen the tab
 - **Image server settings are merged into one `epytor.imageServer` object** (`url` / `fieldName` / `extraParams` / `responsePath`), and `extraParams` is now a real JSON object. Migrating is recommended: `epytor.imageServerUrl`, `imageServerFieldName`, `imageServerExtraParams` and `imageServerResponsePath` still work as a fallback but are marked deprecated
@@ -49,6 +51,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Global search**: clicking a non-Markdown result no longer jumps to the top of the file or scrolls other Markdown documents
 - **Your "Open With" choice for `.md` files is no longer silently removed**
 - **Find bar**: a closed find bar no longer runs the previous search, and invalid patterns are reported
+- **A paragraph written across several source lines no longer gains an extra blank line**: soft line breaks used to be rendered as a full-height block
 - **Path and language autocomplete**: keyboard navigation keeps its highlight
 - **Editor focus restored** when switching back from another file (cursor visible but input dead)
 - **Security**: external links are limited to http/https/mailto; image paths, the image gallery listing and path links can no longer escape the workspace; image-server settings injected by a workspace are never used for uploads (the image is saved locally and a notice is shown) and a plain-http image server is flagged once; upload errors no longer echo the server response body

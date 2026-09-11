@@ -187,4 +187,77 @@ describe("WebView 样式", () => {
         expect(styleCss).not.toContain("epytor-matrix");
         expect(styleCss).not.toContain("epytor-dot-chase");
     });
+
+    /**
+     * 排版尺度：四个用户可感知的症状各自对应一条不可回退的声明。
+     * 量测口径见各条注释（真实 dist 产物 + Chromium 实测，2026-09-11）。
+     */
+    it("段落 应该 只用下内边距表达段间距（回归：Crepe 主题的 4px 上内边距顶开首行，让容器上下留白处处不等）", () => {
+        const rule = findRule(".milkdown .ProseMirror p", "--epytor-paragraph-gap");
+        expect(rule).not.toBeNull();
+        // 上内边距必须为 0：它是「标记不对齐 / 引用块上下不等 / 单元格上下不等」的共同根因
+        expect(rule!.body).toMatch(/padding:\s*0 0 var\(--epytor-paragraph-gap\)/);
+        expect(rule!.body).not.toContain("padding-top");
+        expect(rule!.body).not.toContain("padding-bottom");
+    });
+
+    it("列表标记盒 应该 与首行行盒同高（回归：标记盒 1.6em vs 行盒 21px，标记比同行文字中心高 3.3px）", () => {
+        const rule = findRule(
+            ".milkdown .milkdown-list-item-block li .label-wrapper",
+            "--epytor-list-line-height",
+        );
+        expect(rule).not.toBeNull();
+        expect(rule!.body).toContain("height: calc(var(--epytor-list-line-height) * 1em)");
+        // 标记本体（.label）必须同高，且与 wrapper 同一条规则里声明
+        expect(rule!.selectors).toContain(
+            ".milkdown .milkdown-list-item-block li .label-wrapper .label",
+        );
+    });
+
+    it("列表项段落 应该 不留段间距、行高与标记盒同源（回归：相邻项净空 20.8px ≈ 一整行）", () => {
+        const rule = findRule(".milkdown .ProseMirror .milkdown-list-item-block p");
+        expect(rule).not.toBeNull();
+        expect(rule!.body).toMatch(/padding:\s*0\b/);
+        expect(rule!.body).toContain("line-height: var(--epytor-list-line-height)");
+    });
+
+    it("列表嵌套 应该 不再叠加额外 padding-left（回归：每级步长 55px，标记列 + 1.5em 两段叠加）", () => {
+        const rule = findRule(".milkdown .milkdown-list-item-block .milkdown-list-item-block");
+        expect(rule).not.toBeNull();
+        expect(rule!.body).toMatch(/padding-left:\s*0\b/);
+    });
+
+    it("列表标记列宽与间距 应该 走变量（缩进步长 = 两者之和，改一处即可统一）", () => {
+        const width = findRule(".milkdown .milkdown-list-item-block li .label-wrapper", "width:");
+        expect(width).not.toBeNull();
+        expect(width!.body).toContain("width: var(--epytor-list-marker-width)");
+        const gap = findRule(".milkdown .milkdown-list-item-block > .list-item", "gap:");
+        expect(gap).not.toBeNull();
+        expect(gap!.body).toContain("gap: var(--epytor-list-marker-gap)");
+    });
+
+    it("引用块末段 应该 贴底（回归：末段 1em 下内边距让上留白 12px、下留白 22px）", () => {
+        const rule = findRule(".milkdown .ProseMirror blockquote > p:last-child");
+        expect(rule).not.toBeNull();
+        expect(rule!.body).toMatch(/padding-bottom:\s*0\b/);
+    });
+
+    it("表格单元格末段 应该 贴底（回归：上留白 12.5px、下留白 8.5px；且只贴末段，中间段仍留段间距）", () => {
+        const td = findRule(".milkdown .ProseMirror td > p:last-child");
+        const th = findRule(".milkdown .ProseMirror th > p:last-child");
+        expect(td).not.toBeNull();
+        expect(th).not.toBeNull();
+        expect(td!.body).toMatch(/padding-bottom:\s*0\b/);
+        // 裸 `td > p` 会把中间段也贴平——必须带 :last-child
+        expect(findRule(".milkdown .ProseMirror td > p")).toBeNull();
+    });
+
+    it("软换行 应该 只断行不占位（回归：display:block 让每处软换行多出一整行空白，两行文字排成 3 个行盒）", () => {
+        const rule = findRule(
+            '.milkdown span[data-type="hardbreak"][data-is-inline="true"]',
+        );
+        expect(rule).not.toBeNull();
+        expect(rule!.body).toMatch(/display:\s*block/);
+        expect(rule!.body).toMatch(/height:\s*0\b/);
+    });
 });

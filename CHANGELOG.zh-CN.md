@@ -27,6 +27,8 @@
 * **列表键盘行为对齐官方默认**：空项行首 Backspace 删除该项、非空项行首 Backspace 并入上一项，编号自动重排
 * **自动保存跟随 VS Code 内置 `files.autoSave`**（`off` / `afterDelay` / `onFocusChange` / `onWindowChange`）；`epytor.autoSave` 与 `epytor.autoSaveDelay` 已移除
 * **表格单元格内边距、行距与行列选中工具栏**与编辑器其余部分统一
+* **列表排版重做**：标记（圆点 / 序号 / 复选框）与同行文字居中对齐；列表项之间不再空出一整行；每级嵌套缩进 55px → 28px
+* **引用块与表格单元格的上下留白改为对称**（此前分别差 10px / 4px，看着别扭）
 * **失败不再静默**：图片上传、图片重命名、保存与切换失败都会说明原因；中文界面下若干仍显示英文的提示已翻译
 * **设置面板分组**：*epytor*（编辑器）与 *epytor › 图片*；**`epytor.editorMaxWidth` / `epytor.codeBlockMaxHeight` 改完立即生效**，不必重开标签页
 * **图床设置合并为 `epytor.imageServer` 对象**（`url` / `fieldName` / `extraParams` / `responsePath`），`extraParams` 改为真正的 JSON 对象。建议迁移：`epytor.imageServerUrl`、`imageServerFieldName`、`imageServerExtraParams`、`imageServerResponsePath` 仍可用（作为兜底），但已标记弃用
@@ -49,6 +51,7 @@
 * **全局搜索**：点击非 Markdown 结果不再跳到文件开头，也不再错误滚动其它 Markdown 文档
 * **「打开方式」里为 `.md` 设置的全局关联不再被静默删除**
 * **查找栏**：关闭后不再执行上一次搜索；无效正则给出提示
+* **源码里换行写成的段落不再多出一整行空白**：软换行此前被当成整行高的块渲染
 * **路径与语言补全**：键盘导航不再丢失高亮
 * **切换文件后焦点恢复**：切回页面自动恢复编辑器焦点（此前光标在但输入无效）
 * **安全**：外部链接仅允许 http/https/mailto；图片路径、图库列举与路径链接不再能越出工作区；工作区级配置注入的图床设置不再被用于上传（改为存本地并给出提示），明文 http 图床地址给一次警告；上传错误不再回显服务器响应体
