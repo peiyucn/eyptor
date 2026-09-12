@@ -338,10 +338,14 @@ export function initToc(getEditorView: () => EditorView | null): {
     }
 
     function syncBodyPadding(): void {
-        const active = isPinned && isOpen;
-        document.body.classList.toggle("toc-pinned", active);
+        document.body.classList.toggle("toc-pinned", isPinned);
         const topbar = document.querySelector<HTMLElement>(".milkdown-top-bar");
-        if (active) {
+        // 面板展开时若左侧空白放不下它，就把正文推开——**不覆盖正文**。
+        // 回归（手测 2026-09-12）：原实现只在钉住时推正文，非固定态把面板拖宽会压在正文上，
+        // 看着像布局坏了；而一旦改成"自动展开就推"，窗口很宽时正文又会无谓地右移。
+        // 判据用 freeLeftMargin()（已扣掉当前 padding），因此不会与 padding 互相触发。
+        const shouldPush = isOpen && freeLeftMargin() < panelWidth;
+        if (shouldPush) {
             document.body.style.paddingLeft = `${panelWidth}px`;
             if (topbar) topbar.style.paddingLeft = `${panelWidth}px`;
         } else {
@@ -351,7 +355,7 @@ export function initToc(getEditorView: () => EditorView | null): {
     }
 
     function updateTabPos(): void {
-        tabEl.style.left = isOpen ? `${renderedWidth()}px` : '0px';
+        tabEl.style.left = isOpen ? `${panelWidth}px` : '0px';
     }
 
     function close(): void {
@@ -424,24 +428,27 @@ export function initToc(getEditorView: () => EditorView | null): {
     });
 
     // ── 自动展开检测 ──────────────────────────────────────
-    /** 正文列左侧的可用空白（px） */
-    function availableLeftSpace(): number {
+    /**
+     * 正文列左侧的**未被推开的**空白（px）。
+     *
+     * 判据必须与当前 padding 无关，否则会自己触发自己。**不能**用 `editor.left − padding`
+     * 估算：正文列是居中布局（`max-width` + 自动外边距），去掉 padding 只会让它左移一半，
+     * 实测在 1440 宽下算出 170px（真实空白 270px）→ 宽窗口也被判成「放不下」而无谓地推正文。
+     * 按列宽直接算：居中布局下左右空白相等。
+     */
+    function freeLeftMargin(): number {
         const editorEl = document.getElementById("editor");
-        return editorEl ? editorEl.getBoundingClientRect().left : 0;
+        if (!editorEl) { return 0; }
+        const viewportWidth = document.documentElement.clientWidth;
+        return Math.max(0, (viewportWidth - editorEl.getBoundingClientRect().width) / 2);
     }
 
     function hasEnoughSpace(): boolean {
-        return shouldAutoShowToc(availableLeftSpace(), panelWidth);
-    }
-
-    /** 面板实际渲染宽度：自动展开时收窄到左侧空白内（不遮正文），其余用用户设定宽度 */
-    function renderedWidth(): number {
-        if (!isAutoShown) { return panelWidth; }
-        return Math.max(0, Math.min(panelWidth, Math.floor(availableLeftSpace())));
+        return shouldAutoShowToc(freeLeftMargin(), panelWidth);
     }
 
     function applyPanelWidth(): void {
-        panel.style.width = `${renderedWidth()}px`;
+        panel.style.width = `${panelWidth}px`;
         updateTabPos();
     }
 
@@ -458,8 +465,7 @@ export function initToc(getEditorView: () => EditorView | null): {
             openPanel(true);
             return;
         }
-        // 已展开：窗口变化后重新贴合可用空白
-        if (isOpen) { applyPanelWidth(); }
+        if (isOpen) { syncBodyPadding(); }
     }
 
     // 面板位置（top/height）由 toc.css 静态声明（与 topbar 高度 36px 对齐）——
