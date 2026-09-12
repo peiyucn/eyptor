@@ -130,7 +130,8 @@ export function initToc(getEditorView: () => EditorView | null): {
 
     const headerTitle = document.createElement("span");
     headerTitle.className = "toc-header-title";
-    headerTitle.textContent = t("Table of Contents");
+    // 标题短一点（手测反馈：Table of Contents 太长）——英文显示 Contents，中文词典给「目录」
+    headerTitle.textContent = t("Contents");
 
     // ── 全部折叠/展开按钮 ───────────────────────────────────
     const collapseAllBtn = document.createElement("button");

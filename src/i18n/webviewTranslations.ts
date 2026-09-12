@@ -1,5 +1,6 @@
 /** WebView 侧中文翻译表（key 为英文原文） */
 export const ZH_CN_WEBVIEW: Record<string, string> = {
+    'Contents': '目录',
     'Table of Contents': '目录',
     'Undo': '撤销',
     'Redo': '重做',
