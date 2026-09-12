@@ -50,6 +50,7 @@ import { defaultHighlightStyle, syntaxHighlighting, LanguageDescription, type La
 import { languages as allCodeLanguages } from "@codemirror/language-data";
 import { onThemeChange, isDarkTheme } from "./utils/themeBus";
 import { changeRangeInFinalDoc, normalizeListSpread } from "./utils/listSpread";
+import { listBackspacePlugin } from "./utils/listBackspace";
 import {
     beginClick,
     consumeCellClickTarget,
@@ -102,10 +103,12 @@ codeLanguages.push(LanguageDescription.of({
 // ─── 保留的自定义插件 ────────────────────────────────────────────────────────
 // 以下插件 Crepe 不提供对应功能，永久保留：
 //   listSpreadNormalizePlugin → 列表 spread 规范化
+//   listBackspacePlugin      → 列表项行首 Backspace 的落点（见 utils/listBackspace.ts 文件头）
 //   formatKeymapPlugin       → 自定义格式化快捷键
-// 说明：列表 Backspace 不再自定义拦截（原 listLiftPlugin 已移除）——
-// 官方 commonmark 默认行为：行首 Backspace = joinBackward（合并/删除行，编号自动重排），
-// Shift-Tab = liftListItem（提升层级），与手测反馈一致。
+// 说明：列表 Backspace 的**编号**仍走官方默认（joinBackward：合并/删除行，编号自动重排），
+// Shift-Tab = liftListItem（提升层级）。但官方 joinBackward 在 Crepe 的列表 schema 下按「项」
+// 合并，会把空项留成上一项里的空段落、光标停在那一段上（手测反馈「光标上移错位、上下键走不动」），
+// 任务列表还会把标记漏进正文——listBackspacePlugin 只修正**落点与合并方式**，不碰编号。
 
 // 格式化快捷键：Mod-b 粗体、Mod-i 斜体、Mod-Shift-x 删除线、Mod-e 行内代码
 const formatKeymapPlugin = $prose((ctx) =>
@@ -605,6 +608,7 @@ export async function createEditor(
         .use(headingStickyPlugin)   // 标题吸顶条（滚动跟随 + 推挤过渡）
         .use(softBreakKeymap)       // Shift+Enter 软换行（表格内允许；见文件头回归说明）
         .use(cellClickFixPlugin)    // 表格单击→光标定位，拖拽→多选
+        .use(listBackspacePlugin)   // 列表项行首 Backspace 的落点（见 utils/listBackspace.ts）
         .use(listSpreadNormalizePlugin); // 保留：列表 spread 规范化
 
     _editor = await crepe.create();
