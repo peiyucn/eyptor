@@ -1,10 +1,6 @@
 # 🦖EPYTOR
 
-[![Version](https://img.shields.io/github/package-json/v/peiyucn/epytor?style=for-the-badge)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode)
-[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-epytor-blue?style=for-the-badge)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode)
-[![License](https://img.shields.io/github/license/peiyucn/epytor?style=for-the-badge)](https://github.com/peiyucn/epytor/blob/main/LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)]()
-[![pnpm](https://img.shields.io/badge/pnpm-F69220?style=for-the-badge&logo=pnpm&logoColor=white)]()
+[![Version](https://img.shields.io/github/package-json/v/peiyucn/epytor)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode) [![CI](https://img.shields.io/github/actions/workflow/status/peiyucn/epytor/ci.yml?branch=main)](https://github.com/peiyucn/epytor/actions/workflows/ci.yml) [![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-epytor-blue)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode) [![License](https://img.shields.io/github/license/peiyucn/epytor)](https://github.com/peiyucn/epytor/blob/main/LICENSE)
 
 简体中文 | [English](README.md) | [GitHub](https://github.com/peiyucn/epytor)
 
