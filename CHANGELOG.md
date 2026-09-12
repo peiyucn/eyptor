@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 English | [简体中文](CHANGELOG.zh-CN.md)
 
-## [1.2.0] - Unreleased
+## [1.2.0] - 2026-09-12
 
 ### Features
 
@@ -33,7 +33,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Blockquotes and table cells** now have equal top and bottom padding, equal to the document-wide block gap
 - **Soft line breaks in the source no longer add an extra line**: two lines of text are two lines, with no blank line appearing in between
 - **Heading fold buttons moved outside the text column**: every heading lines up with the body text, with the button hanging in the left margin and fading in when you hover the heading
-- **The outline follows your reading position**: it highlights the current section as you scroll and scrolls itself to keep that entry visible (same rule as the sticky heading — the last heading past the top bar — so it only moves forward and never jumps back at a section boundary); it appears automatically when there is room to the left, and pushes the text aside rather than covering it when there is not
+- **The outline (TOC) now has just two states**: open means it stays and pushes the text aside, and **closing it wins above everything** — once dismissed it never comes back on its own, however the window is resized; whether an opened TOC stays is decided by the window width (threshold = your editor width setting + 100, so it follows pytor.editorMaxWidth). The pin and collapse-all buttons are gone, and the edge handle is now a direction arrow (› when closed, ‹ when open)
 - **Word-style multilevel list markers**: numbered lists show `1.` / `a)` / `i.` and bullets show ● / ■ / ◆ by nesting level, cycling back at the fourth level (your Markdown source and saved files are unchanged — still `1.` / `-`)
 - **Failures are no longer silent**: image upload, image rename, save and switch failures explain what went wrong, and several messages that stayed English in a Chinese UI are translated
 - **Settings are grouped** into *epytor* (editor) and *epytor › Images*, and **`epytor.editorMaxWidth` / `epytor.codeBlockMaxHeight` apply immediately** — no need to reopen the tab
