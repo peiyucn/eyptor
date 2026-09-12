@@ -16,7 +16,7 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 * **Tables**: GFM tables, grid picker (8×8), insert/delete rows & columns, drag reorder, column alignment, wrap modes (`wrap` / `nowrap`), Shift+Enter soft breaks inside cells
 * **Code blocks**: CodeMirror 6 highlighting, language picker, copy, fullscreen
 * **Mermaid diagrams**: inline rendering, source/preview toggle, preview zoom (0.2×–3×)
-* **Images**: paste/drag/picker insert, drag resize, caption, load retry
+* **Images**: three ways to insert (paste / drag & drop / image picker); once inserted you can drag an edge to resize it and add a caption; paths containing spaces or parentheses display correctly; if loading fails you get a message and can retry
 * **Outline panel**: generated automatically and follows your reading position — it highlights the current section and scrolls itself into view; opening it keeps it there and pushes the text aside (never covering it), while closing it means it will not come back on its own (closing wins above everything); it collapses automatically on narrow windows, with the threshold following `epytor.editorMaxWidth` (editor width + 100); the edge handle is a direction arrow (› to open, ‹ to close)
 * **Headings**: sticky section title while scrolling (up to 3 levels), sibling folding (document unchanged)
 * **Source ↔ preview**: `Ctrl/Cmd+Shift+M` switches between the WYSIWYG editor and the VS Code text editor, keeping your position
@@ -48,6 +48,8 @@ The Settings UI groups them into **epytor** (editor) and **epytor › Images**. 
 **Image path safety**: a workspace-level `.vscode/settings.json` may not point `epytor.imageLocalPath` outside the workspace — such a value is ignored and `images/` next to the Markdown file is used for saving and for the image picker. If a workspace turns uploads on for you (`epytor.imageStorage` or the image server URL coming from workspace settings), the upload is skipped, the image is saved locally and a notice is shown.
 
 > Auto save uses the built-in VS Code setting `files.autoSave` (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`). EPYTOR no longer ships its own auto-save setting.
+
+> Four **deprecated** image-server keys still work as a fallback: `epytor.imageServerUrl`, `epytor.imageServerFieldName`, `epytor.imageServerExtraParams` and `epytor.imageServerResponsePath` — migrating to `epytor.imageServer` above is recommended (see below).
 
 > See Settings UI for all options (`epytor.*`).
 
