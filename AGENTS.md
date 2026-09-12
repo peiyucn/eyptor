@@ -143,7 +143,7 @@ VS Code「所见即所得」Markdown 编辑器，基于 Milkdown（Crepe）。
 
 ### Issue 管理
 
-* 标签：`bug`（已确认的 bug）；`bug` + `known-limitation`（已知限制）；`enhancement` + `planned`（**已讨论通过、待落 spec 的计划功能**）；`enhancement`（其他改进）
+* 标签：`bug`（已确认的 bug）、`enhancement`（新功能 / 改进），其余用 GitHub 默认标签；**不设自定义标签**（2026-09-13 删除 `known-limitation` 与 `planned`，两者从未被任何 issue 用过）——已知限制记在 `docs/upstream-limits.md` + `docs/tech-debt.md`，计划记在讨论结论与 spec，都不用标签追
 * 规划只在两处留痕：**讨论结论**（Issue / 对话）与 **spec**（`docs/specs/`）；没有路线图文档，spec 里有对应 issue 就标注编号
 * 用 `.yml` Issue Forms（`.github/ISSUE_TEMPLATE/`）：`bug_report.yml` 自动打 `bug`、`feature_request.yml` 自动打 `enhancement`；`blank_issues_enabled: false`（强制用模板）
 * **主动提醒用户建 issue** 的时机：发现本次修不了的 bug、有新功能想法但暂不开发、发现需记录的技术债务
