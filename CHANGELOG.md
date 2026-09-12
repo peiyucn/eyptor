@@ -24,6 +24,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Switching tabs no longer rebuilds the editor** — undo/redo history, scroll position and folded headings survive tab switches because the editor is still there, not restored after a rebuild
 - **`.markdown` files get the same menu and `Ctrl/Cmd+Shift+M` shortcut as `.md`**
 - **The editor is now listed as `EPYTOR`** under *Reopen Editor With…* (it used to read `WYSIWYG Markdown Editor - EPYTOR`)
+- **Brand mark is now `🦖EPYTOR`** (emoji first, matching dsh-sparrow; updated in the top bar and both READMEs)
 - **Backspace at the start of a list item now breaks the list**: the item becomes a plain line instead of merging into the line above, and when an ordered list is split this way the second half continues the numbering instead of restarting at 1
 - **Auto save follows the built-in VS Code `files.autoSave`** (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`); `epytor.autoSave` and `epytor.autoSaveDelay` are gone
 - **Table cell padding, line spacing and the row/column selection toolbar** are unified with the rest of the editor

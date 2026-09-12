@@ -24,6 +24,7 @@
 * **切换标签不再重建编辑器**：撤销/重做历史、滚动位置与折叠状态在切换标签期间全程保留——编辑器是「还在」，不是「重建后恢复」
 * **`.markdown` 文件与 `.md` 一致**：同样的菜单与 `Ctrl/Cmd+Shift+M` 快捷键
 * **「打开方式…」里本编辑器的名字改为 `EPYTOR`**（此前显示为「WYSIWYG Markdown Editor - EPYTOR」）
+* **品牌标识改为 `🦖EPYTOR`**（emoji 在前，与 dsh-sparrow 一致；顶部工具栏与两份 README 同步）
 * **列表行首 Backspace 改为「断开列表」**：把该列表项升为普通行（列表就此断开），不再是并入上一行；有序列表断开后的后半段延续编号，不会从 1 重新开始
 * **自动保存跟随 VS Code 内置 `files.autoSave`**（`off` / `afterDelay` / `onFocusChange` / `onWindowChange`）；`epytor.autoSave` 与 `epytor.autoSaveDelay` 已移除
 * **表格单元格内边距、行距与行列选中工具栏**与编辑器其余部分统一

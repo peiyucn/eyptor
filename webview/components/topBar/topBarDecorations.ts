@@ -49,14 +49,14 @@ export function setupTopBarTooltips(container: HTMLElement): void {
         .observe(container, { childList: true, subtree: true });
 }
 
-/** 将 EPYTOR🦖 品牌标识注入为 top-bar 真实 flex 子元素（替代 CSS ::after） */
+/** 将 🦖EPYTOR 品牌标识注入为 top-bar 真实 flex 子元素（替代 CSS ::after） */
 export function setupTopBarBrand(container: HTMLElement): void {
     const inject = () => {
         const topBar = container.querySelector('.milkdown-top-bar');
         if (!topBar || topBar.querySelector('.epytor-brand')) return;
         const brand = document.createElement('span');
         brand.className = 'epytor-brand';
-        brand.textContent = 'EPYTOR🦖';
+        brand.textContent = '🦖EPYTOR';
         topBar.insertBefore(brand, topBar.firstChild);
     };
     requestAnimationFrame(inject);
