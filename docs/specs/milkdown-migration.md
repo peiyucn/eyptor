@@ -59,7 +59,7 @@
 
 ## 技术债务
 
-参见 [docs/roadmap.md](../roadmap.md) 技术债务清单。
+参见 [docs/tech-debt.md](../tech-debt.md) 技术债务清单。
 
 ## 代码减量
 
