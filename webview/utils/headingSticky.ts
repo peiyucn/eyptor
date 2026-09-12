@@ -28,6 +28,11 @@ export const STICKY_MAX_ROWS = 3;
  *
  * 回归：旧实现取「最后一个 bottom ≤ 顶栏底」的标题（要求标题**整体**滚出顶栏），
  * 比内置编辑器晚一个标题高度；且只能单级。
+ *
+ * **尾部不接管是刻意的（owner 2026-09-13 确认「符合直觉」）**：文档尾部章节不足一屏时，
+ * 它的标题永远碰不到吸顶行，吸顶条就继续显示上一节——「标题碰到线才接管」正是吸顶的语义。
+ * 别给它加「滚到底就切最后一节」的兜底：那条兜底只服务「当前章节」判据（TOC 高亮要能走到
+ * 尾部几项，见 `currentHeadingIndex` 的 `atDocumentBottom`），两者用途不同。
  */
 export function computeStickyRows(
     headings: StickyHeadingRect[],
