@@ -228,10 +228,14 @@ body.toc-resizing .milkdown-top-bar {
 
 /* 钉住时编辑器内容右移，不被固定面板遮挡 */
 /* padding-left / left 由 JS 动态设置，此处只控制过渡 */
-body.toc-pinned {
+body.toc-open {
     transition: padding-left 0.2s ease;
 }
 
-body.toc-pinned .milkdown-top-bar {
+body.toc-open .milkdown-top-bar {
     transition: left 0.2s ease;
 }
+
+/* 把手：方向随状态翻转（点开就在那儿放着） */
+.toc-toggle-tab { font-size: 14px; line-height: 1; }
+.toc-toggle-tab[data-toc-state="open"] { border-top-right-radius: 0; border-bottom-right-radius: 0; }

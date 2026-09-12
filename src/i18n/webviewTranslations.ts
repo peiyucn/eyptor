@@ -1,6 +1,8 @@
 /** WebView 侧中文翻译表（key 为英文原文） */
 export const ZH_CN_WEBVIEW: Record<string, string> = {
     'Contents': '目录',
+    'Collapse': '收起',
+    'Expand': '展开',
     'Table of Contents': '目录',
     'Undo': '撤销',
     'Redo': '重做',
@@ -60,9 +62,6 @@ export const ZH_CN_WEBVIEW: Record<string, string> = {
     'Invalid Regex': '无效的正则表达式',
     'No results': '无结果',
     // toc
-    'Pin panel': '固定面板',
-    'Collapse all': '全部折叠',
-    'Expand all': '全部展开',
     // 面板/溢出菜单/标题折叠（此前缺翻译，中文环境显示英文原文）
     'Add': '添加',
     'More': '更多',

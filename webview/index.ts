@@ -59,7 +59,7 @@ import { setImageUriMap, remapImageUri, showGlobalLightbox } from "./components/
 import { getUserInteractionEpoch } from "./utils/userInteraction";
 import { initViewportLedger } from "./utils/viewportLedger";
 import { initFindBar } from "./components/findBar";
-import { initToc } from "./components/toc";
+import { initToc, setTocEditorMaxWidth } from "./components/toc";
 import type { Editor } from "@milkdown/kit/core";
 import { editorViewCtx } from "@milkdown/kit/core";
 import { createFrontmatterPanel, type FrontmatterPanelHandle } from "./components/frontmatterPanel";
@@ -1001,6 +1001,7 @@ function handleRegularMessage(msg: ToWebviewMessage): void {
         applyTableWrapVars(resolveTableWrapVars(msg.mode));
     } else if (msg.type === "editorMaxWidthChanged") {
         applyEditorMaxWidth(msg.value);
+        setTocEditorMaxWidth(msg.value); // TOC 自动展开阈值 = 编辑页宽度 + 100（动态跟随）
     } else if (msg.type === "codeBlockMaxHeightChanged") {
         applyCodeBlockMaxHeight(msg.value);
     } else if (msg.type === "notice") {

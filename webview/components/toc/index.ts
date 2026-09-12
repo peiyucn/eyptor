@@ -4,7 +4,7 @@ import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../../../shared/constan
 import { hideStickyUntilNextInteraction, onActiveHeadingChange, getActiveHeadingPos } from "../../headingStickyPlugin";
 import { applyTooltip } from "@/ui/tooltip";
 import { t } from "@/i18n";
-import { IconPin, IconChevronRight, IconChevronDown, IconChevronsUp, IconChevronsDown } from "@/ui/icons";
+import { IconChevronRight, IconChevronDown } from "@/ui/icons";
 import { getWebviewState, setWebviewState } from "@/messaging";
 import { buildHeadingIndex } from "../../utils/headingFold";
 import { shouldSkipViewportWork } from "../../utils/viewportLedger";
@@ -39,19 +39,31 @@ const TOC_MIN_WIDTH = 200;
 const TOC_MAX_WIDTH = 500;
 
 /**
- * 非固定态自动展开所需的左侧空白（面板宽度的比例）。
+ * 自动展开阈值 = 用户设置的编辑页宽度 + 这个余量（默认 900 + 100 = 1000px）。
  *
- * 回归（用户反馈 2026-09-12）：「自动出现的时机是判定宽度吧？目前好像宽度设置的比较宽，
- * 可以窄一点，让非固定 toc 尽早能自动显示出来」——原判据要求左侧空白 ≥ 整个面板宽度，
- * 窗口稍窄就永远不出现。改为按比例放行；同时自动展开时面板**收窄到空白之内**，
- * 所以放宽阈值不会遮住正文。
+ * 为什么是「编辑页宽度 + 余量」：TOC 是给正文让位的侧栏，窗口得先装得下正文列、
+ * 再多出一点才值得自动出现（owner 定的口径 2026-09-12）。
+ *
+ * 为什么量窗口宽而不是量"正文左侧空白"：打开态是推正文的，量空白会把面板自身的影响
+ * 算进去（面板一开、正文一窄、"空白"同步缩水 → 立刻判定放不下 → 反馈回路，实测表现为
+ * 「自动关闭的阈值偏大」）。窗口宽天然不受面板影响。
  */
-const TOC_AUTO_SHOW_MIN_MARGIN_RATIO = 0.55;
+export const TOC_AUTO_SHOW_EXTRA_PX = 100;
 
-/** 纯判据（可直测）：左侧空白是否够自动展开。
- *  取整后再比：`200 × 0.55` 在浮点下是 110.00000000000001，会把「刚好 110px」判成不够。 */
-export function shouldAutoShowToc(leftSpace: number, panelWidth: number): boolean {
-    return leftSpace >= Math.floor(panelWidth * TOC_AUTO_SHOW_MIN_MARGIN_RATIO);
+/** 纯判据（可直测）：窗口宽是否够自动展开 */
+export function shouldAutoShowToc(viewportWidth: number, editorMaxWidth: number): boolean {
+    return viewportWidth >= editorMaxWidth + TOC_AUTO_SHOW_EXTRA_PX;
+}
+
+/**
+ * 打开状态的唯一裁决（纯函数，可直测）——优先级按 owner 在 DSH 左边栏上逐条实测的结论：
+ *
+ * - **用户点过关闭**（`dismissed`）= 最高优先级：无论窗口怎么变都不再自动打开；
+ * - 用户点开 = 解除该偏好，此后是否保持**由宽度决定**（手动打开不压过宽度规则）。
+ */
+export function resolveTocOpen(dismissed: boolean, viewportWidth: number, editorMaxWidth: number): boolean {
+    if (dismissed) { return false; }
+    return shouldAutoShowToc(viewportWidth, editorMaxWidth);
 }
 
 /** 从 EditorView 提取所有 heading 节点（共享索引，口径与折叠/吸顶一致；TOC 列出全部深度） */
@@ -90,6 +102,14 @@ function isHeadingVisible(headings: HeadingEntry[], index: number, collapsed: Se
         }
     }
     return true;
+}
+
+/** 编辑页宽度（px）——由 initToc 的调用方在配置变化时写入 */
+let _editorMaxWidth = 900;
+
+/** 更新自动展开阈值所用的编辑页宽度（`epytor.editorMaxWidth`） */
+export function setTocEditorMaxWidth(width: number): void {
+    if (Number.isFinite(width) && width > 0) { _editorMaxWidth = width; }
 }
 
 export function initToc(getEditorView: () => EditorView | null): {
@@ -132,33 +152,9 @@ export function initToc(getEditorView: () => EditorView | null): {
     headerTitle.className = "toc-header-title";
     // 标题短一点（手测反馈：Table of Contents 太长）——英文显示 Contents，中文词典给「目录」
     headerTitle.textContent = t("Contents");
-
-    // ── 全部折叠/展开按钮 ───────────────────────────────────
-    const collapseAllBtn = document.createElement("button");
-    collapseAllBtn.className = "toc-pin-btn";
-    collapseAllBtn.tabIndex = -1;
-    const collapseAllTip = applyTooltip(collapseAllBtn, t("Collapse all"), { placement: "below" });
-
-    function updateCollapseBtn(): void {
-        const view = getEditorView();
-        const headings = view ? getHeadings(view) : [];
-        const anyExpanded = headings.some(
-            (h, i) => hasChildren(headings, i) && !collapsedHeadings.has(h.key),
-        );
-        collapseAllBtn.innerHTML = anyExpanded ? IconChevronsUp : IconChevronsDown;
-        collapseAllTip.setText(anyExpanded ? t("Collapse all") : t("Expand all"));
-    }
-
-    // ── 固定按钮 ──────────────────────────────────────────────
-    const pinBtn = document.createElement("button");
-    pinBtn.className = "toc-pin-btn";
-    pinBtn.tabIndex = -1;
-    pinBtn.innerHTML = IconPin;
-    applyTooltip(pinBtn, t("Pin panel"), { placement: "below" });
-
+    // 说明：本组件**不再**有「整体收起/展开」与「钉住」两个按钮——
+    // 每个节点自己能收展（前者多余）；打开即常驻（后者的语义被"打开"吸收）。
     header.appendChild(headerTitle);
-    header.appendChild(collapseAllBtn);
-    header.appendChild(pinBtn);
 
     const list = document.createElement("div");
     list.className = "toc-list";
@@ -172,17 +168,18 @@ export function initToc(getEditorView: () => EditorView | null): {
     tabEl.tabIndex = -1;
     document.body.appendChild(tabEl);
 
+    /**
+     * 只有两个状态：打开 / 关闭。`dismissedByUser` 承载「用户点过关闭」这个**最高优先级**
+     * 偏好（持久化）——它成立时无论窗口怎么变都不自动打开；用户点开即解除。
+     * 见 docs/specs/2026-09-12-toc-two-state.md。
+     */
     let isOpen = false;
-    let isAutoShown = false;
-    let isPinned = false;
+    let dismissedByUser = false;
     let panelWidth = TOC_WIDTH;
 
-    // 从 webview 状态恢复固定设置和面板宽度
+    // 从 webview 状态恢复：关闭偏好 + 面板宽度（`tocPinned` 已废弃，不再读取）
     const savedState = getWebviewState();
-    if (savedState?.tocPinned) {
-        isPinned = true;
-        pinBtn.classList.add("toc-pin-btn--active");
-    }
+    if (savedState?.tocDismissed === true) { dismissedByUser = true; }
     if (savedState?.tocWidth && typeof savedState.tocWidth === "number") {
         panelWidth = Math.min(TOC_MAX_WIDTH, Math.max(TOC_MIN_WIDTH, savedState.tocWidth));
     }
@@ -199,49 +196,11 @@ export function initToc(getEditorView: () => EditorView | null): {
             if (typeof key === "string" && key.includes("#")) collapsedHeadings.add(key);
         }
     }
-    updateCollapseBtn();
-
-    // ── Pin 按钮点击 ─────────────────────────────────────────
-    pinBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        isPinned = !isPinned;
-        pinBtn.classList.toggle("toc-pin-btn--active", isPinned);
-        // 钉住时不注册外部点击关闭；取消固定后若面板仍打开则补注册
-        if (!isPinned && isOpen && !isAutoShown) {
-            setTimeout(() => {
-                document.addEventListener("mousedown", outsideClickHandler);
-            }, 0);
-        }
-        syncBodyPadding();
-        setWebviewState({ ...(getWebviewState() ?? {}), tocPinned: isPinned, tocWidth: panelWidth });
-    });
-
-    // ── 全部折叠/展开点击 ──────────────────────────────────────
-    collapseAllBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const view = getEditorView();
-        const headings = view ? getHeadings(view) : [];
-        const anyExpanded = headings.some(
-            (h, i) => hasChildren(headings, i) && !collapsedHeadings.has(h.key),
-        );
-        if (anyExpanded) {
-            headings.forEach((h, i) => {
-                if (hasChildren(headings, i)) collapsedHeadings.add(h.key);
-            });
-            collapseAllBtn.title = t("Expand all");
-        } else {
-            collapsedHeadings.clear();
-            collapseAllBtn.title = t("Collapse all");
-        }
-        saveCollapsedState();
-        updateCollapseBtn();
-        refresh();
-    });
 
     function saveCollapsedState(): void {
         setWebviewState({
             ...(getWebviewState() ?? {}),
-            tocPinned: isPinned,
+            tocDismissed: dismissedByUser,
             tocWidth: panelWidth,
             tocCollapsed: Array.from(collapsedHeadings),
         });
@@ -260,7 +219,6 @@ export function initToc(getEditorView: () => EditorView | null): {
             empty.className = "toc-empty";
             empty.textContent = t("No headings");
             list.appendChild(empty);
-            updateCollapseBtn();
             return;
         }
         headings.forEach((h, idx) => {
@@ -327,26 +285,14 @@ export function initToc(getEditorView: () => EditorView | null): {
             list.appendChild(item);
             itemByPos.set(h.pos, item);
         });
-        updateCollapseBtn();
         applyActiveHeading(getActiveHeadingPos());
     }
 
-    function outsideClickHandler(e: MouseEvent): void {
-        if (isPinned) return; // 钉住时不因外部点击关闭
-        if (!panel.contains(e.target as Node)) {
-            close();
-        }
-    }
-
     function syncBodyPadding(): void {
-        document.body.classList.toggle("toc-pinned", isPinned);
+        document.body.classList.toggle("toc-open", isOpen);
         const topbar = document.querySelector<HTMLElement>(".milkdown-top-bar");
-        // 面板展开时若左侧空白放不下它，就把正文推开——**不覆盖正文**。
-        // 回归（手测 2026-09-12）：原实现只在钉住时推正文，非固定态把面板拖宽会压在正文上，
-        // 看着像布局坏了；而一旦改成"自动展开就推"，窗口很宽时正文又会无谓地右移。
-        // 判据用 freeLeftMargin()（已扣掉当前 padding），因此不会与 padding 互相触发。
-        const shouldPush = isOpen && freeLeftMargin() < panelWidth;
-        if (shouldPush) {
+        // 打开态一律推正文（没有悬浮态）：面板不遮字，窗口窄也由用户自己关
+        if (isOpen) {
             document.body.style.paddingLeft = `${panelWidth}px`;
             if (topbar) topbar.style.paddingLeft = `${panelWidth}px`;
         } else {
@@ -357,37 +303,42 @@ export function initToc(getEditorView: () => EditorView | null): {
 
     function updateTabPos(): void {
         tabEl.style.left = isOpen ? `${panelWidth}px` : '0px';
+        // 把手方向随状态翻转（用户明确点开就在那儿放着的视觉预期）
+        tabEl.textContent = isOpen ? "‹" : "›";
+        tabEl.dataset.tocState = isOpen ? "open" : "closed";
+        applyTooltip(tabEl, isOpen ? t("Collapse") : t("Expand"), { placement: "above" });
     }
 
-    function close(): void {
+    /** 关闭；`byUser` 表示这是用户点击关闭 —— 记成最高优先级偏好并持久化 */
+    function close(byUser: boolean): void {
         isOpen = false;
-        isAutoShown = false;
         panel.classList.remove("toc-panel--open");
-        document.removeEventListener("mousedown", outsideClickHandler);
+        if (byUser) {
+            dismissedByUser = true;
+            saveCollapsedState();
+        }
         updateTabPos();
         syncBodyPadding();
     }
 
-    function openPanel(auto: boolean): void {
+    /** 打开；用户点击打开会**解除**关闭偏好（此后是否保持由宽度决定） */
+    function open(byUser: boolean): void {
         isOpen = true;
-        isAutoShown = auto;
+        if (byUser && dismissedByUser) {
+            dismissedByUser = false;
+            saveCollapsedState();
+        }
         panel.classList.add("toc-panel--open");
         refresh();
-        applyPanelWidth();
+        updateTabPos();
         syncBodyPadding();
-        if (!auto && !isPinned) {
-            // 手动打开才注册外部点击关闭（自动展开时或钉住时 TOC 持久显示）
-            setTimeout(() => {
-                document.addEventListener("mousedown", outsideClickHandler);
-            }, 0);
-        }
     }
 
     function toggle(): void {
         if (isOpen) {
-            close();
+            close(true);
         } else {
-            openPanel(false);
+            open(true);
         }
     }
 
@@ -422,51 +373,25 @@ export function initToc(getEditorView: () => EditorView | null): {
             document.removeEventListener("mousemove", onMove);
             document.removeEventListener("mouseup", onUp);
             if (!tabDragging) toggle();
-            setWebviewState({ ...(getWebviewState() ?? {}), tocPinned: isPinned, tocWidth: panelWidth });
+            saveCollapsedState();
         }
         document.addEventListener("mousemove", onMove);
         document.addEventListener("mouseup", onUp);
     });
 
-    // ── 自动展开检测 ──────────────────────────────────────
-    /**
-     * 正文列左侧的**未被推开的**空白（px）。
-     *
-     * 判据必须与当前 padding 无关，否则会自己触发自己。**不能**用 `editor.left − padding`
-     * 估算：正文列是居中布局（`max-width` + 自动外边距），去掉 padding 只会让它左移一半，
-     * 实测在 1440 宽下算出 170px（真实空白 270px）→ 宽窗口也被判成「放不下」而无谓地推正文。
-     * 按列宽直接算：居中布局下左右空白相等。
-     */
-    function freeLeftMargin(): number {
-        const editorEl = document.getElementById("editor");
-        if (!editorEl) { return 0; }
-        const viewportWidth = document.documentElement.clientWidth;
-        return Math.max(0, (viewportWidth - editorEl.getBoundingClientRect().width) / 2);
-    }
-
-    function hasEnoughSpace(): boolean {
-        return shouldAutoShowToc(freeLeftMargin(), panelWidth);
-    }
-
-    function applyPanelWidth(): void {
-        panel.style.width = `${panelWidth}px`;
-        updateTabPos();
-    }
-
+    // ── 宽度自适应（只在没有关闭偏好时起作用）──────────────────
     function checkAutoShow(): void {
-        if (isPinned) return; // 钉住时不因窗口尺寸变化自动关闭
-        // 宿主折叠态（切到非 webview 标签）视口是假的 300×150：此刻的空间判定
-        // 会把目录误判为「放不下」而收起，切回来再展开——用户看到左侧闪动
+        // 宿主折叠态（切到非 webview 标签）视口是假的 300×150：此刻判定会把目录误收起，
+        // 切回来再展开——用户看到左侧闪动
         if (shouldSkipViewportWork()) return;
-        if (!hasEnoughSpace() && isAutoShown) {
-            close();
-            return;
+        const shouldOpen = resolveTocOpen(dismissedByUser, document.documentElement.clientWidth, _editorMaxWidth);
+        if (shouldOpen && !isOpen) {
+            open(false);
+        } else if (!shouldOpen && isOpen) {
+            close(false);
+        } else if (isOpen) {
+            syncBodyPadding();
         }
-        if (hasEnoughSpace() && !isOpen) {
-            openPanel(true);
-            return;
-        }
-        if (isOpen) { syncBodyPadding(); }
     }
 
     // 面板位置（top/height）由 toc.css 静态声明（与 topbar 高度 36px 对齐）——
@@ -475,9 +400,6 @@ export function initToc(getEditorView: () => EditorView | null): {
 
     updateTabPos();
     requestAnimationFrame(() => {
-        if (isPinned && !isOpen) {
-            openPanel(true);
-        }
         checkAutoShow();
         // 首帧同步一次当前章节（订阅只覆盖"变化"）
         applyActiveHeading(getActiveHeadingPos());
