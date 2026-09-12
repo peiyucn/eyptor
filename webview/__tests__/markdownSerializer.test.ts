@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
     cleanTextHandler,
+    detectListMarkerStyle,
     preserveTableBreakStyle,
     serializeCleanMarkdown,
+    stripListItemBreakPlaceholder,
     withTableBreakHandler,
 } from "../utils/markdownSerializer";
 
@@ -134,6 +136,63 @@ describe("Clean Markdown serializer", () => {
                 "| A |\n|---|\n| a<br> |",
                 "| A |\n|---|\n| a<br /> |",
             )).toBe("| A |\n|---|\n| a<br> |");
+        });
+    });
+
+    describe("list marker style", () => {
+        it("源文件用 `-` 时应该沿用 `-`（回归：保存把 `- item` 改写成 `* item`）", () => {
+            expect(detectListMarkerStyle("- one\n- two\n").bullet).toBe("-");
+        });
+
+        it("源文件用 `*` 时应该沿用 `*`", () => {
+            expect(detectListMarkerStyle("* one\n* two\n").bullet).toBe("*");
+        });
+
+        it("任务列表也算无序列表（`- [ ]`）", () => {
+            expect(detectListMarkerStyle("- [ ] todo\n- [x] done\n").bullet).toBe("-");
+        });
+
+        it("混合写法取出现次数最多的那个", () => {
+            expect(detectListMarkerStyle("- a\n- b\n* c\n").bullet).toBe("-");
+        });
+
+        it("有序列表取编号后的分隔符", () => {
+            expect(detectListMarkerStyle("1) a\n2) b\n").ordered).toBe(")");
+            expect(detectListMarkerStyle("1. a\n2. b\n").ordered).toBe(".");
+        });
+
+        it("没有列表时应该回退上游默认写法", () => {
+            expect(detectListMarkerStyle("# title\n\ntext\n")).toEqual({ bullet: "*", ordered: "." });
+        });
+
+        it("分隔线 `---` 与 `-` setext 下划线不应该被当成列表", () => {
+            expect(detectListMarkerStyle("title\n---\n\ntext\n")).toEqual({ bullet: "*", ordered: "." });
+        });
+    });
+
+    describe("list item break placeholder", () => {
+        it("空任务项的 `<br />` 占位应该 被擦掉且保留复选框标记（回归：写进用户笔记）", () => {
+            expect(stripListItemBreakPlaceholder("- [ ] <br />\n- [x] done\n"))
+                .toBe("- [ ] \n- [x] done\n");
+        });
+
+        it("已勾选空任务项应该 同样保留标记", () => {
+            expect(stripListItemBreakPlaceholder("- [x] <br />\n")).toBe("- [x] \n");
+        });
+
+        it("普通空列表项应该 只留标记", () => {
+            expect(stripListItemBreakPlaceholder("- <br />\n")).toBe("- \n");
+            expect(stripListItemBreakPlaceholder("    - <br />\n")).toBe("    - \n");
+            expect(stripListItemBreakPlaceholder("1. <br />\n")).toBe("1. \n");
+        });
+
+        it("占位后面还有内容时 应该 不碰（那是真内容）", () => {
+            expect(stripListItemBreakPlaceholder("- <br />文字\n")).toBe("- <br />文字\n");
+        });
+
+        it("非列表行上的 `<br />` 应该 不碰", () => {
+            expect(stripListItemBreakPlaceholder("正文 <br />\n")).toBe("正文 <br />\n");
+            expect(stripListItemBreakPlaceholder("<br />\n")).toBe("<br />\n");
         });
     });
 });

@@ -58,6 +58,8 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Your "Open With" choice for `.md` files is no longer silently removed**
 - **Find bar**: a closed find bar no longer runs the previous search, and invalid patterns are reported
 - **A paragraph written across several source lines no longer gains an extra blank line**: soft line breaks used to be rendered as a full-height block
+- **Saving no longer rewrites your list syntax**: bullet markers (`-` / `*` / `+`), the ordered-list style (`1.` or `1)`) and nested-list indentation are kept exactly as written — only the lines you actually changed are rewritten
+- **Empty checkboxes are recognised**: `- [ ] ` (nothing written after the marker) now shows a checkbox instead of a bullet with the literal text `[ ]`, and saving keeps the line as you wrote it
 - **Path and language autocomplete**: keyboard navigation keeps its highlight
 - **Editor focus restored** when switching back from another file (cursor visible but input dead)
 - **Security**: external links are limited to http/https/mailto; image paths, the image gallery listing and path links can no longer escape the workspace; image-server settings injected by a workspace are never used for uploads (the image is saved locally and a notice is shown) and a plain-http image server is flagged once; upload errors no longer echo the server response body

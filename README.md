@@ -11,7 +11,7 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 ## Features
 
 * **Rich text**: headings, bold, italic, strikethrough, inline code, blockquote, horizontal rule, lists
-* **Lists**: ordered / bullet / task lists; markers follow the nesting level (`1.` / `a)` / `i.` and ● / ■ / ◆, cycling at the fourth level); Backspace at the start of an item breaks the list and turns that item into a plain line
+* **Lists**: ordered / bullet / task lists (including `- [ ] ` checkboxes with nothing after the marker); markers follow the nesting level (`1.` / `a)` / `i.` and ● / ■ / ◆, cycling at the fourth level); Backspace at the start of an item breaks the list and turns that item into a plain line; saving keeps your own marker style (`-` / `*`, `1.` / `1)`) and indentation
 * **LaTeX math**: inline `$...$` / block `$$...$$`, KaTeX rendering
 * **Tables**: GFM tables, grid picker (8×8), insert/delete rows & columns, drag reorder, column alignment, wrap modes (`wrap` / `nowrap`), Shift+Enter soft breaks inside cells
 * **Code blocks**: CodeMirror 6 highlighting, language picker, copy, fullscreen
@@ -60,7 +60,6 @@ The Settings UI groups them into **epytor** (editor) and **epytor › Images**. 
 ## Known Limitations
 
 * **Very large documents**: how far the WYSIWYG editor keeps up depends on your machine (CPU, memory and how complex the document structure is) — when a document starts to feel slow, use the VS Code text editor (source mode)
-* An empty task item (`- [ ] ` with nothing after the marker) is not recognised as a task item: it shows as a normal bullet plus the literal text `[ ]`
 * Raw HTML is kept in your file but not rendered — you see the tags themselves; other non-GFM extensions (`==highlight==`, definition lists, `> [!NOTE]` callouts…) are plain text too
 * Paragraph and heading text alignment is not offered (Markdown has no syntax for it)
 

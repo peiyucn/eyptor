@@ -69,12 +69,20 @@ import { headingStickyPlugin } from "./headingStickyPlugin";
 import { softBreakKeymap } from "./softBreakKeymap";
 import { applyMinimalChanges } from "./utils/minimalDiff";
 import { remarkStringifyOptionsCtx } from "@milkdown/kit/core";
+import { emptyTaskListItemPlugin } from "./utils/emptyTaskListItem";
+import { $remark } from "@milkdown/kit/utils";
 import {
     cleanTextHandler,
+    detectListMarkerStyle,
     serializeCleanMarkdown,
+    stripListItemBreakPlaceholder,
     withTableBreakHandler,
     type SerializationMode,
 } from "./utils/markdownSerializer";
+
+// 空任务项（`- [ ] ` 后面什么都不写）识别：上游 task-list 分词器要求标记后有内容，
+// 这里在 remark-gfm 之后补一层 mdast 修正（见 utils/emptyTaskListItem.ts）
+const emptyTaskListItemRemark = $remark("epytorEmptyTaskListItem", () => emptyTaskListItemPlugin);
 
 // 只保留常用语言（143 → ~40）
 const WANTED_LANGS = new Set([
@@ -304,14 +312,17 @@ export function getSerializationMode(): SerializationMode {
 }
 
 function prepareMarkdownForSave(source: string, serialized: string): string {
-    if (_serializationMode === "compatible") return applyMinimalChanges(source, serialized);
+    // 列表项空内容占位（`- [ ] <br />`）两种模式都擦掉：它是 Milkdown 的往返占位，
+    // 不是用户内容（见 markdownSerializer.stripListItemBreakPlaceholder）
+    const normalized = stripListItemBreakPlaceholder(serialized);
+    if (_serializationMode === "compatible") return applyMinimalChanges(source, normalized);
     try {
-        return applyMinimalChanges(source, serializeCleanMarkdown(source, serialized));
+        return applyMinimalChanges(source, serializeCleanMarkdown(source, normalized));
     } catch (error) {
         // 错误日志保留（与调试开关无关）：clean 序列化器异常时回退 compatible 输出，
         // 静默回退会掩盖序列化器缺陷
         console.warn("[markdown-serialization] Clean serializer failed; using compatible output", { error });
-        return applyMinimalChanges(source, serialized);
+        return applyMinimalChanges(source, normalized);
     }
 }
 
@@ -572,10 +583,16 @@ export async function createEditor(
             ctx.update(remarkStringifyOptionsCtx, (options) => {
                 const compatibleTextHandler = options.handlers?.text;
                 if (!compatibleTextHandler) return options;
+                // 列表标记符沿用文件自己的写法（回归：默认 `*` 会把用户的 `- item`、
+                // `1) item` 在保存时改写掉）。两种序列化模式共用——它与 clean/compatible
+                // 的差别（转义与表格换行）无关，属于「不改用户原文」的保真项。
+                const markers = detectListMarkerStyle(_savedMarkdown ?? initialMarkdown);
                 // 表格单元格内换行：mdast 默认 handler 在表格上下文退化为空格，
                 // 覆盖为 GFM 标准 <br>（两种序列化模式均生效，见 withTableBreakHandler）
                 return withTableBreakHandler({
                     ...options,
+                    bullet: markers.bullet,
+                    bulletOrdered: markers.ordered,
                     handlers: {
                         ...options.handlers,
                         text: (node, parent, state, info) => {
@@ -611,6 +628,7 @@ export async function createEditor(
         .use(cellClickFixPlugin)    // 表格单击→光标定位，拖拽→多选
         .use(listBackspacePlugin)   // 列表项行首 Backspace 的落点（见 utils/listBackspace.ts）
         .use(listMarkerPlugin)      // Word 式多级列表标记（见 listMarkers.css 与同名 spec）
+        .use(emptyTaskListItemRemark) // 空任务项（`- [ ] `）识别（见 utils/emptyTaskListItem.ts）
         .use(listSpreadNormalizePlugin); // 保留：列表 spread 规范化
 
     _editor = await crepe.create();

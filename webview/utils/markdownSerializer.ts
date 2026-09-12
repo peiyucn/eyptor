@@ -129,6 +129,78 @@ export function serializeCleanMarkdown(source: string, serialized: string): stri
     return preserveTableBreakStyle(source, serialized);
 }
 
+/** 无序列表标记符与有序列表编号后的分隔符（mdast-util-to-markdown 的 bullet / bulletOrdered） */
+export interface ListMarkerStyle {
+    bullet: "*" | "-" | "+";
+    ordered: "." | ")";
+}
+
+/**
+ * 列表项里「空内容占位」整行：`- <br />` / `- [ ] <br />`（含缩进与有序标记）。
+ * preset-commonmark 给「非文档末尾的空段落」补 `<br />` 占位，好让空行往返；加载侧又有
+ * `remark-preserve-empty-line` 把它抹掉，所以它本就不是用户内容。
+ */
+const LIST_ITEM_BREAK_PLACEHOLDER_RE =
+    /^([ \t]*(?:[-*+]|\d{1,9}[.)])(?:[ \t]+\[[ xX]\])?[ \t]*)<br\s*\/?>[ \t]*$/gim;
+
+/**
+ * 擦掉列表项内的空内容占位 `<br />`，保留标记本身。
+ *
+ * 回归（2026-09-13，owner 在笔记里踩到）：空任务项 `- [ ] `（标记后什么都不写）在 mdast
+ * 里靠「占位 + 复选框标记」才写得出来 —— 占位在，输出是 `- [ ] <br />`（把 `<br />` 写进
+ * 用户笔记）；占位被提前吞掉，复选框标记会一起消失（输出只剩 `-`）。所以在**序列化文本**上
+ * 收尾：`- [ ] <br />` → `- [ ] `、`- <br />` → `- `，与用户原文逐字一致。
+ */
+export function stripListItemBreakPlaceholder(markdown: string): string {
+    return markdown.replace(LIST_ITEM_BREAK_PLACEHOLDER_RE, "$1");
+}
+
+/** 行首列表标记：`-` / `*` / `+` 后必须有空格（`---` 分隔线、`-` setext 下划线不算） */
+const LIST_MARKER_LINE_RE = /^[ \t]*([-*+]|\d{1,9}([.)]))[ \t]+/;
+
+/**
+ * 读取文件自己的列表标记风格，供序列化沿用。
+ *
+ * 回归：mdast-util-to-markdown 默认把无序列表写成 `*`、有序编号写成 `1.`，于是保存会把
+ * 用户原文的 `- item` 改写成 `* item`、`1) item` 改写成 `1. item`——语义没变但每次保存都
+ * 改用户文件（git 全是噪声），与「clean = 尽量少改」相悖。取**出现次数最多**的写法
+ * （并列时取先出现的），没有对应列表时回退上游默认值，保证无列表的文件行为不变。
+ */
+export function detectListMarkerStyle(source: string): ListMarkerStyle {
+    const bullets: Array<"*" | "-" | "+"> = ["*", "-", "+"];
+    const orderedMarkers: Array<"." | ")"> = [".", ")"];
+    const bulletCounts = new Map<string, number>();
+    const orderedCounts = new Map<string, number>();
+
+    for (const line of source.split("\n")) {
+        const match = LIST_MARKER_LINE_RE.exec(line);
+        if (!match) { continue; }
+        const delimiter = match[2];
+        const counts = delimiter ? orderedCounts : bulletCounts;
+        const marker = delimiter ?? match[1];
+        counts.set(marker, (counts.get(marker) ?? 0) + 1);
+    }
+
+    return {
+        bullet: mostFrequent(bullets, bulletCounts),
+        ordered: mostFrequent(orderedMarkers, orderedCounts),
+    };
+}
+
+/** 取出现次数最多的标记；全为 0 时取该顺序的第一个（= 上游默认写法） */
+function mostFrequent<T extends string>(candidates: readonly T[], counts: Map<string, number>): T {
+    let best = candidates[0];
+    let bestCount = counts.get(best) ?? 0;
+    for (const candidate of candidates.slice(1)) {
+        const count = counts.get(candidate) ?? 0;
+        if (count > bestCount) {
+            best = candidate;
+            bestCount = count;
+        }
+    }
+    return best;
+}
+
 /**
  * 表格换行的序列化补丁（闭环方案，源码形态 <br>）。
  *
@@ -198,6 +270,10 @@ export function withTableBreakHandler<T extends { handlers?: unknown }>(options:
                 if (state.stack.includes("tableCell") && /^<br\s*\/?>$/i.test(value.trim())) {
                     return "";
                 }
+                // 列表项里的占位**不能**在这里吞掉：mdast 的空任务项序列化要求首块是
+                // paragraph 且模板里要能看到标记后的内容，占位没了复选框标记会一起消失
+                // （实测 `- [ ] ` 存成 `-`）。该占位改由 stripListItemBreakPlaceholder
+                // 在序列化文本上擦除，那时复选框标记已经写好。
                 return value;
             },
         } as T["handlers"],

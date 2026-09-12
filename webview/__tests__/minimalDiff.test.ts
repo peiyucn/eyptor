@@ -34,6 +34,36 @@ describe("minimalDiff", () => {
         expect(applyMinimalChanges(saved, serialized)).toBe(saved);
     });
 
+    it("列表标记符与嵌套缩进宽度变化时应该保留原始行风格", () => {
+        // 回归：mdast 固定输出 `*` 与 3 空格缩进，此前保存会把用户的 `-` / 4 空格嵌套改写
+        const saved = "- one\n- two\n1. a\n    1. b\n        1. c";
+        const serialized = "* one\n* two\n1. a\n   1. b\n      1. c";
+
+        expect(applyMinimalChanges(saved, serialized)).toBe(saved);
+    });
+
+    it("列表行内容真的变了时应该采用新内容（写法归一只针对未改行）", () => {
+        const saved = "- one\n- two";
+        const serialized = "* one\n* two changed";
+
+        expect(applyMinimalChanges(saved, serialized)).toBe("- one\n* two changed");
+    });
+
+    it("列表缩进层级真的变了时应该采用新缩进", () => {
+        // `- b` 从同级变成 `- a` 的子项：段内缩进档位从 1 档变 2 档 → 不能当成写法差异
+        const saved = "- a\n- b";
+        const serialized = "- a\n  - b";
+
+        expect(applyMinimalChanges(saved, serialized)).toBe("- a\n  - b");
+    });
+
+    it("有序列表的编号是内容 不应该被当成写法差异", () => {
+        const saved = "1. one\n5. two";
+        const serialized = "1. one\n2. two";
+
+        expect(applyMinimalChanges(saved, serialized)).toBe("1. one\n2. two");
+    });
+
     it("大范围重复内容无法安全匹配时应该快速使用新输出", () => {
         const saved = Array.from({ length: 500 }, () => "same").join("\n");
         const serialized = Array.from({ length: 500 }, () => "changed").join("\n");
