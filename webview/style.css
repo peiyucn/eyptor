@@ -797,6 +797,21 @@ html[data-epytor-host-collapsed] body {
     margin-bottom: 0 !important;
 }
 
+/* ④ 父项与它的子列表之间也留同一个块间距（手测 2026-09-12：「行距至少得统一标准」）——
+   此前父子紧贴（父项文字顶边到子项首行只隔一个行高），而同层相邻项之间隔一个块间距，
+   于是同一张列表里出现 21.5px / 31.5px 两种行距，看上去就是没统一。补上这一条之后
+   任何相邻两行都是「行高 + 块间距」，与全文其余块的关系一致。 */
+.milkdown .ProseMirror .milkdown-list-item-block .content-dom > ul,
+.milkdown .ProseMirror .milkdown-list-item-block .content-dom > ol {
+    margin-top: var(--epytor-block-gap);
+}
+/* 子列表是所在项的最后一块时，不再留自己那份下边距——否则它与上一项的下边距叠加，
+   该处行距变成两个块间距（实测 42px vs 其余 31px） */
+.milkdown .ProseMirror .milkdown-list-item-block .content-dom > ul:last-child,
+.milkdown .ProseMirror .milkdown-list-item-block .content-dom > ol:last-child {
+    margin-bottom: 0;
+}
+
 /* ② 列表项内的段落不留段间距——项间距交给列表项自身的外边距（同一个块间距），
    行高与标记盒同源（容器的首末块贴边由上面的容器规则统一负责） */
 .milkdown .ProseMirror .milkdown-list-item-block p {
