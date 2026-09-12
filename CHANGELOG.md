@@ -9,7 +9,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 ### Features
 
-- **Clean Markdown serialization mode** (`epytor.serializationMode`: `clean` / `compatible`) — minimizes unnecessary escaping and redundant table breaks; default `clean` (#15, thanks @dongjha)
+- **Clean Markdown serialization mode** (`epytor.serializationMode`: `clean` / `compatible`) — minimizes unnecessary escaping and redundant table breaks; default `clean` (#15, thanks @Jurhoo)
 - **Source ↔ preview keeps your place** — switching between the WYSIWYG editor and the text/preview tab returns to the same position, from any entry point (menu, shortcut, command palette, search results)
 - **Table grid picker**: an 8×8 grid on the insert-table button, any rows × columns
 - **Regular-expression search** in the find bar (`.*` toggle) with invalid-pattern feedback and zero-width match protection
@@ -45,7 +45,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 
 - **Opening a Markdown file is significantly faster**: the editor payload loads on demand (Mermaid, KaTeX and per-language syntax support only when used) and post-open bookkeeping no longer blocks the first frame
 - **Typing in large documents no longer stutters every few hundred milliseconds** — nothing is processed in the background while you type; the document is handed over after you stop
-- **Large-document input lag** (#16, thanks @dongjha): editing stays smooth up to ~3000 lines (see Known Limitations)
+- **Large-document input lag** (#16, thanks to @Jurhoo for the report and the initial diagnosis): editing stays smooth up to ~3000 lines (see Known Limitations). Following their diagnosis, the whole-document diff that ran on every edit was replaced by a line-anchor based local change; this release also stopped all background full-document work while typing (hand-over happens after you stop), rebuilt the sticky-heading cache on document coordinates with debouncing (zero DOM queries while scrolling), made serialization pull-based (zero serialization while typing), and pinned undo granularity to one step per typing burst
 - **Search stays responsive on huge files**: highlighting is capped instead of building tens of thousands of ranges
 
 ### Bug fixes
