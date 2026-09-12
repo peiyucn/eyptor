@@ -237,13 +237,13 @@
     "@types/jsdom": "^28.0.3",
     "@types/node": "^26.1.2",
     "@types/vscode": "^1.80.0",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.1",
     "jsdom": "30.0.1",
     "typescript": "^5.7.0",
     "vite": "^6",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "@codemirror/language": "^6.12.3",

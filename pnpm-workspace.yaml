@@ -19,3 +19,8 @@ overrides:
   prosemirror-tables: ^1.8.5
   prosemirror-transform: ^1.12.0
   prosemirror-view: ^1.42.2
+  # 安全（Dependabot 警报，2026-09-13）：两个传递依赖钉到补丁版。都不进产物
+  # （dist/webview.js / dist/extension.js 里 0 处），升级只为默认分支警报清零。
+  fast-uri: ^3.1.6
+  # nanoid 只钉 3.x 线：Milkdown（@milkdown/utils）自己用的是 6.x，不能一起钉
+  "nanoid@3": ^3.3.18
