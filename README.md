@@ -63,6 +63,7 @@ The Settings UI groups them into **epytor** (editor) and **epytor › Images**. 
 * ⚠️ Upstream — Table cell click-selection temporarily disabled (Crepe instability, clicks go to edit mode)
 * ⚠️ Upstream — Ordered list multi-level numbering: decimal only (Milkdown kernel limitation)
 * ⚠️ Upstream — Inline styles at paragraph end cannot exit to normal text ([Milkdown#2413](https://github.com/Milkdown/milkdown/issues/2413))
+* ⚠️ Upstream — Switching back to the Markdown tab briefly blanks the editor area: VS Code drops a kept-alive webview's content size while it is hidden and re-applies it on activation, so that frame belongs to the host rather than the editor. The editor itself is never rebuilt and nothing is lost
 * **Very large documents (10k+ lines)**: WYSIWYG editing stays smooth up to ~3000 lines; beyond that the document-tree cost of the editor engine grows — use the VS Code text editor (source mode) for such files
 * If you switch tabs within ~400 ms of your last keystroke, that last change is not written to the file
 * Global search may not scroll precisely with multiple `.md` files open
