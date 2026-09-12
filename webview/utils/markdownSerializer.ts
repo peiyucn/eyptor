@@ -155,6 +155,52 @@ export function stripListItemBreakPlaceholder(markdown: string): string {
     return markdown.replace(LIST_ITEM_BREAK_PLACEHOLDER_RE, "$1");
 }
 
+/** 文件惯用行尾 */
+export type LineEnding = "\r\n" | "\n";
+
+/**
+ * 探测源文件的惯用行尾（按数量取多数；并列或没有换行时按 LF）。
+ *
+ * 回归（2026-09-13，owner 反馈 pyai.site 的 README 被改写）：**写盘是直接写字节**
+ * （`MarkdownDocument.save` → `workspace.fs.writeFile`），而 webview 交回的序列化结果永远是
+ * LF —— CRLF 文件每保存一次就被改成 LF。必须按原文行尾写回。
+ */
+export function detectLineEnding(source: string): LineEnding {
+    const crlf = (source.match(/\r\n/g) ?? []).length;
+    const lf = (source.match(/\n/g) ?? []).length - crlf;
+    return crlf > lf ? "\r\n" : "\n";
+}
+
+/** 统一成 LF（供逐行比较与序列化使用；顺带归一孤立的 `\r`） */
+export function toLf(text: string): string {
+    return text.replace(/\r\n?/g, "\n");
+}
+
+/** 按目标行尾写出（已是 `\r\n` 的不会变成 `\r\r\n`） */
+export function withLineEnding(text: string, eol: LineEnding): string {
+    return eol === "\n" ? text : text.replace(/\r\n?|\n/g, "\r\n");
+}
+
+/** 字符引用样式的 `&`（`&amp;` / `&#123;` / `&#x1F;`）：只有这种 `&` 才需要保留转义 */
+const ENTITY_LIKE_AFTER_AMPERSAND_RE = /^(?:[A-Za-z][A-Za-z0-9]*|#[0-9]+|#[xX][0-9A-Fa-f]+);/;
+
+/**
+ * 去掉多余的 `\&` 转义。
+ *
+ * 回归（2026-09-13，owner 反馈 pyai.site 的 README 被改写）：序列化器会把链接目标 URL 里的
+ * `&` 写成 `\&`（`…?branch=main&label=ci` → `…?branch=main\&label=ci`），改写了用户文件、
+ * 污染 diff。而 `&` 在链接目标里本来就不需要转义——只有紧跟字符引用（`&amp;`、`&#123;`）时
+ * 才需要保留，否则那个引用会被解码掉。
+ *
+ * 注意这是**保真**问题而不是渲染问题：CommonMark 会在链接目标里还原反斜杠转义，所以徽章
+ * 照常渲染。
+ */
+export function dropRedundantAmpersandEscapes(markdown: string): string {
+    return markdown.replace(/\\&/g, (match, offset: number, whole: string) =>
+        ENTITY_LIKE_AFTER_AMPERSAND_RE.test(whole.slice(offset + 2)) ? match : "&",
+    );
+}
+
 /** 行首列表标记：`-` / `*` / `+` 后必须有空格（`---` 分隔线、`-` setext 下划线不算） */
 const LIST_MARKER_LINE_RE = /^[ \t]*([-*+]|\d{1,9}([.)]))[ \t]+/;
 

@@ -59,6 +59,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Find bar**: a closed find bar no longer runs the previous search, and invalid patterns are reported
 - **A paragraph written across several source lines no longer gains an extra blank line**: soft line breaks used to be rendered as a full-height block
 - **Saving no longer rewrites your list syntax**: bullet markers (`-` / `*` / `+`), the ordered-list style (`1.` or `1)`) and nested-list indentation are kept exactly as written — only the lines you actually changed are rewritten
+- **Saving no longer rewrites your file's line endings or escapes URLs**: a CRLF file used to be written back as LF (and, because of that mismatch, the whole document was treated as changed and re-serialized), and `&` in link targets was escaped to `\&` — both are gone; what you did not touch is written back byte for byte
 - **Empty checkboxes are recognised**: `- [ ] ` (nothing written after the marker) now shows a checkbox instead of a bullet with the literal text `[ ]`, and saving keeps the line as you wrote it
 - **Outline panel**: the closing sections of a document now light up in order as you scroll to the end, and the last one takes over at the very bottom — before, they could never become current (a short closing section can never reach the sticky line), so the highlight was stuck one section early and the panel could not scroll to its end
 - **Path and language autocomplete**: keyboard navigation keeps its highlight

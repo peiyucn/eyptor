@@ -115,4 +115,29 @@ describe("保存保真（列表写法不被重写）", () => {
 
         expect(save()).toBe("- one!\n- two\n\ntail\n");
     }, 30_000);
+
+    it("CRLF 文件 应该 逐字保存并保持 CRLF（回归：每存一次被改成 LF、整篇被判为改动）", async () => {
+        const source = ["# 标题", "", "- one", "- two", "", "[链接](https://e.com/a?x=1&y=2)", ""]
+            .join("\r\n");
+        const { save } = await openEditor(source);
+        const saved = save();
+
+        expect(saved).toBe(source);
+        expect(saved.includes("\r\n")).toBe(true);
+        expect(/(?<!\r)\n/.test(saved)).toBe(false);
+    }, 30_000);
+
+    it("链接目标里的 & 应该 保留原样（回归：被写成 \\& 改写用户文件）", async () => {
+        const source = [
+            "[![CI](https://img.shields.io/x/ci.yml?branch=main&label=ci)](https://github.com/a/b/actions)",
+            "",
+            "正文一行",
+            "",
+        ].join("\n");
+        const { save } = await openEditor(source);
+        const saved = save();
+
+        expect(saved).toBe(source);
+        expect(saved.includes("\\&")).toBe(false);
+    }, 30_000);
 });

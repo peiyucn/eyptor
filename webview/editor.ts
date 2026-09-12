@@ -73,9 +73,13 @@ import { emptyTaskListItemPlugin } from "./utils/emptyTaskListItem";
 import { $remark } from "@milkdown/kit/utils";
 import {
     cleanTextHandler,
+    detectLineEnding,
     detectListMarkerStyle,
+    dropRedundantAmpersandEscapes,
     serializeCleanMarkdown,
     stripListItemBreakPlaceholder,
+    toLf,
+    withLineEnding,
     withTableBreakHandler,
     type SerializationMode,
 } from "./utils/markdownSerializer";
@@ -311,19 +315,32 @@ export function getSerializationMode(): SerializationMode {
     return _serializationMode;
 }
 
+/**
+ * 保存前的收尾（序列化 → 归一化 → 最小行改动 → 还原原文行尾）。
+ *
+ * 三件事（都在两种序列化模式下生效）：
+ * 1. 擦掉列表项空内容占位 `<br />`（`stripListItemBreakPlaceholder`）；
+ * 2. 去掉多余的 `\&` 转义（`dropRedundantAmpersandEscapes`）；
+ * 3. **行尾保真**：比较与序列化统一在 LF 口径下做，最后按源文件惯用行尾写回。源是 CRLF 时
+ *    逐行签名会带上 `\r`、与 LF 序列化结果永远不相等，导致「全文都被判为改动」（用户看到的
+ *    是整篇被重排）；写盘又是直接写字节，不还原就每存一次把 CRLF 文件改成 LF。
+ */
 function prepareMarkdownForSave(source: string, serialized: string): string {
-    // 列表项空内容占位（`- [ ] <br />`）两种模式都擦掉：它是 Milkdown 的往返占位，
-    // 不是用户内容（见 markdownSerializer.stripListItemBreakPlaceholder）
-    const normalized = stripListItemBreakPlaceholder(serialized);
-    if (_serializationMode === "compatible") return applyMinimalChanges(source, normalized);
-    try {
-        return applyMinimalChanges(source, serializeCleanMarkdown(source, normalized));
-    } catch (error) {
-        // 错误日志保留（与调试开关无关）：clean 序列化器异常时回退 compatible 输出，
-        // 静默回退会掩盖序列化器缺陷
-        console.warn("[markdown-serialization] Clean serializer failed; using compatible output", { error });
-        return applyMinimalChanges(source, normalized);
-    }
+    const eol = detectLineEnding(source);
+    const sourceLf = toLf(source);
+    const normalized = dropRedundantAmpersandEscapes(stripListItemBreakPlaceholder(toLf(serialized)));
+    const withoutEol = (() => {
+        if (_serializationMode === "compatible") return applyMinimalChanges(sourceLf, normalized);
+        try {
+            return applyMinimalChanges(sourceLf, serializeCleanMarkdown(sourceLf, normalized));
+        } catch (error) {
+            // 错误日志保留（与调试开关无关）：clean 序列化器异常时回退 compatible 输出，
+            // 静默回退会掩盖序列化器缺陷
+            console.warn("[markdown-serialization] Clean serializer failed; using compatible output", { error });
+            return applyMinimalChanges(sourceLf, normalized);
+        }
+    })();
+    return withLineEnding(withoutEol, eol);
 }
 
 export function getEditorView(): EditorView | null {

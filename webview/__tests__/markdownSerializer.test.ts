@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
     cleanTextHandler,
+    detectLineEnding,
     detectListMarkerStyle,
+    dropRedundantAmpersandEscapes,
     preserveTableBreakStyle,
     serializeCleanMarkdown,
     stripListItemBreakPlaceholder,
+    toLf,
+    withLineEnding,
     withTableBreakHandler,
 } from "../utils/markdownSerializer";
 
@@ -193,6 +197,49 @@ describe("Clean Markdown serializer", () => {
         it("非列表行上的 `<br />` 应该 不碰", () => {
             expect(stripListItemBreakPlaceholder("正文 <br />\n")).toBe("正文 <br />\n");
             expect(stripListItemBreakPlaceholder("<br />\n")).toBe("<br />\n");
+        });
+    });
+
+    describe("line ending（保存行尾保真）", () => {
+        it("CRLF 文件 应该 探测为 CRLF", () => {
+            expect(detectLineEnding("a\r\nb\r\n")).toBe("\r\n");
+        });
+
+        it("LF 文件 / 无换行 应该 探测为 LF", () => {
+            expect(detectLineEnding("a\nb\n")).toBe("\n");
+            expect(detectLineEnding("单行")).toBe("\n");
+            expect(detectLineEnding("")).toBe("\n");
+        });
+
+        it("混合行尾 应该 取多数", () => {
+            expect(detectLineEnding("a\r\nb\r\nc\n")).toBe("\r\n");
+            expect(detectLineEnding("a\nb\nc\r\n")).toBe("\n");
+        });
+
+        it("toLf 应该 把 CRLF 与孤立 CR 都归一", () => {
+            expect(toLf("a\r\nb\rc\n")).toBe("a\nb\nc\n");
+        });
+
+        it("withLineEnding 应该 按目标行尾写出 且不产生 \\r\\r\\n", () => {
+            expect(withLineEnding("a\nb", "\r\n")).toBe("a\r\nb");
+            expect(withLineEnding("a\r\nb", "\r\n")).toBe("a\r\nb");
+            expect(withLineEnding("a\r\nb", "\n")).toBe("a\r\nb");
+        });
+    });
+
+    describe("ampersand escape（链接目标里的 &）", () => {
+        it("链接目标里的 `\\&` 应该 还原成 `&`（回归：URL 被改写）", () => {
+            expect(dropRedundantAmpersandEscapes("[x](https://e.com/a?x=1\\&y=2)"))
+                .toBe("[x](https://e.com/a?x=1&y=2)");
+        });
+
+        it("紧跟字符引用的 `\\&` 应该 保留（否则 `&amp;` 会被解码）", () => {
+            expect(dropRedundantAmpersandEscapes("a \\&amp; b")).toBe("a \\&amp; b");
+            expect(dropRedundantAmpersandEscapes("a \\&#123; b")).toBe("a \\&#123; b");
+        });
+
+        it("本来就没转义的 `&` 应该 不动", () => {
+            expect(dropRedundantAmpersandEscapes("a & b")).toBe("a & b");
         });
     });
 });
