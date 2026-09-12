@@ -196,18 +196,24 @@
     background: color-mix(in srgb, color-mix(in srgb, var(--vscode-editor-background) 80%, #808080) 45%, transparent);
 }
 
-/* 中间两条小竖线 */
+/* 中间一个方向箭头（替代原先"两条小竖线"）：收起态 ›（点它展开）、展开态 ‹（点它收起）
+   —— 方向随状态翻转，正对应用户"点开就在那儿放着"的视觉预期 */
 .toc-toggle-tab::after {
-    content: '';
+    content: '›';
     position: absolute;
     inset: 0;
-    background:
-        linear-gradient(currentColor, currentColor) 4px center / 1.5px 30px no-repeat,
-        linear-gradient(currentColor, currentColor) calc(100% - 4px) center / 1.5px 30px no-repeat;
-    /* 14px宽：4px边距 + 1.5px线 + 3px间距 + 1.5px线 + 4px边距 */
-    color: color-mix(in srgb, var(--vscode-editor-foreground) 35%, transparent);
-    opacity: 0.65;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1;
+    color: color-mix(in srgb, var(--vscode-editor-foreground) 55%, transparent);
+    opacity: 0.75;
     transition: opacity 0.2s ease;
+}
+
+.toc-toggle-tab[data-toc-state="open"]::after {
+    content: '‹';
 }
 
 .toc-toggle-tab:hover::after {
