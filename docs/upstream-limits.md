@@ -7,9 +7,9 @@
 
 | # | 限制 | 用户可见 | 来源 | 追踪 |
 |---|------|:---:|------|------|
-| 1 | 行内样式（粗体、斜体、行内代码等）尾部无后续内容时无法退出 | ✔ | Milkdown | [Milkdown#2413](https://github.com/Milkdown/milkdown/issues/2413) |
+| 1 | 行内样式（粗体、斜体、行内代码等）尾部无后续内容时无法退出 | ✘（**epytor 侧已解决**） | Milkdown | [Milkdown#2413](https://github.com/Milkdown/milkdown/issues/2413)（仍 open） — **已解决（2026-09-13 探针实测）**：段落末尾按 → 后 `storedMarks` 被清空，继续输入是普通文本；四类标记（strong / emphasis / strike_through / inlineCode）逐一验证。实现路径 = 自注册官方 cursor 插件 + vendored 虚拟光标（`webview/editor.ts`、`webview/vendor/prosemirrorVirtualCursor`）+ Milkdown 7.22.1 的 inlineCode `inclusive:false`。**升级 `@milkdown/*` 时必须复验**（回归断言 `webview/__tests__/inlineCodeArrowProbe.test.ts`、`upstreamRegression.test.ts`） |
 | 2 | 有序列表多层级编号均为十进制（不区分 a.b.c. / i.ii.iii.） | ✔（显示层已 workaround） | Milkdown 内核 | [Milkdown#2415](https://github.com/Milkdown/milkdown/issues/2415) ／ [Milkdown#2475](https://github.com/Milkdown/milkdown/issues/2475)（已向上游提「把层级透出给 renderLabel」，2026-09-12） — **epytor 已有显示层 workaround（2026-09-12）**：`webview/listMarkerPlugin.ts` + `webview/listMarkers.css` 按层级重绘标记（`1.`/`a)`/`i.` 与 ●/■/◆ 三档循环，见 `docs/specs/2026-09-12-word-style-multilevel-markers.md`）。**升级 `@milkdown/*` 时必须复验**：workaround 依赖 Crepe 的 label 结构（`.label.ordered` / `.label.bullet` / `.label.checked`）与「装饰属性 + CSS 自定义属性」这一路径；若上游改为透出层级（例如 `listItemBlockConfig.renderLabel` 收到 depth），应改用它并删除本 workaround |
-| 3 | 表格单元格单击只是把光标放进去，不选中整格 | ✔ | Crepe | [Milkdown#2414](https://github.com/Milkdown/milkdown/issues/2414) — epytor 的落点修正见 `webview/utils/cellClickState.ts`（单击→光标，跨格拖选保留多选） |
+| 3 | 表格单元格单击进入编辑而不是选中整格 | ✘（**epytor 侧按设计改写**） | Crepe | [Milkdown#2414](https://github.com/Milkdown/milkdown/issues/2414)（仍 open） — epytor 的落点修正见 `webview/utils/cellClickState.ts`：单击 → 光标进格编辑，跨格/整行整列拖选仍保留多选；这是有意的交互选择，不再是已知限制（2026-09-13 从 README 已知限制中移除） |
 | 4 | **保活 webview 切标签时「整块闪一下」**：激活初期屏幕上呈现的是**宿主**重绘的那一帧；页面侧贡献 0（对照实验：一个什么都不干的最小 webview 同样闪），扩展侧没有任何着力点 | ✔（平台行为） | VS Code webview 宿主 | [vscode#113188](https://github.com/microsoft/vscode/issues/113188)（ghost renders，2020 已关闭为 duplicate of #110450） |
 | 5 | **复选框后不写内容的空任务项识别不了复选框**：`- [ ] `（标记后无内容）被解析成普通列表项，`[ ]` 留成正文文本（显示为「• [ ]」）；退格并项时这段文本还会漏进上一项；写回时 `[` 被转义，存成 `- \[ ]`（2026-09-13 实测） | ✔ | Milkdown / remark 任务列表解析 | 待提 issue（退格语义由 `webview/utils/listBackspace.ts` 按「实质为空」修正，渲染仍是上游行为） |
 
