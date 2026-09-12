@@ -1,34 +1,27 @@
 import { $prose } from "@milkdown/kit/utils";
 import { schemaCtx } from "@milkdown/kit/core";
 import { keymap } from "@milkdown/kit/prose/keymap";
-import { Plugin, TextSelection } from "@milkdown/kit/prose/state";
+import type { Transaction } from "@milkdown/kit/prose/state";
+import { Plugin } from "@milkdown/kit/prose/state";
+import { liftListItem } from "@milkdown/kit/prose/schema-list";
 import type { NodeType, ResolvedPos } from "@milkdown/kit/prose/model";
 
 /**
- * 列表项行首 Backspace 的落点修正。
+ * 列表项行首 Backspace：**断开列表，把该项变成普通行**（不是并入上一项，也不是删掉整行）。
  *
- * 背景（手测反馈 2026-09-12：「退格键退到删除行时，光标上移错位比较严重，上下位置不能动」）：
- * Crepe 的 `list_item` schema 允许一项内含多段（`paragraph block*`），于是 ProseMirror 默认的
- * `joinBackward` 在列表里是**按项合并**——空项不会被删除，而是变成上一项里的第二个空段落，
- * 光标随即停在那个空段落上（视觉上像上移，且 PM 自己会报
- * 「TextSelection endpoint not pointing into a node with inline content」）；任务列表还会把
- * 标记漏进正文。
+ * 手测反馈（2026-09-12，两轮）：
+ * ① 「退格键退到删除行的时候，光标上移错位比较严重，上下位置不能动」——Crepe 的 `list_item`
+ *    schema 允许一项内含多段（`paragraph block*`），ProseMirror 默认的 `joinBackward` 因此在
+ *    列表里按「项」合并：空项变成上一项里的第二个空段落，光标停在那一段上（PM 自己还会报
+ *    「TextSelection endpoint not pointing into a node with inline content」）；
+ * ② 「列表退格不应该是直接删除标号并回到上一行，而是应该断开列表变成正常行」。
  *
- * 规则（与常见编辑器一致；编号仍由 Crepe 依项序重算，本插件不碰编号）：
- * - **空项**：删除该项，光标落到上一项文字的末尾；
- * - **非空项**：把它的文字并进上一项（同一行接续），光标落在接缝处；
- * - **已是第一项**：不拦截，交回默认命令（提升为普通段落 / 与前一块合并）；
- * - **光标不在项内第一个文本块、项内含多块、上一项末尾不是文字**：不拦截，交回默认行为。
+ * 所以走官方 `liftListItem`：顶层项 → 升为普通段落（列表就此断开），嵌套项 → 上升一级。
+ *
+ * **断出来的后半段要补起始编号**：`liftListItem` 分裂列表时把原 `order` 原样复制给后半段，
+ * 于是「1. a / b / 1. c」——这正是此前撤掉自定义 lift 的原因（用户反馈「中间删除一行后编号
+ * 重新开始」）。这里按被提升项原本的序号 +1 写回后半段的 `order`，编号得以延续。
  */
-
-/** 任务标记字面量：上游解析器对「复选框后无内容」的项不识别复选框，把标记留成了正文文本
- * （详见 docs/upstream-limits.md 第 5 项）。这类项在退格语义上等同于空项。 */
-const TASK_MARKER_ONLY = /^\[[ xX]\]$/;
-
-/** 段落是否「实质为空」（真空段，或只剩上游留下的任务标记） */
-function isEffectivelyEmpty(text: string): boolean {
-    return text.length === 0 || TASK_MARKER_ONLY.test(text.trim());
-}
 
 /** 从光标位置向上找到 list_item 所在深度（找不到返回 -1） */
 function listItemDepth($from: ResolvedPos, listItem: NodeType): number {
@@ -38,9 +31,26 @@ function listItemDepth($from: ResolvedPos, listItem: NodeType): number {
     return -1;
 }
 
+/**
+ * 提升之后：若紧接着出现的有序列表是本次分裂产生的后半段，把它的起始编号写成 `order`。
+ * 位置直接取自提升后光标所在段落的下一个兄弟——不依赖任何位置映射。
+ */
+function withContinuationOrder(tr: Transaction, order: number): Transaction {
+    const { $from } = tr.selection;
+    if (!$from.parent.isTextblock || $from.depth < 1) { return tr; }
+    const parentDepth = $from.depth - 1;
+    const parent = $from.node(parentDepth);
+    const nextIndex = $from.index(parentDepth) + 1;
+    if (nextIndex >= parent.childCount) { return tr; }
+    const next = parent.child(nextIndex);
+    if (next.type.name !== "ordered_list") { return tr; }
+    return tr.setNodeMarkup($from.after($from.depth), undefined, { ...next.attrs, order });
+}
+
 export const listBackspacePlugin = $prose((ctx) => {
     const listItem = ctx.get(schemaCtx).nodes["list_item"];
     if (!listItem) { return new Plugin({}); }
+    const lift = liftListItem(listItem);
 
     return keymap({
         Backspace: (state, dispatch) => {
@@ -48,35 +58,22 @@ export const listBackspacePlugin = $prose((ctx) => {
             if (!selection.empty) { return false; }
             const { $from } = selection;
             if ($from.parentOffset !== 0 || !$from.parent.isTextblock) { return false; }
-
             const itemDepth = listItemDepth($from, listItem);
             if (itemDepth < 0) { return false; }
-            // 光标必须在项内第一个文本块，且该项只含这一个块（松列表/多项交回默认行为）
+            // 只在项内第一个文本块的行首介入（项内多块时交回默认行为）
             if ($from.index(itemDepth) !== 0) { return false; }
-            if ($from.node(itemDepth).childCount !== 1) { return false; }
 
+            const listNode = $from.node(itemDepth - 1);
             const itemIndex = $from.index(itemDepth - 1);
-            // 第一项：默认命令负责（提升为普通段落 / 与前一块合并）
-            if (itemIndex === 0) { return false; }
-            // 上一项末尾必须是文字，接缝才落得进去（代码块、嵌套列表等交回默认行为）
-            if (!$from.node(itemDepth - 1).child(itemIndex - 1).lastChild?.isTextblock) { return false; }
+            const continues = listNode.type.name === "ordered_list" && itemIndex + 1 < listNode.childCount;
+            const order = Number(listNode.attrs.order ?? 1) + itemIndex + 1;
 
-            const itemStart = $from.before(itemDepth);
-            const itemEnd = $from.after(itemDepth);
-            // 上一项最后一个文本块的文字末尾（项内容末尾的前一位）
-            const joinPos = itemStart - 2;
-            if (!state.doc.resolve(joinPos).parent.isTextblock) { return false; }
-
-            const isEmpty = isEffectivelyEmpty($from.parent.textContent);
-            if (!dispatch) { return true; }
-
-            const content = $from.parent.content;
-            const tr = state.tr.delete(itemStart, itemEnd);
-            // 非空项：把文字并进上一项同一行（接缝即 joinPos，光标落在接缝处）
-            if (!isEmpty) { tr.insert(joinPos, content); }
-            tr.setSelection(TextSelection.create(tr.doc, joinPos));
-            dispatch(tr.scrollIntoView());
-            return true;
+            return lift(
+                state,
+                dispatch
+                    ? (tr) => { dispatch(continues ? withContinuationOrder(tr, order) : tr); }
+                    : undefined,
+            );
         },
     });
 });
