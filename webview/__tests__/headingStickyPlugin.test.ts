@@ -7,7 +7,9 @@
  * 旧实现要等标题整体滚出顶栏，晚一个标题高度。
  */
 import { describe, expect, it, vi } from "vitest";
-import { createEditor, destroyEditor } from "../editor";
+import { createEditor, destroyEditor, getEditorView } from "../editor";
+import { getActiveHeadingPos } from "../headingStickyPlugin";
+import { buildHeadingIndex } from "../utils/headingFold";
 
 if (typeof (window as unknown as Record<string, unknown>).IntersectionObserver === "undefined") {
     (window as unknown as Record<string, unknown>).IntersectionObserver = class {
@@ -298,6 +300,47 @@ describe("标题吸顶完整链路", () => {
 
         bodySpy.mockRestore();
         setViewport(1024, 768);
+        destroyEditor();
+        root.remove();
+    }, 60000);
+
+    it("滚到文档底部时 应该 把最后一个标题当作当前章节（回归：尾部章节短，TOC 高亮与滚动到不了最下面）", async () => {
+        // 视口 600、内容 2000：scrollY=1400 即到底。尾部标题 docTop=1450 → 视口 top=50，
+        // 仍在吸顶线（36）下方——按老判据永远轮不到它，TOC 也就停在高亮倒数第二节。
+        setViewport(1024, 600);
+        Object.defineProperty(document.documentElement, "scrollHeight", { get: () => 2000, configurable: true });
+        scrollY = 1400;
+        const root = await mountWithStubLayout(
+            ["## 第一节", "正文", "正文", "## 尾部小节", "正文"],
+            (i) => (i === 0 ? 60 : 1450),
+        );
+        await settle();
+
+        const view = getEditorView();
+        expect(view).not.toBeNull();
+        const entries = buildHeadingIndex(view!.state.doc).filter((e) => e.topLevel);
+        expect(entries).toHaveLength(2);
+        expect(getActiveHeadingPos()).toBe(entries[1].pos);
+
+        destroyEditor();
+        root.remove();
+    }, 60000);
+
+    it("没滚到底时 应该 仍是最后一个划过吸顶线的标题（尾部兜底不提前生效）", async () => {
+        // 同一份几何，scrollY=1000（1000+600=1600 < 1998）→ 未到底，尾部标题在视口下方 450
+        setViewport(1024, 600);
+        Object.defineProperty(document.documentElement, "scrollHeight", { get: () => 2000, configurable: true });
+        scrollY = 1000;
+        const root = await mountWithStubLayout(
+            ["## 第一节", "正文", "正文", "## 尾部小节", "正文"],
+            (i) => (i === 0 ? 60 : 1450),
+        );
+        await settle();
+
+        const view = getEditorView();
+        const entries = buildHeadingIndex(view!.state.doc).filter((e) => e.topLevel);
+        expect(getActiveHeadingPos()).toBe(entries[0].pos);
+
         destroyEditor();
         root.remove();
     }, 60000);

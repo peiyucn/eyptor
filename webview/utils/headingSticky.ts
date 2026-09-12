@@ -59,14 +59,45 @@ export function computeStickyRows(
  *
  * 本判据只看「标题顶边是否已划过吸顶线」，与推挤过程无关，因此随滚动**单调前进**
  * （标题按文档顺序传入，扫描在第一个未划过的标题处提前结束）。
+ *
+ * `atDocumentBottom`（已滚到文档底部）时直接取最后一个标题：文档尾部内容不足一屏时，
+ * 最后一节的标题**永远划不到吸顶线**（下面是空的，它上不去），但它就是当前阅读位置——
+ * 不兜底的话 TOC 高亮永远停在倒数第二节、面板也滚不到最下面（手测反馈 2026-09-13：
+ * 「文档尾部章节较短时，它滚不到最下面」）。VS Code 内置吸顶滚动同样有「最后一行可见时
+ * 取最后一个元素」的兜底。
  */
 export function currentHeadingIndex(
     headings: StickyHeadingRect[],
     topbarBottom: number,
+    atDocumentBottom = false,
 ): number {
+    if (headings.length === 0) { return -1; }
+    if (atDocumentBottom) { return headings.length - 1; }
     let hit = -1;
     for (let i = 0; i < headings.length; i++) {
         if (headings[i].top < topbarBottom) { hit = i; } else { break; }
     }
     return hit;
+}
+
+/** 「已滚到底」判定的容差（px）：亚像素布局与缩放会带来 1px 级别误差 */
+export const DOCUMENT_BOTTOM_EPSILON_PX = 2;
+
+/**
+ * 是否已滚到文档底部（纯函数，便于单测）。
+ *
+ * 三个入参都是浏览器读数：`scrollY` / `window.innerHeight` / `documentElement.scrollHeight`。
+ *
+ * **内容不足一屏时返回 false**：那种情况首屏全都可见，但用户还在读开头，不能算「读到尾部」
+ * （否则短文档一打开就把 TOC 高亮打在最后一项上）。jsdom 里 `scrollHeight` 恒为 0，
+ * 这条也让单测不会误触发尾部兜底。
+ */
+export function isAtDocumentBottom(
+    scrollTop: number,
+    viewportHeight: number,
+    contentHeight: number,
+    epsilon: number = DOCUMENT_BOTTOM_EPSILON_PX,
+): boolean {
+    if (contentHeight <= viewportHeight) { return false; }
+    return scrollTop + viewportHeight >= contentHeight - epsilon;
 }

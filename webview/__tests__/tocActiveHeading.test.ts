@@ -4,7 +4,7 @@
  * 根因是复用吸顶行栈的最内层：两节交替的那几帧它会退化成父标题（在上面、早已过去）。
  */
 import { describe, expect, it } from "vitest";
-import { currentHeadingIndex, computeStickyRows, type StickyHeadingRect } from "../utils/headingSticky";
+import { currentHeadingIndex, computeStickyRows, isAtDocumentBottom, type StickyHeadingRect } from "../utils/headingSticky";
 
 /** 构造：depth/top/sectionBottom（视口坐标，顺序即文档顺序） */
 const h = (depth: number, top: number, sectionBottom: number): StickyHeadingRect => ({ depth, top, sectionBottom });
@@ -35,5 +35,39 @@ describe("当前章节判据", () => {
     it("划过最后一个标题后 应该 停在它上面（单调前进）", () => {
         const scrolled = [h(1, -900, -400), h(2, -500, -100), h(3, -90, -20)];
         expect(currentHeadingIndex(scrolled, 0)).toBe(2);
+    });
+
+    it("滚到文档底部时 应该 取最后一个标题（回归：尾部章节短，它永远划不到吸顶线）", () => {
+        // 尾部兜底：最后一个标题 h2 的顶边还在吸顶线下方（30 > 0）——按老判据会停在 h1，
+        // 于是 TOC 永远高亮不到尾部、面板也滚不到最下面（手测反馈 2026-09-13）
+        const tail = [h(1, -500, 30), h(2, 30, 400)];
+        expect(currentHeadingIndex(tail, 0)).toBe(0);
+        expect(currentHeadingIndex(tail, 0, true)).toBe(1);
+    });
+
+    it("文档为空 / 没有标题时 应该 返回 -1（含底部兜底路径）", () => {
+        expect(currentHeadingIndex([], 0)).toBe(-1);
+        expect(currentHeadingIndex([], 0, true)).toBe(-1);
+    });
+});
+
+describe("isAtDocumentBottom", () => {
+    it("滚到底（或越过）应该 为真", () => {
+        expect(isAtDocumentBottom(1000, 600, 1600)).toBe(true);
+        expect(isAtDocumentBottom(1100, 600, 1600)).toBe(true);
+    });
+
+    it("还差得远 应该 为假", () => {
+        expect(isAtDocumentBottom(900, 600, 1600)).toBe(false);
+    });
+
+    it("1px 级亚像素误差 应该 仍算到底（容差 2px）", () => {
+        expect(isAtDocumentBottom(999, 600, 1600)).toBe(true);
+        expect(isAtDocumentBottom(997, 600, 1600)).toBe(false);
+    });
+
+    it("内容不足一屏（无需滚动）应该 为假（还没读到尾部，不能把高亮打到最后一项）", () => {
+        expect(isAtDocumentBottom(0, 600, 400)).toBe(false);
+        expect(isAtDocumentBottom(0, 600, 600)).toBe(false);
     });
 });
