@@ -31,8 +31,8 @@ export const STICKY_MAX_ROWS = 3;
  *
  * **尾部不接管是刻意的（owner 2026-09-13 确认「符合直觉」）**：文档尾部章节不足一屏时，
  * 它的标题永远碰不到吸顶行，吸顶条就继续显示上一节——「标题碰到线才接管」正是吸顶的语义。
- * 别给它加「滚到底就切最后一节」的兜底：那条兜底只服务「当前章节」判据（TOC 高亮要能走到
- * 尾部几项，见 `currentHeadingIndex` 的 `atDocumentBottom`），两者用途不同。
+ * 别给它加尾部分支：那条「逐级下滑的阅读线」只服务「当前章节」判据（TOC 高亮要能走到尾部
+ * 几项，见 `effectiveReadingLineY`），两者用途不同。
  */
 export function computeStickyRows(
     headings: StickyHeadingRect[],
@@ -55,54 +55,57 @@ export function computeStickyRows(
 }
 
 /**
- * 「当前章节」的标题下标：**最后一个顶边已划过吸顶线的标题**（无则 -1）。
+ * 「当前章节」的标题下标：**最后一个顶边已划过阅读线的标题**（无则 -1）。
  *
  * 为什么不复用 `computeStickyRows` 的最内层：吸顶行栈在**两节交替**的那几帧会退化成父级
  * ——当前章节被下一节推挤出局、而下一节的标题还没接管，此时最内层是它的父标题（位置在
  * 上面、早已过去）。TOC 高亮跟着它就会「跳回上一个章节再跳回来」，表现为抖动（手测反馈
  * 2026-09-12：「toc 高亮跟随，会出现往上面已经过去的章节高亮抖动」）。
  *
- * 本判据只看「标题顶边是否已划过吸顶线」，与推挤过程无关，因此随滚动**单调前进**
+ * 本判据只看「标题顶边是否已划过阅读线」，与推挤过程无关，因此随滚动**单调前进**
  * （标题按文档顺序传入，扫描在第一个未划过的标题处提前结束）。
  *
- * `atDocumentBottom`（已滚到文档底部）时直接取最后一个标题：文档尾部内容不足一屏时，
- * 最后一节的标题**永远划不到吸顶线**（下面是空的，它上不去），但它就是当前阅读位置——
- * 不兜底的话 TOC 高亮永远停在倒数第二节、面板也滚不到最下面（手测反馈 2026-09-13：
- * 「文档尾部章节较短时，它滚不到最下面」）。VS Code 内置吸顶滚动同样有「最后一行可见时
- * 取最后一个元素」的兜底。
+ * 阅读线一般就是吸顶线（顶栏底），由调用方传入；文档尾部要用 `effectiveReadingLineY`
+ * 逐级下滑的线，末尾那几节才会**按顺序**依次接管（详见该函数）。
  */
 export function currentHeadingIndex(
     headings: StickyHeadingRect[],
-    topbarBottom: number,
-    atDocumentBottom = false,
+    readingLineY: number,
 ): number {
-    if (headings.length === 0) { return -1; }
-    if (atDocumentBottom) { return headings.length - 1; }
     let hit = -1;
     for (let i = 0; i < headings.length; i++) {
-        if (headings[i].top < topbarBottom) { hit = i; } else { break; }
+        if (headings[i].top < readingLineY) { hit = i; } else { break; }
     }
     return hit;
 }
 
-/** 「已滚到底」判定的容差（px）：亚像素布局与缩放会带来 1px 级别误差 */
-export const DOCUMENT_BOTTOM_EPSILON_PX = 2;
-
 /**
- * 是否已滚到文档底部（纯函数，便于单测）。
+ * 阅读线的视口 y：正常 = 吸顶线（顶栏底）；**进入「够不到的尾部」后随剩余可滚动量下滑**，
+ * 滚到文档底部时正好落到视口底。
  *
- * 三个入参都是浏览器读数：`scrollY` / `window.innerHeight` / `documentElement.scrollHeight`。
+ * 为什么需要（手测反馈 2026-09-13）：内容坐标系里**最后 `viewportHeight - topbarBottom`
+ * 像素**是「够不到的尾部」——落在这段里的标题永远爬不到吸顶线（下面没内容了）。判据一直用
+ * 吸顶线的话，末尾那几节全都轮不到，高亮卡在尾部之前那一节，直到滚到底才「跳」到最后一项；
+ * 而且末尾有多个标题时会**跳过中间几个**。
  *
- * **内容不足一屏时返回 false**：那种情况首屏全都可见，但用户还在读开头，不能算「读到尾部」
- * （否则短文档一打开就把 TOC 高亮打在最后一项上）。jsdom 里 `scrollHeight` 恒为 0，
- * 这条也让单测不会误触发尾部兜底。
+ * 口径：距底部还有 `band = viewportHeight - topbarBottom` 以上的可滚动量时，用吸顶线
+ * （与老判据逐像素一致）；再往下，线随「距底部还剩多少」线性下滑，到底时 = 视口底。于是
+ * 尾部每节标题都会在各自的位置**依次**划过线：既不会一次跳到最后，也不会提前接管——线
+ * 始终在标题真正进入视野之后才经过它。
+ *
+ * 退化情形：视口不比顶栏高、或文档不足一屏（无可滚动量）时，直接返回吸顶线（尾部兜底不生效，
+ * 短文档首屏不该把高亮打到最后一项；jsdom 里 `scrollHeight` 恒为 0，也走这条路）。
  */
-export function isAtDocumentBottom(
-    scrollTop: number,
+export function effectiveReadingLineY(
+    topbarBottom: number,
     viewportHeight: number,
+    scrollY: number,
     contentHeight: number,
-    epsilon: number = DOCUMENT_BOTTOM_EPSILON_PX,
-): boolean {
-    if (contentHeight <= viewportHeight) { return false; }
-    return scrollTop + viewportHeight >= contentHeight - epsilon;
+): number {
+    const band = viewportHeight - topbarBottom;
+    const maxScroll = contentHeight - viewportHeight;
+    if (band <= 0 || maxScroll <= 0) { return topbarBottom; }
+    const fromBottom = Math.max(0, maxScroll - scrollY);
+    if (fromBottom >= band) { return topbarBottom; }
+    return Math.min(viewportHeight, topbarBottom + (band - fromBottom));
 }

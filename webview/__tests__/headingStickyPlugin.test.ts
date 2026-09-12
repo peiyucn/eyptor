@@ -306,7 +306,8 @@ describe("标题吸顶完整链路", () => {
 
     it("滚到文档底部时 应该 把最后一个标题当作当前章节（回归：尾部章节短，TOC 高亮与滚动到不了最下面）", async () => {
         // 视口 600、内容 2000：scrollY=1400 即到底。尾部标题 docTop=1450 → 视口 top=50，
-        // 仍在吸顶线（36）下方——按老判据永远轮不到它，TOC 也就停在高亮倒数第二节。
+        // 常年待在吸顶线（36）下方——按老判据永远轮不到它；阅读线到底时滑到视口底（600），
+        // 于是它接管，TOC 也就能滚到最后一项。
         setViewport(1024, 600);
         Object.defineProperty(document.documentElement, "scrollHeight", { get: () => 2000, configurable: true });
         scrollY = 1400;
@@ -326,8 +327,9 @@ describe("标题吸顶完整链路", () => {
         root.remove();
     }, 60000);
 
-    it("没滚到底时 应该 仍是最后一个划过吸顶线的标题（尾部兜底不提前生效）", async () => {
-        // 同一份几何，scrollY=1000（1000+600=1600 < 1998）→ 未到底，尾部标题在视口下方 450
+    it("离底部还远时 应该 仍是最后一个划过吸顶线的标题（阅读线还没滑到尾部那节）", async () => {
+        // 同一份几何，scrollY=1000（距底部 400 < 尾部 band 564）→ 阅读线只滑到 200，
+        // 尾部标题在视口 450 处，接管不了
         setViewport(1024, 600);
         Object.defineProperty(document.documentElement, "scrollHeight", { get: () => 2000, configurable: true });
         scrollY = 1000;

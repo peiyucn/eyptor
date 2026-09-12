@@ -60,7 +60,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **A paragraph written across several source lines no longer gains an extra blank line**: soft line breaks used to be rendered as a full-height block
 - **Saving no longer rewrites your list syntax**: bullet markers (`-` / `*` / `+`), the ordered-list style (`1.` or `1)`) and nested-list indentation are kept exactly as written — only the lines you actually changed are rewritten
 - **Empty checkboxes are recognised**: `- [ ] ` (nothing written after the marker) now shows a checkbox instead of a bullet with the literal text `[ ]`, and saving keeps the line as you wrote it
-- **Outline panel**: scrolling to the very end of a document now highlights (and scrolls to) the last section even when the closing sections are shorter than the screen — before, the last item could never become current
+- **Outline panel**: the closing sections of a document now light up in order as you scroll to the end, and the last one takes over at the very bottom — before, they could never become current (a short closing section can never reach the sticky line), so the highlight was stuck one section early and the panel could not scroll to its end
 - **Path and language autocomplete**: keyboard navigation keeps its highlight
 - **Editor focus restored** when switching back from another file (cursor visible but input dead)
 - **Security**: external links are limited to http/https/mailto; image paths, the image gallery listing and path links can no longer escape the workspace; image-server settings injected by a workspace are never used for uploads (the image is saved locally and a notice is shown) and a plain-http image server is flagged once; upload errors no longer echo the server response body

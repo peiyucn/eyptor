@@ -17,7 +17,7 @@ import { t } from "./i18n";
 import { headingFoldPluginKey, type HeadingFoldMeta } from "./headingFoldPlugin";
 import { shouldSkipViewportWork } from "./utils/viewportLedger";
 import { buildHeadingIndex, type HeadingIndexEntry } from "./utils/headingFold";
-import { computeStickyRows, currentHeadingIndex, isAtDocumentBottom, STICKY_MAX_ROWS, STICKY_ROW_HEIGHT_PX } from "./utils/headingSticky";
+import { computeStickyRows, currentHeadingIndex, effectiveReadingLineY, STICKY_MAX_ROWS, STICKY_ROW_HEIGHT_PX } from "./utils/headingSticky";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
 
 /** 隐藏吸顶条直到用户下一次交互（TOC 跳转用；插件实例挂载时赋值） */
@@ -317,12 +317,12 @@ export const headingStickyPlugin = $prose(() =>
                     const scrollY = window.scrollY;
                     const activeIndex = currentHeadingIndex(
                         cachedHeadings.map((h) => ({ depth: h.depth, top: h.docTop - scrollY, sectionBottom: 0 })),
-                        topbarBottom,
-                        // 滚到底时取最后一个标题：尾部内容不足一屏时它永远划不到吸顶线，
-                        // 但那就是当前阅读位置（否则 TOC 高亮与滚动都到不了尾部几项）
-                        isAtDocumentBottom(
-                            scrollY,
+                        // 尾部用逐级下滑的阅读线：末尾那几节（标题爬不到吸顶线）才会按顺序
+                        // 依次接管，而不是滚到底时一次跳到最后一项
+                        effectiveReadingLineY(
+                            topbarBottom,
                             window.innerHeight,
+                            scrollY,
                             document.documentElement.scrollHeight,
                         ),
                     );
