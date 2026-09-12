@@ -78,6 +78,7 @@
 
 ### 🔴 上游 workaround
 
+* [ ] **切标签「整块闪一下」= 宿主行为，扩展侧抑制已到顶**（2026-09-12 查清）— 结论与全部读数见 [`docs/upstream-limits.md`](upstream-limits.md) 第 4 项。要点：① 隐藏期间宿主把保活 webview 的 iframe 撤成 300×150、激活后重设（对照实验：一个什么都不干的最小 webview 同样如此，页面侧贡献 0ms）；② 鼠标路径上「焦点离开」与「撤尺寸」**同帧**（0ms 空档），所以 `blur` / `panelActiveState` 驱动的「提前归空」不可能生效——本会话一度照这个思路实现过，副作用是「点一下标签就闪一次」，已拆（`5fee083`）；③ 折叠期只能画那 300×150，已改为**纯背景**（`visibility: hidden` + `opacity: 0`；opacity 必须，否则子元素的 `visibility: visible` 会翻回继承的 hidden，屏幕上残留「孤零零一个目录面板」）；④ 要彻底消除只剩 `retainContextWhenHidden: false` + 跨重建状态快照（撤销历史快照实现见 `858518a`，曾被 revert，需要时捡回）
 * [ ] **`cellClickFixPlugin`**（~130 行，[editor.ts:236-363](../webview/editor.ts#L236)）— `filterTransaction` + `appendTransaction` + `requestAnimationFrame` 多层拦截，对抗 Crepe 表格单击行为不稳定。**需等 Milkdown 上游修复后移除。**
 * [ ] **vendor latex feature 上游同步**（2026-09-08 新增，`webview/vendor/latexFeature.ts`）— 升级 `@milkdown/crepe` 时需按文件头「§上游对照」逐节 diff 上游 `src/feature/latex/*`；若上游 latex feature 改为惰性加载 katex，可移除本 vendor 与 esbuild.mjs 的 katex-stub-for-crepe 插件
 * [ ] **表格 `<br>` 往返闭环（四层）**（2026-09-08 过度设计审计 P11 登记）— `convertTableBrForDisplay`（加载转换 `src/utils/contentTransform.ts`）+ `withTableBreakHandler`（序列化 handler）+ `cleanTableBreaks` + `preserveTableBreakStyle`（`webview/utils/markdownSerializer.ts`），四层全部绕上游 [Milkdown#2463](https://github.com/Milkdown/milkdown/issues/2463)（remark-gfm 丢弃表格内 `<br>`）。**上游修复后整链移除**；关联回归测试 `webview/__tests__/tableBrRoundtrip.test.ts`、`tableSoftBreak.test.ts` 随链退役

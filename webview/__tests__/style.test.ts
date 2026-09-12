@@ -317,4 +317,14 @@ describe("WebView 样式", () => {
         // 反面：不允许再出现「失焦/失活即归空」——那会让点侧边栏、点当前标签都闪一下（回归实测）
         expect(styleCss).not.toContain("data-epytor-content-blank");
     });
+
+    it("标题折叠按钮 应该 悬挑在正文列外（回归：按常规占位会把所有 H 标题右推 26px，看着像缩进）", () => {
+        const body = stripComments(headingCss).match(/\.heading-fold-gutter\s*\{([^}]*)\}/)?.[1] ?? "";
+        expect(body).not.toBe("");
+        // 负 margin + 等宽：按钮整体挂到正文左缘之外
+        expect(body).toMatch(/margin-left:\s*-\d+px/);
+        expect(body).toMatch(/width:\s*\d+px/);
+        // 反面：不能再留右外边距（那正是把标题文字推右的元凶）
+        expect(body).not.toMatch(/margin-right:\s*[1-9]/);
+    });
 });

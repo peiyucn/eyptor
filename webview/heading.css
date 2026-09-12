@@ -1,10 +1,17 @@
 /* 标题折叠 + 吸顶（全部使用 --vscode-* 变量） */
 
 /* ── 折叠 gutter ─────────────────────────────────────── */
+/* 折叠按钮挂在正文列**外面**（负 margin + 固定宽度）：
+   它是标题的第一个子元素，若按常规占位会把标题文字整体右推 26px，
+   于是所有 H 标题都比正文缩进一格（用户反馈「看着不舒服」）。
+   悬挑到左侧内边距里之后，标题文字与正文左缘严格对齐，
+   而按钮落在 `#editor` 的 48px 左内边距内，不会被裁切。 */
 .heading-fold-gutter {
     display: inline-flex;
     align-items: center;
-    margin-right: 6px;
+    justify-content: flex-end;
+    width: 26px;
+    margin-left: -26px;
     opacity: 0;
     transition: opacity 0.15s ease;
     vertical-align: middle;
