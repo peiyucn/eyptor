@@ -1,5 +1,5 @@
 {
-  "customEditor.displayName": "所见即所得 Markdown 编辑器",
+  "customEditor.displayName": "EPYTOR",
   "config.group.images": "epytor › 图片",
   "command.switchToTextEditor.title": "EPYTOR OFF",
   "command.switchToPreview.title": "EPYTOR ON",
