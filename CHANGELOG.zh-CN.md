@@ -31,6 +31,7 @@
 * **引用块与表格单元格**：上下留白相等，且等于全文的块间距
 * **源码里的软换行不再多出一行**：两行文字就是两行，中间不再凭空多出一个空行
 * **标题折叠按钮移到正文列外**：各级标题与正文左缘严格对齐，按钮悬在左侧留白里、悬停标题时淡入
+* **目录跟随阅读位置**：滚动时目录高亮当前章节并自动滚到可视区（判据与吸顶条同源：最后一个划过顶栏的标题，因此只随阅读单调前进，不会在两节交界处来回跳）；左侧空白够用时自动出现，不够用时把正文推开、不遮住文字
 * **失败不再静默**：图片上传、图片重命名、保存与切换失败都会说明原因；中文界面下若干仍显示英文的提示已翻译
 * **设置面板分组**：*epytor*（编辑器）与 *epytor › 图片*；**`epytor.editorMaxWidth` / `epytor.codeBlockMaxHeight` 改完立即生效**，不必重开标签页
 * **图床设置合并为 `epytor.imageServer` 对象**（`url` / `fieldName` / `extraParams` / `responsePath`），`extraParams` 改为真正的 JSON 对象。建议迁移：`epytor.imageServerUrl`、`imageServerFieldName`、`imageServerExtraParams`、`imageServerResponsePath` 仍可用（作为兜底），但已标记弃用

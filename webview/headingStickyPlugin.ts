@@ -17,7 +17,7 @@ import { t } from "./i18n";
 import { headingFoldPluginKey, type HeadingFoldMeta } from "./headingFoldPlugin";
 import { shouldSkipViewportWork } from "./utils/viewportLedger";
 import { buildHeadingIndex, type HeadingIndexEntry } from "./utils/headingFold";
-import { computeStickyRows, STICKY_MAX_ROWS, STICKY_ROW_HEIGHT_PX } from "./utils/headingSticky";
+import { computeStickyRows, currentHeadingIndex, STICKY_MAX_ROWS, STICKY_ROW_HEIGHT_PX } from "./utils/headingSticky";
 import { getUserInteractionEpoch } from "./utils/userInteraction";
 
 /** 隐藏吸顶条直到用户下一次交互（TOC 跳转用；插件实例挂载时赋值） */
@@ -308,6 +308,20 @@ export const headingStickyPlugin = $prose(() =>
 
             const updateSticky = () => {
                 rafId = null;
+                const topbarBottom = getTopbarBottom();
+                // 当前章节（TOC 高亮跟随）先发布：判据是「最后一个划过吸顶线的标题」，
+                // 与吸顶行的推挤过程无关，因此不会在两节交替时跳回父章节再跳回来。
+                // 注意要在抑制判定**之前**发布——抑制只针对吸顶条本身，目录高亮仍应跟着滚动走。
+                if (cacheDirty) { rebuildCache(); }
+                if (cachedHeadings.length > 0) {
+                    const scrollY = window.scrollY;
+                    const activeIndex = currentHeadingIndex(
+                        cachedHeadings.map((h) => ({ depth: h.depth, top: h.docTop - scrollY, sectionBottom: 0 })),
+                        topbarBottom,
+                    );
+                    publishActiveHeading(activeIndex >= 0 ? cachedHeadings[activeIndex].pos : null);
+                }
+
                 if (suppressSticky) {
                     // 用户下一次交互（wheel/键盘/滚动条 mousedown）后自动解除
                     if (suppressEpoch !== null && getUserInteractionEpoch() !== suppressEpoch) {
@@ -319,8 +333,6 @@ export const headingStickyPlugin = $prose(() =>
                     }
                 }
 
-                const topbarBottom = getTopbarBottom();
-                if (cacheDirty) rebuildCache();
                 if (cachedHeadings.length === 0) {
                     hideSticky();
                     return;
@@ -339,14 +351,11 @@ export const headingStickyPlugin = $prose(() =>
                     maxStickyRows(),
                 );
                 if (rows.length === 0) {
-                    publishActiveHeading(null);
                     hideSticky();
                     return;
                 }
 
                 const innermost = cachedHeadings[rows[rows.length - 1]];
-                // 当前章节 = 吸顶条最内层那一行；TOC 高亮跟随复用同一判定
-                publishActiveHeading(innermost.pos);
                 const rect = innermost.el.getBoundingClientRect();
                 sticky.hidden = false;
                 sticky.style.display = "";

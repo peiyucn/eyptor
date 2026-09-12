@@ -48,3 +48,25 @@ export function computeStickyRows(
     }
     return rows;
 }
+
+/**
+ * 「当前章节」的标题下标：**最后一个顶边已划过吸顶线的标题**（无则 -1）。
+ *
+ * 为什么不复用 `computeStickyRows` 的最内层：吸顶行栈在**两节交替**的那几帧会退化成父级
+ * ——当前章节被下一节推挤出局、而下一节的标题还没接管，此时最内层是它的父标题（位置在
+ * 上面、早已过去）。TOC 高亮跟着它就会「跳回上一个章节再跳回来」，表现为抖动（手测反馈
+ * 2026-09-12：「toc 高亮跟随，会出现往上面已经过去的章节高亮抖动」）。
+ *
+ * 本判据只看「标题顶边是否已划过吸顶线」，与推挤过程无关，因此随滚动**单调前进**
+ * （标题按文档顺序传入，扫描在第一个未划过的标题处提前结束）。
+ */
+export function currentHeadingIndex(
+    headings: StickyHeadingRect[],
+    topbarBottom: number,
+): number {
+    let hit = -1;
+    for (let i = 0; i < headings.length; i++) {
+        if (headings[i].top < topbarBottom) { hit = i; } else { break; }
+    }
+    return hit;
+}
