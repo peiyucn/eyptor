@@ -59,13 +59,10 @@ The Settings UI groups them into **epytor** (editor) and **epytor › Images**. 
 
 ## Known Limitations
 
-* **Very large documents (10k+ lines)**: editing stays smooth up to ~3000 lines; beyond that the editor engine's document-tree cost grows noticeably — use the VS Code text editor (source mode) for such files
-* If you switch tabs within ~400 ms of your last keystroke, the save triggered by that switch can miss your last few characters (the copy the editor hands back is pushed only after you stop typing). They are written by the next edit or save — close the window before that and they are lost
+* **Very large documents**: how far the WYSIWYG editor keeps up depends on your machine (CPU, memory and how complex the document structure is) — when a document starts to feel slow, use the VS Code text editor (source mode)
 * An empty task item (`- [ ] ` with nothing after the marker) is not recognised as a task item: it shows as a normal bullet plus the literal text `[ ]`
 * Raw HTML is kept in your file but not rendered — you see the tags themselves; other non-GFM extensions (`==highlight==`, definition lists, `> [!NOTE]` callouts…) are plain text too
 * Paragraph and heading text alignment is not offered (Markdown has no syntax for it)
-* The `a)` / `i.` numbering and the ■ / ◆ bullets are an **editor display effect**: your file keeps `1.` numbering and its own bullet markers
-* ⚠️ Platform: switching back to the Markdown tab can briefly show the editor area blank — that frame belongs to VS Code's webview host rather than the editor (a do-nothing webview shows the same), and nothing is lost because the editor is never rebuilt (undo history, scroll position and folded headings stay)
 
 > Upstream issues we are tracking (not fixable on our side) are listed in [docs/upstream-limits.md](docs/upstream-limits.md).
 
