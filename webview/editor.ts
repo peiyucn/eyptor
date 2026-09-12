@@ -51,6 +51,7 @@ import { languages as allCodeLanguages } from "@codemirror/language-data";
 import { onThemeChange, isDarkTheme } from "./utils/themeBus";
 import { changeRangeInFinalDoc, normalizeListSpread } from "./utils/listSpread";
 import { listBackspacePlugin } from "./utils/listBackspace";
+import { listMarkerPlugin } from "./listMarkerPlugin";
 import {
     beginClick,
     consumeCellClickTarget,
@@ -609,6 +610,7 @@ export async function createEditor(
         .use(softBreakKeymap)       // Shift+Enter 软换行（表格内允许；见文件头回归说明）
         .use(cellClickFixPlugin)    // 表格单击→光标定位，拖拽→多选
         .use(listBackspacePlugin)   // 列表项行首 Backspace 的落点（见 utils/listBackspace.ts）
+        .use(listMarkerPlugin)      // Word 式多级列表标记（见 listMarkers.css 与同名 spec）
         .use(listSpreadNormalizePlugin); // 保留：列表 spread 规范化
 
     _editor = await crepe.create();

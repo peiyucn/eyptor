@@ -8,7 +8,7 @@
 | # | 限制 | 来源 | 追踪 |
 |---|------|------|------|
 | 1 | 行内样式（粗体、斜体、行内代码等）尾部无后续内容时无法退出 | Milkdown | [Milkdown#2413](https://github.com/Milkdown/milkdown/issues/2413) |
-| 2 | 有序列表多层级编号均为十进制（不区分 a.b.c. / i.ii.iii.） | Milkdown 内核 | [Milkdown#2415](https://github.com/Milkdown/milkdown/issues/2415) |
+| 2 | 有序列表多层级编号均为十进制（不区分 a.b.c. / i.ii.iii.） | Milkdown 内核 | [Milkdown#2415](https://github.com/Milkdown/milkdown/issues/2415) — **epytor 已有显示层 workaround（2026-09-12）**：`webview/listMarkerPlugin.ts` + `webview/listMarkers.css` 按层级重绘标记（`1.`/`a)`/`i.` 与 ●/■/◆ 三档循环，见 `docs/specs/2026-09-12-word-style-multilevel-markers.md`）。**升级 `@milkdown/*` 时必须复验**：workaround 依赖 Crepe 的 label 结构（`.label.ordered` / `.label.bullet` / `.label.checked`）与「装饰属性 + CSS 自定义属性」这一路径；若上游改为透出层级（例如 `listItemBlockConfig.renderLabel` 收到 depth），应改用它并删除本 workaround |
 | 3 | 表格单击选中整格暂时关闭 | Crepe | [Milkdown#2414](https://github.com/Milkdown/milkdown/issues/2414) |
 | 4 | **保活 webview 切标签时「整块闪一下」**：隐藏期间宿主把 webview 的 iframe 撤成规范默认 300×150（实测对照：一个什么都不干的最小 webview 也一样），激活后再重设回真实尺寸；那一帧里受影响的编辑区只有 `编辑区左缘 + 300px` 属于我们，其余是宿主底板 | VS Code webview 宿主 | [vscode#113188](https://github.com/microsoft/vscode/issues/113188)（ghost renders，2020 已关闭为 duplicate） |
 | 5 | **复选框后不写内容的空任务项识别不了复选框**：`- [ ] `（标记后无内容）被解析成普通列表项，`[ ]` 留成正文文本（显示为「• [ ]」）；退格并项时这段文本还会漏进上一项 | Milkdown / remark 任务列表解析 | 待提 issue（`webview/utils/listBackspace.ts` 只按「实质为空」修正退格语义，渲染仍是上游行为） |

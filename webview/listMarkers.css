@@ -1,0 +1,59 @@
+/* ─── Word 式多级列表标记（只改显示，源码不变）─────────────────────────────
+   见 docs/specs/2026-09-12-word-style-multilevel-markers.md。
+
+   层级、编号与形状都由 listMarkerPlugin 算好，以**自定义属性**挂在列表项上：
+     · `--epytor-marker`                       有序列表的显示文本（`1.` / `a)` / `i.`）
+     · `--epytor-marker-size/radius/rotate`    无序标记的形状
+   选自定义属性而不是「层级 class + 层级选择器」：后者只能表达"某层及其后代"，
+   第 4 层回绕时祖先层的规则会误命中它（实测第 4 层仍画第 3 层的 ◆）；
+   自定义属性由最近的祖先决定，天然只作用于该项本身。
+
+   本文件只负责画：
+     · 有序：藏掉 Milkdown 算出的编号文本（保留盒尺寸），用 ::before 画我们的文本；
+     · 无序：藏掉 Milkdown 的图标 SVG，用 ::before 画 CSS 图形。
+   标记盒仍沿用 .label-wrapper 的既有尺寸，因此行内文字左缘不变。 */
+
+/* 编号文本与图标：保留占位、只藏观感 */
+.milkdown .ProseMirror .label-wrapper > .label.ordered {
+    color: transparent;
+}
+
+.milkdown .ProseMirror .label-wrapper > .label.bullet > svg {
+    visibility: hidden;
+}
+
+.milkdown .ProseMirror .label-wrapper > .label {
+    position: relative;
+}
+
+.milkdown .ProseMirror .label-wrapper > .label::before {
+    position: absolute;
+    display: block;
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+/* ── 有序：文本来自 --epytor-marker ── */
+.milkdown .ProseMirror .label-wrapper > .label.ordered::before {
+    content: var(--epytor-marker, "");
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9em;
+    font-variant-numeric: tabular-nums;
+    color: var(--vscode-editor-foreground, #cccccc);
+    white-space: nowrap;
+}
+
+/* ── 无序：形状来自 --epytor-marker-* ── */
+.milkdown .ProseMirror .label-wrapper > .label.bullet::before {
+    content: "";
+    top: 50%;
+    left: 50%;
+    width: var(--epytor-marker-size, 6px);
+    height: var(--epytor-marker-size, 6px);
+    border-radius: var(--epytor-marker-radius, 50%);
+    transform: translate(-50%, -50%) rotate(var(--epytor-marker-rotate, 0deg));
+    background: var(--vscode-editor-foreground, #cccccc);
+}

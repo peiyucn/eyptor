@@ -12,6 +12,7 @@ import "@milkdown/crepe/theme/common/link-tooltip.css";
 // 是 webview.css 膨胀主因；KaTeX 样式随首个数学渲染按需加载，见 vendor/latexFeature.ts）
 import "./latex.css";
 import "./style.css"; // 必须在 Crepe CSS 之后加载，用 VSCode 变量覆盖 Crepe 主题
+import "./listMarkers.css"; // Word 式多级列表标记（依赖 style.css 里的尺度变量）
 import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING, OPEN_URL_SCHEMES, extractUrlScheme } from "../shared/constants";
 import { resolveTableWrapVars } from "../shared/tableWrap";
 import type { ToWebviewMessage } from "../shared/messages";
