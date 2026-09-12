@@ -1,7 +1,7 @@
 import './toc.css';
 import type { EditorView } from "@milkdown/kit/prose/view";
 import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../../../shared/constants";
-import { hideStickyUntilNextInteraction } from "../../headingStickyPlugin";
+import { hideStickyUntilNextInteraction, onActiveHeadingChange, getActiveHeadingPos } from "../../headingStickyPlugin";
 import { applyTooltip } from "@/ui/tooltip";
 import { t } from "@/i18n";
 import { IconPin, IconChevronRight, IconChevronDown, IconChevronsUp, IconChevronsDown } from "@/ui/icons";
@@ -37,6 +37,22 @@ export function assignFoldKeys<T extends { level: number; text: string }>(headin
 const TOC_WIDTH = 200;
 const TOC_MIN_WIDTH = 200;
 const TOC_MAX_WIDTH = 500;
+
+/**
+ * 非固定态自动展开所需的左侧空白（面板宽度的比例）。
+ *
+ * 回归（用户反馈 2026-09-12）：「自动出现的时机是判定宽度吧？目前好像宽度设置的比较宽，
+ * 可以窄一点，让非固定 toc 尽早能自动显示出来」——原判据要求左侧空白 ≥ 整个面板宽度，
+ * 窗口稍窄就永远不出现。改为按比例放行；同时自动展开时面板**收窄到空白之内**，
+ * 所以放宽阈值不会遮住正文。
+ */
+const TOC_AUTO_SHOW_MIN_MARGIN_RATIO = 0.55;
+
+/** 纯判据（可直测）：左侧空白是否够自动展开。
+ *  取整后再比：`200 × 0.55` 在浮点下是 110.00000000000001，会把「刚好 110px」判成不够。 */
+export function shouldAutoShowToc(leftSpace: number, panelWidth: number): boolean {
+    return leftSpace >= Math.floor(panelWidth * TOC_AUTO_SHOW_MIN_MARGIN_RATIO);
+}
 
 /** 从 EditorView 提取所有 heading 节点（共享索引，口径与折叠/吸顶一致；TOC 列出全部深度） */
 function getHeadings(view: EditorView): HeadingEntry[] {
@@ -87,6 +103,27 @@ export function initToc(getEditorView: () => EditorView | null): {
 
     /** TOC 列表项 → 对应标题 DOM 元素（refresh 时填充，点击跳转用；P9） */
     const headingEls = new WeakMap<HTMLElement, HTMLElement>();
+
+    /** 标题位置 → 列表项（高亮跟随用；refresh 时重建） */
+    const itemByPos = new Map<number, HTMLElement>();
+
+    /**
+     * 高亮当前章节并把它滚进可视区（跟随吸顶条的「我们现在在哪」）。
+     *
+     * 只动列表自身的 scrollTop（不用 scrollIntoView：那会连带滚动窗口，把正文顶跑）。
+     */
+    function applyActiveHeading(pos: number | null): void {
+        for (const [itemPos, el] of itemByPos) {
+            el.classList.toggle("toc-item--active", pos !== null && itemPos === pos);
+        }
+        if (pos === null) { return; }
+        const item = itemByPos.get(pos);
+        if (!item) { return; }
+        const listRect = list.getBoundingClientRect();
+        const itemRect = item.getBoundingClientRect();
+        if (itemRect.top >= listRect.top && itemRect.bottom <= listRect.bottom) { return; }
+        list.scrollTop += itemRect.top - listRect.top - (listRect.height - itemRect.height) / 2;
+    }
 
     const header = document.createElement("div");
     header.className = "toc-header";
@@ -215,6 +252,7 @@ export function initToc(getEditorView: () => EditorView | null): {
         if (!view) return;
         const headings = getHeadings(view);
         list.innerHTML = "";
+        itemByPos.clear();
         // headingEls 为 WeakMap：列表重建后旧项自动可回收，无需清空
         if (headings.length === 0) {
             const empty = document.createElement("div");
@@ -286,8 +324,10 @@ export function initToc(getEditorView: () => EditorView | null): {
 
             item.appendChild(label);
             list.appendChild(item);
+            itemByPos.set(h.pos, item);
         });
         updateCollapseBtn();
+        applyActiveHeading(getActiveHeadingPos());
     }
 
     function outsideClickHandler(e: MouseEvent): void {
@@ -311,7 +351,7 @@ export function initToc(getEditorView: () => EditorView | null): {
     }
 
     function updateTabPos(): void {
-        tabEl.style.left = isOpen ? `${panelWidth}px` : '0px';
+        tabEl.style.left = isOpen ? `${renderedWidth()}px` : '0px';
     }
 
     function close(): void {
@@ -328,7 +368,7 @@ export function initToc(getEditorView: () => EditorView | null): {
         isAutoShown = auto;
         panel.classList.add("toc-panel--open");
         refresh();
-        updateTabPos();
+        applyPanelWidth();
         syncBodyPadding();
         if (!auto && !isPinned) {
             // 手动打开才注册外部点击关闭（自动展开时或钉住时 TOC 持久显示）
@@ -384,12 +424,25 @@ export function initToc(getEditorView: () => EditorView | null): {
     });
 
     // ── 自动展开检测 ──────────────────────────────────────
-    function hasEnoughSpace(): boolean {
+    /** 正文列左侧的可用空白（px） */
+    function availableLeftSpace(): number {
         const editorEl = document.getElementById("editor");
-        if (!editorEl) {
-            return false;
-        }
-        return editorEl.getBoundingClientRect().left >= panelWidth;
+        return editorEl ? editorEl.getBoundingClientRect().left : 0;
+    }
+
+    function hasEnoughSpace(): boolean {
+        return shouldAutoShowToc(availableLeftSpace(), panelWidth);
+    }
+
+    /** 面板实际渲染宽度：自动展开时收窄到左侧空白内（不遮正文），其余用用户设定宽度 */
+    function renderedWidth(): number {
+        if (!isAutoShown) { return panelWidth; }
+        return Math.max(0, Math.min(panelWidth, Math.floor(availableLeftSpace())));
+    }
+
+    function applyPanelWidth(): void {
+        panel.style.width = `${renderedWidth()}px`;
+        updateTabPos();
     }
 
     function checkAutoShow(): void {
@@ -397,11 +450,16 @@ export function initToc(getEditorView: () => EditorView | null): {
         // 宿主折叠态（切到非 webview 标签）视口是假的 300×150：此刻的空间判定
         // 会把目录误判为「放不下」而收起，切回来再展开——用户看到左侧闪动
         if (shouldSkipViewportWork()) return;
+        if (!hasEnoughSpace() && isAutoShown) {
+            close();
+            return;
+        }
         if (hasEnoughSpace() && !isOpen) {
             openPanel(true);
-        } else if (!hasEnoughSpace() && isAutoShown) {
-            close();
+            return;
         }
+        // 已展开：窗口变化后重新贴合可用空白
+        if (isOpen) { applyPanelWidth(); }
     }
 
     // 面板位置（top/height）由 toc.css 静态声明（与 topbar 高度 36px 对齐）——
@@ -414,9 +472,13 @@ export function initToc(getEditorView: () => EditorView | null): {
             openPanel(true);
         }
         checkAutoShow();
+        // 首帧同步一次当前章节（订阅只覆盖"变化"）
+        applyActiveHeading(getActiveHeadingPos());
     });
 
     window.addEventListener("resize", checkAutoShow);
+    // 当前章节跟随（判定与吸顶条同源：吸顶条最内层那一行）
+    onActiveHeadingChange(applyActiveHeading);
 
     function show(): void {
         panel.style.visibility = 'visible';

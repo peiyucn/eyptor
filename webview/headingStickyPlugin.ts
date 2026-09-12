@@ -24,12 +24,39 @@ import { getUserInteractionEpoch } from "./utils/userInteraction";
 let _hideStickyUntilNextInteraction: (() => void) | null = null;
 
 /**
+ * 当前章节标题（= 吸顶条最内层那一行）的**文档位置**，`null` = 还没滚到任何标题。
+ *
+ * TOC 高亮跟随复用这个判定：吸顶条已经在算「我们现在在哪」，再让目录自己算一套
+ * 必然会出现两套口径不一致（用户反馈：「既然现在有吸顶，说明你知道我们在哪，
+ * 那 TOC 最好也跟着高亮并一起滚动」）。
+ */
+let _activeHeadingPos: number | null = null;
+const _activeHeadingListeners = new Set<(pos: number | null) => void>();
+
+/** 订阅当前章节标题变化；返回取消订阅函数 */
+export function onActiveHeadingChange(listener: (pos: number | null) => void): () => void {
+    _activeHeadingListeners.add(listener);
+    return () => { _activeHeadingListeners.delete(listener); };
+}
+
+/** 当前章节标题的文档位置（TOC 首次同步用） */
+export function getActiveHeadingPos(): number | null {
+    return _activeHeadingPos;
+}
+
+/** 发布当前章节标题（仅在真正变化时通知订阅者） */
+function publishActiveHeading(pos: number | null): void {
+    if (pos === _activeHeadingPos) { return; }
+    _activeHeadingPos = pos;
+    for (const listener of _activeHeadingListeners) { listener(pos); }
+}
+
+/**
  * TOC 点击跳转后调用：隐藏吸顶条，直到用户下一次交互为止。
  * 回归：用户反馈「点击 TOC 后上一个章节的吸顶条还在」——此前抑制只有 400ms 定时解除，
  * 用户还没滚动就恢复了；改为按交互纪元判定，且跳转落点让目标标题完整可见。
  */
-export function hideStickyUntilNextInteraction(): void {
-    _hideStickyUntilNextInteraction?.();
+export function hideStickyUntilNextInteraction(): void {    _hideStickyUntilNextInteraction?.();
 }
 
 function getTopbarBottom(): number {
@@ -312,11 +339,14 @@ export const headingStickyPlugin = $prose(() =>
                     maxStickyRows(),
                 );
                 if (rows.length === 0) {
+                    publishActiveHeading(null);
                     hideSticky();
                     return;
                 }
 
                 const innermost = cachedHeadings[rows[rows.length - 1]];
+                // 当前章节 = 吸顶条最内层那一行；TOC 高亮跟随复用同一判定
+                publishActiveHeading(innermost.pos);
                 const rect = innermost.el.getBoundingClientRect();
                 sticky.hidden = false;
                 sticky.style.display = "";

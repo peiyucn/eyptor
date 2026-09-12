@@ -154,6 +154,14 @@
     background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.15));
 }
 
+/* 当前章节（判定与吸顶条同源）：VS Code 列表选中色 + 左侧强调边 */
+.toc-item--active,
+.toc-item--active:hover {
+    background: var(--vscode-list-activeSelectionBackground, rgba(128, 128, 128, 0.25));
+    color: var(--vscode-list-activeSelectionForeground, var(--vscode-foreground));
+    box-shadow: inset 2px 0 0 0 var(--vscode-focusBorder, transparent);
+}
+
 .toc-item--h1 { font-weight: 600; }
 /* h2-h6 文字大小统一，不做区别 */
 
