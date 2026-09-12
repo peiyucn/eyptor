@@ -13,9 +13,9 @@
 | 🟡 minor | 39 |
 | ⚪ nit | 15 |
 
-- **交叉验证**：保存拉取单槽竞态、openUrl 无白名单、themeBus 订阅泄漏 3 条被两个独立审计域分别命中。
-- **现场复核**：`epytor.codeBlockMaxHeight` 死配置（CSS 变量零消费方）与 CHANGELOG.zh-CN.md 未提交 diff 均已由主 agent 独立 grep/git 复核确认。
-- **系统性根因**：① 保存/面板/webview 会话无显式状态机，竞态治理靠散点布尔 + 裸 setTimeout；② 失败路径静默（多处无 catch 空回调）；③ 死代码/魔法数字/文档漂移以「批次清偿」方式治理，无机制性兜底。
+* **交叉验证**：保存拉取单槽竞态、openUrl 无白名单、themeBus 订阅泄漏 3 条被两个独立审计域分别命中。
+* **现场复核**：`epytor.codeBlockMaxHeight` 死配置（CSS 变量零消费方）与 CHANGELOG.zh-CN.md 未提交 diff 均已由主 agent 独立 grep/git 复核确认。
+* **系统性根因**：① 保存/面板/webview 会话无显式状态机，竞态治理靠散点布尔 + 裸 setTimeout；② 失败路径静默（多处无 catch 空回调）；③ 死代码/魔法数字/文档漂移以「批次清偿」方式治理，无机制性兜底。
 
 ## 修复波次计划
 
@@ -26,7 +26,7 @@
 | ③ 抽象/分层 | 拆模块 + 提抽象 | B7-B8、D1-D2、E1-E3 |
 | ④ 清理收尾 | 死代码/魔法数字/i18n/文档 | 其余 minor/nit |
 
----
+***
 
 ## 审计域 A：Extension 核心（状态机 / 竞态 / 资源生命周期）
 
@@ -50,7 +50,7 @@
 
 ### A 域亮点
 
-- 拉取式保存单点拉取 + 3s 超时兜底 + 面板销毁时挂起请求兜底；语义常量集中命名（*_MS）；fs.watch 绕过 Extension Host 写盘不可见 + 200ms 防抖 + 自写抑制；切换文本编辑器前强制 flush；图片上传失败双通道反馈；纯函数分层可单测；CSP nonce + localResourceRoots 收敛。
+* 拉取式保存单点拉取 + 3s 超时兜底 + 面板销毁时挂起请求兜底；语义常量集中命名（*_MS）；fs.watch 绕过 Extension Host 写盘不可见 + 200ms 防抖 + 自写抑制；切换文本编辑器前强制 flush；图片上传失败双通道反馈；纯函数分层可单测；CSP nonce + localResourceRoots 收敛。
 
 ## 审计域 B：WebView 核心与消息层（分层 / 抽象 / 全局状态）
 
@@ -74,7 +74,7 @@
 
 ### B 域亮点
 
-- 33 处 postMessage 全收敛于 messaging.ts（唯一通信层契约）；脏标记 300ms/TOC 800ms 分层防抖 + 标题签名跳过重建（有实测依据注释）；frontmatterPanel 状态封装范例（disposed+防抖+flushSave）；滚动定位的用户交互保护（_userInteracted）；tooltip 横向定位抽纯函数可测；cellClickFixPlugin 上游 workaround 台账登记。
+* 33 处 postMessage 全收敛于 messaging.ts（唯一通信层契约）；脏标记 300ms/TOC 800ms 分层防抖 + 标题签名跳过重建（有实测依据注释）；frontmatterPanel 状态封装范例（disposed+防抖+flushSave）；滚动定位的用户交互保护（_userInteracted）；tooltip 横向定位抽纯函数可测；cellClickFixPlugin 上游 workaround 台账登记。
 
 ## 审计域 C：组件层（重复代码 / 单一职责 / 鲁棒性 / 死代码）
 
@@ -88,7 +88,7 @@
 | C6 | 🟠 | findBar/index.ts L191-194/L242-249 | close() 不清防抖 timer：关闭后高亮与滚动「复活」 | clearTimeout + search() 入口 visible 守卫 |
 | C7 | 🟠 | toc/index.ts L130-135/L175-182 | 折叠状态以文档 pos 为键且跨文档持久化：切换文件/编辑后错误折叠、跳转错位 | 稳定标识（签名/序号）作键；revert/init 时重建或清空 |
 | C8 | 🟠 | pathComplete.ts L13-18/L110-159/L186-220 | pathComplete 与 imgPathComplete 结构性重复仍是主体（下拉渲染/键盘导航逐行镜像、常量三对双份），已产生行为不对称 | 抽 ui/pathCompleteCore 共享模块，参数化差异 |
-| C9 | 🟡 | imageView/index.ts L296-312/L343-350/L654-663 | NodeView.destroy() 清理不完整：重试 timer/拖拽 window 监听/lightbox keydown 不释放 | destroy 内 clearTimeout + 移除监听 + 复用 close 清理 |
+| C9  | 🟡 | imageView/index.ts L296-312/L343-350/L654-663 | NodeView\.destroy() 清理不完整：重试 timer/拖拽 window 监听/lightbox keydown 不释放       | destroy 内 clearTimeout + 移除监听 + 复用 close 清理                |
 | C10 | 🟡 | imageView/index.ts L635/L638-642 | image-toolbar--below 类无任何 CSS 定义且不对称残留 | 删除或补 CSS/对称移除 |
 | C11 | 🟡 | mermaidZoom/index.ts L12/L30/L76 | dataset.mermaidZoomKey 与 _seq 只写不读，纯死代码 | 删除；防重复挂载改查已有 bar |
 | C12 | 🟡 | index.ts L190-225/L453-459 | handleGetProjectImages 死代码；内联版丢失 10s 超时兜底，Extension 不响应时永久 Loading | 复用或删除；组件侧竞速超时 |
@@ -98,7 +98,7 @@
 
 ### C 域亮点
 
-- topBarOverflow 防御最强（measure 期间 disconnect observer 防自触发循环、rafId 去重、dispose 全释放）；frontmatterPanel 生命周期契约（含回归测试）；startToolbarInlineEdit 抽象方向正确；findBar 可访问性（CSS Custom Highlight API 不污染 DOM）；tableGridPicker 单例管理规范；toc 的 clamp/拖拽阈值/钉住守卫。
+* topBarOverflow 防御最强（measure 期间 disconnect observer 防自触发循环、rafId 去重、dispose 全释放）；frontmatterPanel 生命周期契约（含回归测试）；startToolbarInlineEdit 抽象方向正确；findBar 可访问性（CSS Custom Highlight API 不污染 DOM）；tableGridPicker 单例管理规范；toc 的 clamp/拖拽阈值/钉住守卫。
 
 ## 审计域 D：插件与工具层（性能 / 死代码 / 魔法数字 / 边界）
 
@@ -115,13 +115,13 @@
 | D9 | 🟡 | utils/mermaidZoom.ts L4 | MERMAID_ZOOM_MIN=0.2 与 spec/AGENTS/roadmap 的 0.4 漂移（需确认最终区间） | 统一口径或改代码 |
 | D10 | 🟡 | shared/tableWrap.ts L4 | TableWrapMode 联合类型死导出，参数退化为宽 string | 收窄签名或在边界白名单校验 |
 | D11 | 🟡 | utils/slug.ts L15-24 | slugify 生产死代码（唯一引用是自身测试） | 删除或恢复用途 |
-| D12 | ⚪ | utils/topBarOverflow.ts L10 | TopBarMeasuredItem.isDivider 只写不读 | 删除字段或让 computeOverflow 消费 |
+| D12 | ⚪  | utils/topBarOverflow\.ts L10               | TopBarMeasuredItem.isDivider 只写不读                            | 删除字段或让 computeOverflow 消费              |
 | D13 | ⚪ | headingStickyPlugin.ts L190-193 | 缓存重建防抖 300 裸魔法数字 | CACHE_REBUILD_DEBOUNCE_MS |
 | D14 | ⚪ | utils/tableWrap.ts L11 | 「三档映射」注释与已简化两档矛盾 | 修正注释 |
 
 ### D 域亮点
 
-- headingFold 单遍 O(n) 栈式算法 + 签名缓存 + bench 文件；headingSticky 文档坐标缓存 + rAF 合并 + 完整 destroy；minimalDiff 有界 LCS（Uint16Array + 4 万上限 + 唯一锚点分段）；cleanTextHandler 与官方序列化器逐行一致；vendor 虚拟光标 [epytor] 标记治理规范；utils 全部无 DOM 依赖可 jsdom 单测。
+* headingFold 单遍 O(n) 栈式算法 + 签名缓存 + bench 文件；headingSticky 文档坐标缓存 + rAF 合并 + 完整 destroy；minimalDiff 有界 LCS（Uint16Array + 4 万上限 + 唯一锚点分段）；cleanTextHandler 与官方序列化器逐行一致；vendor 虚拟光标 [epytor] 标记治理规范；utils 全部无 DOM 依赖可 jsdom 单测。
 
 ## 审计域 E：安全与边界
 
@@ -139,7 +139,7 @@
 
 ### E 域亮点
 
-- CSP default-src 'none' + nonce（128 位熵）+ localResourceRoots 收敛；上传 30s 超时 + destroy + 失败清理；imageServerExtraParams 不进日志/面板；动态 UI 全 DOM API 构建（无 innerHTML 拼接）；pending 回调 map 均有超时清理与 settled 幂等；重命名防覆盖 + 非法字符过滤；消息协议单一权威来源。
+* CSP default-src 'none' + nonce（128 位熵）+ localResourceRoots 收敛；上传 30s 超时 + destroy + 失败清理；imageServerExtraParams 不进日志/面板；动态 UI 全 DOM API 构建（无 innerHTML 拼接）；pending 回调 map 均有超时清理与 settled 幂等；重命名防覆盖 + 非法字符过滤；消息协议单一权威来源。
 
 ## 审计域 F：文档对齐与测试质量
 
@@ -163,15 +163,15 @@
 
 ### F 域亮点
 
-- 双份 nls 26 键 100% 对称；14 项配置 13 项有完整使用链（README 设置表与 package.json 逐项一致）；CHANGELOG 1.2.0 双份完全对称且几乎每条有代码支撑；测试套件无 it.skip/真实等待；关键模块错误路径测试深度到位。
+* 双份 nls 26 键 100% 对称；14 项配置 13 项有完整使用链（README 设置表与 package.json 逐项一致）；CHANGELOG 1.2.0 双份完全对称且几乎每条有代码支撑；测试套件无 it.skip/真实等待；关键模块错误路径测试深度到位。
 
----
+***
 
 ## 附：与 tech-debt 的关系
 
-- 本记录中标注「已复核」的条目推翻或补充了 tech-debt 旧结论：F1 推翻「无死配置」、A6/B6 补充「类型安全未达成」、D1 补充 slug.ts 连带清理。
-- 修复完成后，已清偿条目按项目惯例移入 `docs/tech-debt.md` 已清偿区，未修条目登记待处理区。
-- 用户未跟踪的 `docs/specs/2026-09-06-typora-replication-assessment.md` 不属本审计范围，未读取未改动。
+* 本记录中标注「已复核」的条目推翻或补充了 tech-debt 旧结论：F1 推翻「无死配置」、A6/B6 补充「类型安全未达成」、D1 补充 slug.ts 连带清理。
+* 修复完成后，已清偿条目按项目惯例移入 `docs/tech-debt.md` 已清偿区，未修条目登记待处理区。
+* 用户未跟踪的 `docs/specs/2026-09-06-typora-replication-assessment.md` 不属本审计范围，未读取未改动。
 
 ## 修复进度（2026-09-08 起按波次推进）
 
@@ -194,7 +194,7 @@
 | B3 themeBus 订阅泄漏 | ✅ destroyEditor 统一销毁出口（退订+观察器断开） | `ae3618b` |
 | B4 消息处理器可重入 | ✅ init/revert 串行链 + 其余消息并行分发 | `de2f96c` |
 | B8 滚动定位三份复制 | ✅ scheduleDelayedScroll 状态机合一 | `13a7687` |
-| D3 findHeadingPos O(H×N) | ✅ view.posAtDOM DOM 反查 | `e9456cc` |
+| D3 findHeadingPos O(H×N)          | ✅ view\.posAtDOM DOM 反查                                                                             | `e9456cc` |
 | D4 纯选区事务触发重建 | ✅ update 仅 doc/折叠状态变化重建 | `e9456cc` |
 | D5 吸顶抑制无法解除 | ✅ 400ms 定时兜底解除 + destroy 清理 | `35f9a1a` |
 | A4 导航/切换抑制全局化 | ✅ ExpiryWindowMap 按文档时间戳窗口（含 6 测试）；保存态形式化由 A1/A2 结构化解法覆盖 | `8d72086` |
@@ -217,7 +217,7 @@
 | E7 openFile 路径越界 | ✅ isPathWithinBase 工作区边界（独立文件保持现状） | `8e81309` |
 | E6 imageLocalPath 越界 | ✅ 工作区级配置越界降级默认目录（用户级信任放行） | `c067365` |
 | B10 onMessage 无运行时校验 | ✅ 来源/形状/type 守卫 + 未知类型 debug 可见 | `e5f82d4` |
-| C9 NodeView.destroy 清理不完整 | ✅ 重试 timer/拖拽监听/lightbox keydown 全释放 | `d225305` |
+| C9 NodeView\.destroy 清理不完整        | ✅ 重试 timer/拖拽监听/lightbox keydown 全释放                                                                | `d225305` |
 | D6 折叠隐藏 O(N×F) | ✅ 区间排序合并 + 双指针单遍 | `a09f182` |
 | B14 滚动热路径无节流 | ✅ rAF 节流 + 无浮层零工作 | `9f801f1` |
 | F7 覆盖率底线未编码 | ✅ vitest.config per-file thresholds（CI 强制） | `9f801f1` |
