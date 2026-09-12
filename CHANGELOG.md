@@ -22,7 +22,6 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 ### Experience
 
 - **Switching tabs no longer rebuilds the editor** — undo/redo history, scroll position and folded headings survive tab switches because the editor is still there, not restored after a rebuild
-- **Switching back still blanks the editor area for a moment** — a VS Code platform behavior for kept-alive webviews (the host drops the content size while hidden and re-applies it on activation); not avoidable from an extension. See "Known limitations" in the README
 - **`.markdown` files get the same menu and `Ctrl/Cmd+Shift+M` shortcut as `.md`**
 - **List keyboard behavior follows the official defaults**: Backspace on an empty item deletes it, on a non-empty item merges it into the previous one, and numbering reflows automatically
 - **Auto save follows the built-in VS Code `files.autoSave`** (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`); `epytor.autoSave` and `epytor.autoSaveDelay` are gone

@@ -22,7 +22,6 @@
 ### 体验
 
 * **切换标签不再重建编辑器**：撤销/重做历史、滚动位置与折叠状态在切换标签期间全程保留——编辑器是「还在」，不是「重建后恢复」
-* **切回标签时仍会空白一下**：这是 VS Code 对保活 webview 的平台行为（隐藏期间宿主撤掉内容尺寸、激活后重设），扩展侧无法干预，详见 README「已知限制」
 * **`.markdown` 文件与 `.md` 一致**：同样的菜单与 `Ctrl/Cmd+Shift+M` 快捷键
 * **列表键盘行为对齐官方默认**：空项行首 Backspace 删除该项、非空项行首 Backspace 并入上一项，编号自动重排
 * **自动保存跟随 VS Code 内置 `files.autoSave`**（`off` / `afterDelay` / `onFocusChange` / `onWindowChange`）；`epytor.autoSave` 与 `epytor.autoSaveDelay` 已移除
