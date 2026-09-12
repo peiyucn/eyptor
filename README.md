@@ -1,6 +1,6 @@
 # 🦖EPYTOR
 
-[![Version](https://img.shields.io/github/package-json/v/peiyucn/epytor)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode)[![CI](https://img.shields.io/github/actions/workflow/status/peiyucn/epytor/ci.yml?branch=main)](https://github.com/peiyucn/epytor/actions/workflows/ci.yml)[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-epytor-blue)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode)[![License](https://img.shields.io/github/license/peiyucn/epytor)](https://github.com/peiyucn/epytor/blob/main/LICENSE)
+[![Version](https://img.shields.io/github/package-json/v/peiyucn/epytor?color=007ec6)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode)[![CI](https://img.shields.io/github/actions/workflow/status/peiyucn/epytor/ci.yml?branch=main&label=ci)](https://github.com/peiyucn/epytor/actions/workflows/ci.yml)[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-epytor-blue)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode)[![License](https://img.shields.io/github/license/peiyucn/epytor)](https://github.com/peiyucn/epytor/blob/main/LICENSE)
 
 [简体中文](README.zh-CN.md) | English | [GitHub](https://github.com/peiyucn/epytor)
 
