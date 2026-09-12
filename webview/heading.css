@@ -5,13 +5,17 @@
    它是标题的第一个子元素，若按常规占位会把标题文字整体右推 26px，
    于是所有 H 标题都比正文缩进一格（用户反馈「看着不舒服」）。
    悬挑到左侧内边距里之后，标题文字与正文左缘严格对齐，
-   而按钮落在 `#editor` 的 48px 左内边距内，不会被裁切。 */
+   而按钮落在 `#editor` 的 48px 左内边距内，不会被裁切。
+
+   间距要留在**按钮与文字之间**：gutter 28px、按钮 20px 且靠左（flex-start），
+   按钮占 -28~-8px，与标题文字之间留 8px。
+   回归：第一版写成 justify-content: flex-end，按钮右缘正好贴住文字（用户反馈「都挨上了」）。 */
 .heading-fold-gutter {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
-    width: 26px;
-    margin-left: -26px;
+    justify-content: flex-start;
+    width: 28px;
+    margin-left: -28px;
     opacity: 0;
     transition: opacity 0.15s ease;
     vertical-align: middle;

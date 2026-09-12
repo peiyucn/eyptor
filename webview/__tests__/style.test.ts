@@ -318,12 +318,20 @@ describe("WebView 样式", () => {
         expect(styleCss).not.toContain("data-epytor-content-blank");
     });
 
-    it("标题折叠按钮 应该 悬挑在正文列外（回归：按常规占位会把所有 H 标题右推 26px，看着像缩进）", () => {
+    it("标题折叠按钮 应该 悬挑在正文列外、且与标题留出间距（回归：常规占位把 H 标题右推；靠右对齐让按钮贴住文字）", () => {
         const body = stripComments(headingCss).match(/\.heading-fold-gutter\s*\{([^}]*)\}/)?.[1] ?? "";
         expect(body).not.toBe("");
         // 负 margin + 等宽：按钮整体挂到正文左缘之外
         expect(body).toMatch(/margin-left:\s*-\d+px/);
-        expect(body).toMatch(/width:\s*\d+px/);
+        const width = Number(body.match(/width:\s*(\d+)px/)?.[1] ?? 0);
+        const buttonWidth = Number(
+            stripComments(headingCss).match(/\.heading-fold-toggle\s*\{[^}]*width:\s*(\d+)px/)?.[1] ?? 0,
+        );
+        // 宽度要大于按钮自身，差额就是按钮与标题文字之间的间距（相等 = 贴在一起）
+        expect(buttonWidth).toBeGreaterThan(0);
+        expect(width).toBeGreaterThan(buttonWidth);
+        // 按钮靠左，把间距留在右侧
+        expect(body).toContain("justify-content: flex-start");
         // 反面：不能再留右外边距（那正是把标题文字推右的元凶）
         expect(body).not.toMatch(/margin-right:\s*[1-9]/);
     });
