@@ -1,6 +1,6 @@
 # 🦖EPYTOR
 
-[![Version](https://img.shields.io/github/package-json/v/peiyucn/epytor)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode) [![CI](https://img.shields.io/github/actions/workflow/status/peiyucn/epytor/ci.yml?branch=main)](https://github.com/peiyucn/epytor/actions/workflows/ci.yml) [![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-epytor-blue)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode) [![License](https://img.shields.io/github/license/peiyucn/epytor)](https://github.com/peiyucn/epytor/blob/main/LICENSE)
+[![Version](https://img.shields.io/github/package-json/v/peiyucn/epytor)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode)[![CI](https://img.shields.io/github/actions/workflow/status/peiyucn/epytor/ci.yml?branch=main)](https://github.com/peiyucn/epytor/actions/workflows/ci.yml)[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-epytor-blue)](https://marketplace.visualstudio.com/items?itemName=peiyucn.epytor-vscode)[![License](https://img.shields.io/github/license/peiyucn/epytor)](https://github.com/peiyucn/epytor/blob/main/LICENSE)
 
 [简体中文](README.zh-CN.md) | English | [GitHub](https://github.com/peiyucn/epytor)
 
@@ -31,27 +31,27 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 
 > To choose how `.md` files open by default, use the built-in VS Code entry: right-click a Markdown file → **Reopen Editor With…** → **Configure default editor for '*.md'**. EPYTOR does not manage editor associations itself.
 
-The Settings UI groups them into **epytor** (editor) and **epytor › Images**. Changing any of them takes effect immediately — no need to reopen the tab.
+The Settings UI groups them into **epytor** (editor) and **epytor › Images**. Changing any of them takes effect immediately — no need to reopen the tab. EPYTOR only reads these settings; it never rewrites your `settings.json`.
 
 | Setting | Default | Description |
 |---|---|---|
 | `epytor.tableWrapMode` | `"wrap"` | Table cell wrapping: `wrap` (break anywhere) / `nowrap` (no wrap + horizontal scroll) |
-| `epytor.codeBlockMaxHeight` | `600` | Code block max height in px (100–10000) |
-| `epytor.editorMaxWidth` | `900` | Editor content max width in px (400–10000) |
-| `epytor.serializationMode` | `"clean"` | Markdown save mode: `clean` / `compatible` |
+| `epytor.codeBlockMaxHeight` | `600` | Code block max height in px (100–10000); taller code blocks scroll inside the block |
+| `epytor.editorMaxWidth` | `900` | Editor content max width in px (400–10000); the outline panel's auto-collapse threshold follows it (this width + 100) |
+| `epytor.serializationMode` | `"clean"` | Markdown save mode: `clean` (fewer unnecessary escapes and table breaks) / `compatible` |
 | `epytor.imageStorage` | `"local"` | Image storage: `local` (save to disk) / `server` (upload to your image server) |
-| `epytor.imageLocalPath` | `""` | Local image folder — relative to the workspace root (or to the Markdown file when there is no workspace) or an absolute path. Empty = auto-detect `images/`, `imgs/`, `assets/images/`, `assets/`, otherwise `images/` next to the file |
+| `epytor.imageLocalPath` | `""` | Local image folder — relative to the workspace root (or to the Markdown file when there is no workspace) or an absolute path. Empty = auto-detect `images/`, `imgs/`, `assets/images/`, `assets/` (workspace root first, then next to the file), otherwise `images/` next to the file |
 | `epytor.imageServer` | `{}` | Image server settings: `{ "url": "", "fieldName": "file", "extraParams": {}, "responsePath": "url" }` |
+| `epytor.imageServerUrl` | `""` | *Deprecated* — fallback for `epytor.imageServer.url` |
+| `epytor.imageServerFieldName` | `"file"` | *Deprecated* — fallback for `epytor.imageServer.fieldName` |
+| `epytor.imageServerExtraParams` | `""` | *Deprecated* — fallback for `epytor.imageServer.extraParams` (a JSON string) |
+| `epytor.imageServerResponsePath` | `"url"` | *Deprecated* — fallback for `epytor.imageServer.responsePath` |
 
-**Image server** (`imageStorage` = `server`): `epytor.imageServer.url` must point at the upload endpoint — without it the upload fails with an explanation. `fieldName` (default `file`) is the multipart form field of the image; `extraParams` (a JSON object; values must be strings, numbers or booleans) adds extra form fields; `responsePath` (default `url`, e.g. `data.url`) is the dot-notation path used to read the image URL from the JSON response. A plain-`http` endpoint is allowed (intranet servers) but you get one warning. The older `epytor.imageServerUrl`, `epytor.imageServerFieldName`, `epytor.imageServerExtraParams` and `epytor.imageServerResponsePath` settings still work as a fallback but are deprecated — please migrate to `epytor.imageServer`.
+**Image server** (`imageStorage` = `server`): `epytor.imageServer.url` must point at the upload endpoint — without it the upload fails with an explanation. `fieldName` (default `file`) is the multipart form field of the image; only letters, digits, dot, dash and underscore are accepted, anything else falls back to `file`. `extraParams` (a JSON object; values must be strings, numbers or booleans — nested objects and arrays are ignored with a notice) adds extra form fields. `responsePath` (default `url`, e.g. `data.url`) is the dot-notation path used to read the image URL from the JSON response. A plain-`http` endpoint is allowed (intranet servers) but you get one warning. The four deprecated keys still work as a fallback — anything set in `epytor.imageServer` wins over them.
 
 **Image path safety**: a workspace-level `.vscode/settings.json` may not point `epytor.imageLocalPath` outside the workspace — such a value is ignored and `images/` next to the Markdown file is used for saving and for the image picker. If a workspace turns uploads on for you (`epytor.imageStorage` or the image server URL coming from workspace settings), the upload is skipped, the image is saved locally and a notice is shown.
 
 > Auto save uses the built-in VS Code setting `files.autoSave` (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`). EPYTOR no longer ships its own auto-save setting.
-
-> Four **deprecated** image-server keys still work as a fallback: `epytor.imageServerUrl`, `epytor.imageServerFieldName`, `epytor.imageServerExtraParams` and `epytor.imageServerResponsePath` — migrating to `epytor.imageServer` above is recommended (see below).
-
-> See Settings UI for all options (`epytor.*`).
 
 ## Requirements
 
@@ -59,16 +59,18 @@ The Settings UI groups them into **epytor** (editor) and **epytor › Images**. 
 
 ## Known Limitations
 
-* ⚠️ Upstream — Table cell click-selection temporarily disabled (Crepe instability, clicks go to edit mode)
-* ⚠️ Upstream — Inline styles at paragraph end cannot exit to normal text ([Milkdown#2413](https://github.com/Milkdown/milkdown/issues/2413))
-* ⚠️ Upstream — Switching back to the Markdown tab briefly blanks the editor area: VS Code drops a kept-alive webview's content size while it is hidden and re-applies it on activation, so that frame belongs to the host rather than the editor. The editor itself is never rebuilt and nothing is lost
-* ⚠️ Upstream — An empty task item (`- [ ] ` with nothing after the marker) is not recognised as a task item: the marker shows up as literal `[ ]` text
-* ⚠️ Upstream — The `a)` / `i.` and ■ / ◆ multilevel markers are an **editor display effect**: plain Markdown only supports numbered and `-` markers, so saved files keep `1.` / `-` (reported upstream as [Milkdown#2475](https://github.com/Milkdown/milkdown/issues/2475))
-* **Very large documents (10k+ lines)**: WYSIWYG editing stays smooth up to ~3000 lines; beyond that the document-tree cost of the editor engine grows — use the VS Code text editor (source mode) for such files
-* If you switch tabs within ~400 ms of your last keystroke, that last change is not written to the file
-* Global search may not scroll precisely with multiple `.md` files open
-* Some extended Markdown syntax (footnotes, inline HTML, etc.) not yet supported
-* Paragraph/heading text alignment is not provided (no standard Markdown syntax)
+* **Very large documents (10k+ lines)**: editing stays smooth up to ~3000 lines; beyond that the editor engine's document-tree cost grows noticeably — use the VS Code text editor (source mode) for such files
+* If you switch tabs within ~400 ms of your last keystroke, that last change may not make it into the file (the save that runs when a tab loses focus uses the copy pushed back after you stop typing)
+* Clicking a table cell only puts the cursor in it instead of selecting the whole cell — use the row/column drag handles or drag across cells to select
+* An empty task item (`- [ ] ` with nothing after the marker) is not recognised as a task item: it shows as a normal bullet plus the literal text `[ ]`
+* Raw HTML is kept in your file but not rendered — you see the tags themselves; other non-GFM extensions (`==highlight==`, definition lists, `> [!NOTE]` callouts…) are plain text too
+* Inline styles (bold, italic, inline code…) cannot be left with the arrow keys when they sit at the end of a paragraph with nothing after them
+* Paragraph and heading text alignment is not offered (Markdown has no syntax for it)
+* Global search may not scroll to the exact line when several `.md` files are open
+* The `a)` / `i.` numbering and the ■ / ◆ bullets are an **editor display effect**: your file keeps `1.` numbering and its own bullet markers
+* ⚠️ Platform: switching back to the Markdown tab can briefly show the editor area blank — that frame belongs to VS Code's webview host rather than the editor (a do-nothing webview shows the same), and nothing is lost because the editor is never rebuilt (undo history, scroll position and folded headings stay)
+
+> Upstream issues we are tracking (not fixable on our side) are listed in [docs/upstream-limits.md](docs/upstream-limits.md).
 
 ## Contributing
 

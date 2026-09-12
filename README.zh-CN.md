@@ -31,25 +31,27 @@
 
 > 默认打开方式请用 VS Code 官方入口设置：右键 Markdown 文件 → **打开方式…** → **为「*.md」配置默认编辑器**。EPYTOR 不再自行管理编辑器关联。
 
-设置面板分为 **epytor**（编辑器）与 **epytor › 图片** 两组；任一项改完立即生效，不必重开标签页。
+设置面板分为 **epytor**（编辑器）与 **epytor › 图片** 两组；任一项改完立即生效，不必重开标签页。EPYTOR 只读取这些设置，绝不改写你的 `settings.json`。
 
 | 设置项 | 默认值 | 说明 |
 |---|---|---|
 | `epytor.tableWrapMode` | `"wrap"` | 表格单元格换行：`wrap`（任意字符断行）/ `nowrap`（不换行 + 横向滚动） |
-| `epytor.codeBlockMaxHeight` | `600` | 代码块最大高度（px，100–10000） |
-| `epytor.editorMaxWidth` | `900` | 编辑器内容区最大宽度（px，400–10000） |
-| `epytor.serializationMode` | `"clean"` | Markdown 保存模式：`clean` / `compatible` |
+| `epytor.codeBlockMaxHeight` | `600` | 代码块最大显示高度（px，100–10000），超出后在块内滚动 |
+| `epytor.editorMaxWidth` | `900` | 编辑器内容区最大宽度（px，400–10000）；目录面板的自动收起阈值随它变化（该宽度 + 100） |
+| `epytor.serializationMode` | `"clean"` | Markdown 保存模式：`clean`（减少不必要的转义与表格换行）/ `compatible` |
 | `epytor.imageStorage` | `"local"` | 图片存储：`local`（存本地）/ `server`（上传到你的图床） |
-| `epytor.imageLocalPath` | `""` | 本地图片目录——相对工作区根目录（无工作区时相对 Markdown 文件）或绝对路径。留空则自动检测 `images/`、`imgs/`、`assets/images/`、`assets/`，都没有时用文件同级的 `images/` |
+| `epytor.imageLocalPath` | `""` | 本地图片目录——相对工作区根目录（无工作区时相对 Markdown 文件）或绝对路径。留空则自动检测 `images/`、`imgs/`、`assets/images/`、`assets/`（先看工作区根目录，再看文件所在目录），都没有时用文件同级的 `images/` |
 | `epytor.imageServer` | `{}` | 图床设置：`{ "url": "", "fieldName": "file", "extraParams": {}, "responsePath": "url" }` |
+| `epytor.imageServerUrl` | `""` | *已弃用*——`epytor.imageServer.url` 的兜底 |
+| `epytor.imageServerFieldName` | `"file"` | *已弃用*——`epytor.imageServer.fieldName` 的兜底 |
+| `epytor.imageServerExtraParams` | `""` | *已弃用*——`epytor.imageServer.extraParams` 的兜底（JSON 字符串） |
+| `epytor.imageServerResponsePath` | `"url"` | *已弃用*——`epytor.imageServer.responsePath` 的兜底 |
 
-**图床**（`imageStorage` 为 `server` 时）：必须配置 `epytor.imageServer.url` 指向上传接口，否则上传会失败并说明原因。`fieldName`（默认 `file`）是图片在 multipart 表单中的字段名；`extraParams`（JSON 对象，值只支持字符串/数字/布尔）附加额外表单字段；`responsePath`（默认 `url`，如 `data.url`）是从响应 JSON 中提取图片 URL 的点分路径。明文 `http` 地址可用（内网场景），但会给一次警告。旧的 `epytor.imageServerUrl`、`epytor.imageServerFieldName`、`epytor.imageServerExtraParams`、`epytor.imageServerResponsePath` 仍作为兜底可用，但已弃用——建议迁移到 `epytor.imageServer`。
+**图床**（`imageStorage` 为 `server` 时）：必须配置 `epytor.imageServer.url` 指向上传接口，否则上传会失败并说明原因。`fieldName`（默认 `file`）是图片在 multipart 表单中的字段名，只允许字母、数字、点、短横线与下划线，其它值回退为 `file`。`extraParams`（JSON 对象，值只支持字符串/数字/布尔——嵌套对象与数组会被忽略并给出提示）附加额外表单字段。`responsePath`（默认 `url`，如 `data.url`）是从响应 JSON 中提取图片 URL 的点分路径。明文 `http` 地址可用（内网场景），但会给一次警告。四个已弃用键仍作为兜底可用——`epytor.imageServer` 里填了值就以它为准。
 
 **图片路径安全**：工作区级 `.vscode/settings.json` 不能把 `epytor.imageLocalPath` 指向工作区之外——这类值会被忽略，保存与图库面板都改用 Markdown 文件同级的 `images/`。若工作区配置替你把上传打开（`epytor.imageStorage` 或图床地址来自工作区设置），上传会被跳过：图片存本地并给出提示。
 
 > 自动保存使用 VS Code 内置设置 `files.autoSave`（`off` / `afterDelay` / `onFocusChange` / `onWindowChange`），EPYTOR 不再提供独立的自动保存设置。
-
-> 完整设置列表见 VSCode 设置面板（`epytor.*`）
 
 ## 环境
 
@@ -57,16 +59,18 @@
 
 ## 已知限制
 
-* ⚠️ 上游 — 表格单击选中整格暂时关闭（Crepe 上游行为不稳定，改为单击直接编辑）
-* ⚠️ 上游 — 行内样式尾部无后续内容时无法直接退出（[Milkdown#2413](https://github.com/Milkdown/milkdown/issues/2413)）
-* ⚠️ 上游 — 从别的标签切回 Markdown 时编辑区会空白一下：VS Code 在保活 webview 隐藏期间撤掉其内容尺寸、激活时再重设，那一帧属于宿主而不是编辑器。编辑器本身从不重建，也不会丢失任何状态
-* ⚠️ 上游 — 复选框后面不写内容的空任务项（`- [ ] `）识别不了复选框，标记会显示成文本 `[ ]`
-* ⚠️ 上游 — 多级列表的 `a)` / `i.` 与 ■ / ◆ 是**编辑器的显示效果**：Markdown 源码本身只支持数字编号与 `-`，保存后仍是 `1.` / `-`（已向上游提 [Milkdown#2475](https://github.com/Milkdown/milkdown/issues/2475)）
-* **超大文档（万行级）**：WYSIWYG 编辑在约 3000 行内保持流畅，超过后编辑器引擎的文档树成本显著上升——此类文件建议用 VS Code 文本编辑器（源码模式）编辑
-* 停手后约 400ms 内切走标签，最后一次改动不会写入文件
-* 全局搜索跳转：多文件同时打开时可能无法精确定位
-* 部分扩展语法（脚注、内联 HTML 等）尚未支持
-* 段落/标题文字对齐不提供（标准 Markdown 无对应语法）
+* **超大文档（万行级）**：约 3000 行以内编辑保持流畅，超过后编辑器引擎的文档树成本明显上升——此类文件建议用 VS Code 文本编辑器（源码模式）编辑
+* 停手后约 400ms 内切走标签，最后一次改动可能来不及写入文件（标签失焦时触发的保存用的是停手后回推的内容副本）
+* 表格单元格单击只是把光标放进去，不会选中整格——要整格/整行/整列选中，用行/列拖拽手柄或跨格拖选
+* 复选框后不写内容的空任务项（`- [ ] `）不会被识别成任务项：它显示成普通项目符号加一行字面文本 `[ ]`
+* 原始 HTML 会原样保留在文件里，但不会被渲染——你看到的是标签本身；其它非 GFM 扩展（`==高亮==`、定义列表、`> [!NOTE]` 提示块…）同样只是纯文本
+* 行内样式（粗体、斜体、行内代码…）位于段落末尾、后面没有内容时，无法用方向键退出到普通文本
+* 不提供段落 / 标题的文字对齐（Markdown 没有对应语法）
+* 同时打开多个 `.md` 时，全局搜索的跳转定位可能不够精确
+* 多级列表的 `a)` / `i.` 与 ■ / ◆ 是**编辑器的显示效果**：文件本身仍是 `1.` 编号与你自己的项目符号
+* ⚠️ 平台行为：从别的标签切回 Markdown 时，编辑区可能短暂空白一帧——这一帧属于 VS Code 的 webview 宿主而不是编辑器（什么都不干的 webview 同样如此）；编辑器不会重建，撤销历史、滚动位置与折叠状态都不丢
+
+> 我们跟踪的上游问题（扩展侧无法修复）见 [docs/upstream-limits.md](docs/upstream-limits.md)。
 
 ## 参与贡献
 
