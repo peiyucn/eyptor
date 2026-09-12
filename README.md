@@ -16,7 +16,7 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 * **Tables**: GFM tables, grid picker (8×8), insert/delete rows & columns, drag reorder, column alignment, wrap modes (`wrap` / `nowrap`), Shift+Enter soft breaks inside cells
 * **Code blocks**: CodeMirror 6 highlighting, language picker, copy, fullscreen
 * **Mermaid diagrams**: inline rendering, source/preview toggle, preview zoom (0.2×–3×)
-* **Images**: three ways to insert (paste / drag & drop / image picker); once inserted you can drag an edge to resize it and add a caption; paths containing spaces or parentheses display correctly; if loading fails you get a message and can retry
+* **Images**: insert by paste, drag & drop or the image picker; resize by dragging an edge, add a caption, and retry if loading fails
 * **Outline panel**: generated automatically and follows your reading position — it highlights the current section and scrolls itself into view; opening it keeps it there and pushes the text aside (never covering it), while closing it means it will not come back on its own (closing wins above everything); it collapses automatically on narrow windows, with the threshold following `epytor.editorMaxWidth` (editor width + 100); the edge handle is a direction arrow (› to open, ‹ to close)
 * **Headings**: sticky section title while scrolling (up to 3 levels), sibling folding (document unchanged)
 * **Source ↔ preview**: `Ctrl/Cmd+Shift+M` switches between the WYSIWYG editor and the VS Code text editor, keeping your position
@@ -40,16 +40,14 @@ The Settings UI groups them into **epytor** (editor) and **epytor › Images**. 
 | `epytor.editorMaxWidth` | `900` | Editor content max width in px (400–10000); the outline panel's auto-collapse threshold follows it (this width + 100) |
 | `epytor.serializationMode` | `"clean"` | Markdown save mode: `clean` (fewer unnecessary escapes and table breaks) / `compatible` |
 | `epytor.imageStorage` | `"local"` | Image storage: `local` (save to disk) / `server` (upload to your image server) |
-| `epytor.imageLocalPath` | `""` | Local image folder — relative to the workspace root (or to the Markdown file when there is no workspace) or an absolute path. Empty = auto-detect `images/`, `imgs/`, `assets/images/`, `assets/` (workspace root first, then next to the file), otherwise `images/` next to the file |
+| `epytor.imageLocalPath` | `""` | Local image folder (relative to the workspace root or to the Markdown file, or absolute). Empty = auto-detect `images/`, `imgs/`, `assets/images/`, `assets/`; if none exists, `images/` next to the file is used |
 | `epytor.imageServer` | `{}` | Image server settings: `{ "url": "", "fieldName": "file", "extraParams": {}, "responsePath": "url" }` |
 | `epytor.imageServerUrl` | `""` | *Deprecated* — fallback for `epytor.imageServer.url` |
 | `epytor.imageServerFieldName` | `"file"` | *Deprecated* — fallback for `epytor.imageServer.fieldName` |
 | `epytor.imageServerExtraParams` | `""` | *Deprecated* — fallback for `epytor.imageServer.extraParams` (a JSON string) |
 | `epytor.imageServerResponsePath` | `"url"` | *Deprecated* — fallback for `epytor.imageServer.responsePath` |
 
-**Image server** (`imageStorage` = `server`): `epytor.imageServer.url` must point at the upload endpoint — without it the upload fails with an explanation. `fieldName` (default `file`) is the multipart form field of the image; only letters, digits, dot, dash and underscore are accepted, anything else falls back to `file`. `extraParams` (a JSON object; values must be strings, numbers or booleans — nested objects and arrays are ignored with a notice) adds extra form fields. `responsePath` (default `url`, e.g. `data.url`) is the dot-notation path used to read the image URL from the JSON response. A plain-`http` endpoint is allowed (intranet servers) but you get one warning. The four deprecated keys still work as a fallback — anything set in `epytor.imageServer` wins over them.
-
-**Image path safety**: a workspace-level `.vscode/settings.json` may not point `epytor.imageLocalPath` outside the workspace — such a value is ignored and `images/` next to the Markdown file is used for saving and for the image picker. If a workspace turns uploads on for you (`epytor.imageStorage` or the image server URL coming from workspace settings), the upload is skipped, the image is saved locally and a notice is shown.
+**Images**: with `epytor.imageStorage` = `server` the image goes to your image server (`epytor.imageServer.url` must be set, otherwise the upload fails with an explanation); with `local` it is saved to `epytor.imageLocalPath` or an auto-detected folder. Each field is described in the Settings UI. For safety, a workspace-level `.vscode/settings.json` can neither point `epytor.imageLocalPath` outside the workspace nor turn uploads on for you — in both cases the image is saved locally and a notice is shown.
 
 > Auto save uses the built-in VS Code setting `files.autoSave` (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`). EPYTOR no longer ships its own auto-save setting.
 
