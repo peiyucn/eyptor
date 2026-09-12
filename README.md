@@ -11,12 +11,13 @@ A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.de
 ## Features
 
 * **Rich text**: headings, bold, italic, strikethrough, inline code, blockquote, horizontal rule, lists
+* **Lists**: ordered / bullet / task lists; markers follow the nesting level (`1.` / `a)` / `i.` and ● / ■ / ◆, cycling at the fourth level); Backspace at the start of an item breaks the list and turns that item into a plain line
 * **LaTeX math**: inline `$...$` / block `$$...$$`, KaTeX rendering
 * **Tables**: GFM tables, grid picker (8×8), insert/delete rows & columns, drag reorder, column alignment, wrap modes (`wrap` / `nowrap`), Shift+Enter soft breaks inside cells
 * **Code blocks**: CodeMirror 6 highlighting, language picker, copy, fullscreen
 * **Mermaid diagrams**: inline rendering, source/preview toggle, preview zoom (0.2×–3×)
 * **Images**: paste/drag/picker insert, drag resize, caption, load retry
-* **TOC**: auto-generated, pinnable, click to navigate
+* **Outline panel**: generated automatically and follows your reading position — it highlights the current section and scrolls itself into view; opening it keeps it there and pushes the text aside (never covering it), while closing it means it will not come back on its own (closing wins above everything); it collapses automatically on narrow windows, with the threshold following `epytor.editorMaxWidth` (editor width + 100); the edge handle is a direction arrow (› to open, ‹ to close)
 * **Headings**: sticky section title while scrolling (up to 3 levels), sibling folding (document unchanged)
 * **Source ↔ preview**: `Ctrl/Cmd+Shift+M` switches between the WYSIWYG editor and the VS Code text editor, keeping your position
 * **FindBar**: `Ctrl/Cmd+F` search with match-case and regular-expression modes
