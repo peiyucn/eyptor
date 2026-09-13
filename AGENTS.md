@@ -66,6 +66,7 @@ VS Code「所见即所得」Markdown 编辑器，基于 Milkdown（Crepe）。
 
 * **ci.yml**（push / PR 到 main、dev）：`typecheck` → `test`（覆盖率门槛，Vitest Job Summary + 覆盖率 artifact）→ `build` → `package`（vsce）
 * **publish.yml**（push `v*.*.*` tag）：打包 VSIX → 发布 VS Code Marketplace → 建 GitHub Release（说明拼两份 CHANGELOG 当前版本条目）
+* **publish 的 vsce 警告是误报**（2026-09-13 首次发布时出现）：「249 个文件里 232 个是 JavaScript，建议打包成单文件」——这 232 个 JS 是 `esbuild.mjs` 里 `splitting: true` 产出的**惰性 chunk**（首屏只加载 `webview.js` + `webview.css`，其余按需）。**不要为消这条警告关掉 splitting**，那会把「6.2MB 单文件、首帧卡顿」的回归放回来（见 `esbuild.mjs` 注释）
 
 ## GitHub 与网络
 

@@ -63,6 +63,11 @@ const webviewBuild = {
     // 代码分割：动态 import（CodeMirror 按语言加载、mermaid 等重库惰性化）拆分为
     // 独立 chunk，首次加载只拉入口 —— 回归：无分割时 esbuild 把全部动态 import
     // 内联进单文件（6.2MB），首次打开 md 的下载+解析+求值是首帧卡顿主因
+    //
+    // ⚠️ 发布时 vsce 会警告「249 个文件里 232 个是 JavaScript，建议打包成单文件」——
+    // 那是**误报**：这 232 个 JS 就是本行 splitting 产出的惰性 chunk（58 个 chunk-* +
+    // 语言/图表/公式按需块），首屏只加载 webview.js + webview.css，其余按需拉取。
+    // **不要为消这条警告关掉 splitting**（会把 6.2MB 单文件的回归放回来）。
     splitting: true,
     loader: {
         '.ttf': 'dataurl',
