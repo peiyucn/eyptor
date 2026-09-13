@@ -1,0 +1,37 @@
+/* 表格网格选择器：全部使用 --vscode-* 变量适配亮/暗主题 */
+.epytor-grid-picker {
+    position: fixed;
+    z-index: 1000;
+    background: var(--vscode-menu-background, #252526);
+    border: 1px solid var(--vscode-menu-border, #454545);
+    border-radius: 4px;
+    padding: 6px 8px 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+}
+
+.epytor-grid-picker__label {
+    color: var(--vscode-menu-foreground, #cccccc);
+    font-size: 12px;
+    margin-bottom: 6px;
+    min-height: 15px;
+    white-space: nowrap;
+}
+
+.epytor-grid-picker__grid {
+    display: grid;
+    grid-template-columns: repeat(8, 18px);
+    grid-template-rows: repeat(8, 18px);
+    gap: 2px;
+}
+
+.epytor-grid-picker__cell {
+    border: 1px solid var(--vscode-menu-border, #454545);
+    border-radius: 2px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.epytor-grid-picker__cell--active {
+    background: var(--vscode-button-background, #0e639c);
+    border-color: var(--vscode-button-background, #0e639c);
+}

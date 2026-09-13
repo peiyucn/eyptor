@@ -12,27 +12,18 @@ import {
     toggleEmphasisCommand,
     toggleInlineCodeCommand,
     listItemSchema,
-    wrapInBlockTypeCommand,
+    inlineCodeSchema,
 } from "@milkdown/kit/preset/commonmark";
 import { toggleStrikethroughCommand } from "@milkdown/kit/preset/gfm";
-import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
 import type { EditorView } from "@milkdown/kit/prose/view";
-import { undo, redo } from "@milkdown/kit/prose/history";
+import type { Node as ProseNode } from "@milkdown/kit/prose/model";
 import { keymap } from "@milkdown/kit/prose/keymap";
-import { Plugin, NodeSelection, TextSelection, type EditorState } from "@milkdown/kit/prose/state";
-import { liftListItem } from "@milkdown/kit/prose/schema-list";
-import { lift, wrapIn } from "prosemirror-commands";
-import { CellSelection, TableMap } from "@milkdown/kit/prose/tables";
-import { $prose } from "@milkdown/kit/utils";
+import { closeHistory } from "@milkdown/kit/prose/history";
+import { Plugin, NodeSelection, TextSelection } from "@milkdown/kit/prose/state";
+import { CellSelection } from "@milkdown/kit/prose/tables";
+import { $prose, getMarkdown } from "@milkdown/kit/utils";
 import { CrepeBuilder } from "@milkdown/crepe";
 import { linkTooltip } from "@milkdown/crepe/feature/link-tooltip";
-import { TbUndo, TbRedo, TbImage, TbEraser, TbGear, TbToc } from "./ui/icons";
-
-// 调试日志开关（由 index.ts setDebugMode 消息驱动）
-let logTableSel = false;
-export function setLogTableSel(enabled: boolean): void {
-    logTableSel = enabled;
-}
 
 // ─── Crepe 原生功能 ──────────────────────────────────────────────────────────
 // 以下 feature 由 @milkdown/crepe 官方维护，替换我们的自定义实现：
@@ -42,21 +33,60 @@ export function setLogTableSel(enabled: boolean): void {
 //   feature/latex       → 全新：KaTeX 数学公式支持
 // feature/code-mirror → 换回自定义实现（复制反馈、全屏、样式更精致）
 import { codeMirror } from "@milkdown/crepe/feature/code-mirror";
-import { cursor } from "@milkdown/crepe/feature/cursor";
-import { latex } from "@milkdown/crepe/feature/latex";
+import { cursor } from "@milkdown/kit/plugin/cursor";
+import { createVirtualCursor } from "./vendor/prosemirrorVirtualCursor";
+// LaTeX feature 用本地惰性 KaTeX 实现（上游静态 import katex 会压入口 480KB，
+// 见 vendor/latexFeature.ts 头部注释与 esbuild.mjs katex-stub-for-crepe）
+import { latexFeature, createMathInlineView, renderLatexPreview } from "./vendor/latexFeature";
 import { listItem } from "@milkdown/crepe/feature/list-item";
 import { table } from "@milkdown/crepe/feature/table";
 import { topBar } from "@milkdown/crepe/feature/top-bar";
+import { buildTopBarConfig } from "./components/topBar/buildTopBar";
 import { toolbar } from "@milkdown/crepe/feature/toolbar";
 import { Compartment } from "@codemirror/state";
 import { EditorView as CMEditorView } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { defaultHighlightStyle, syntaxHighlighting, LanguageDescription, type LanguageSupport } from "@codemirror/language";
-import type { Ctx } from "@milkdown/kit/ctx";
 import { languages as allCodeLanguages } from "@codemirror/language-data";
-import mermaid from "mermaid";
-import { onThemeChange } from "./utils/themeBus";
+import { onThemeChange, isDarkTheme } from "./utils/themeBus";
+import { changeRangeInFinalDoc, normalizeListSpread } from "./utils/listSpread";
+import { listBackspacePlugin } from "./utils/listBackspace";
+import { listMarkerPlugin } from "./listMarkerPlugin";
+import {
+    beginClick,
+    consumeCellClickTarget,
+    createCellClickState,
+    decideCellSelection,
+    endClick,
+    markDragged,
+} from "./utils/cellClickState";
+import { observeCmEditorCount } from "./utils/cmThemeObserver";
+import { getUserInteractionEpoch } from "./utils/userInteraction";
 import { t } from "./i18n";
+import { enhanceMermaidPreview } from "./components/mermaidZoom";
+import { headingFoldPlugin } from "./headingFoldPlugin";
+import { headingStickyPlugin } from "./headingStickyPlugin";
+import { softBreakKeymap } from "./softBreakKeymap";
+import { applyMinimalChanges } from "./utils/minimalDiff";
+import { remarkStringifyOptionsCtx } from "@milkdown/kit/core";
+import { emptyTaskListItemPlugin } from "./utils/emptyTaskListItem";
+import { $remark } from "@milkdown/kit/utils";
+import {
+    cleanTextHandler,
+    detectLineEnding,
+    detectListMarkerStyle,
+    dropRedundantAmpersandEscapes,
+    serializeCleanMarkdown,
+    stripListItemBreakPlaceholder,
+    toLf,
+    withLineEnding,
+    withTableBreakHandler,
+    type SerializationMode,
+} from "./utils/markdownSerializer";
+
+// 空任务项（`- [ ] ` 后面什么都不写）识别：上游 task-list 分词器要求标记后有内容，
+// 这里在 remark-gfm 之后补一层 mdast 修正（见 utils/emptyTaskListItem.ts）
+const emptyTaskListItemRemark = $remark("epytorEmptyTaskListItem", () => emptyTaskListItemPlugin);
 
 // 只保留常用语言（143 → ~40）
 const WANTED_LANGS = new Set([
@@ -85,34 +115,13 @@ codeLanguages.push(LanguageDescription.of({
 
 // ─── 保留的自定义插件 ────────────────────────────────────────────────────────
 // 以下插件 Crepe 不提供对应功能，永久保留：
-//   listLiftPlugin           → 列表 backspace 上升一级
 //   listSpreadNormalizePlugin → 列表 spread 规范化
-//   selectionPlugin          → 选区变更回调（驱动外部 UI）
+//   listBackspacePlugin      → 列表项行首 Backspace 的落点（见 utils/listBackspace.ts 文件头）
 //   formatKeymapPlugin       → 自定义格式化快捷键
-
-// 列表 Backspace：光标在行首时，层级 ≥2 → 上升一级；层级 1 → 同样上升（变为普通段落）
-const listLiftPlugin = $prose((ctx) => {
-    const schema = ctx.get(schemaCtx);
-    const listItemType = schema.nodes["list_item"];
-    if (!listItemType) {
-        return new Plugin({});
-    }
-    const doLift = liftListItem(listItemType);
-    return keymap({
-        Backspace: (state, dispatch) => {
-            const { selection } = state;
-            if (!selection.empty) return false;
-            const { $from } = selection;
-            if ($from.parentOffset !== 0) return false;
-            let inList = false;
-            for (let d = $from.depth; d >= 0; d--) {
-                if ($from.node(d).type === listItemType) { inList = true; break; }
-            }
-            if (!inList) return false;
-            return doLift(state, dispatch);
-        },
-    });
-});
+// 说明：列表 Backspace 的**编号**仍走官方默认（joinBackward：合并/删除行，编号自动重排），
+// Shift-Tab = liftListItem（提升层级）。但官方 joinBackward 在 Crepe 的列表 schema 下按「项」
+// 合并，会把空项留成上一项里的空段落、光标停在那一段上（手测反馈「光标上移错位、上下键走不动」），
+// 任务列表还会把标记漏进正文——listBackspacePlugin 只修正**落点与合并方式**，不碰编号。
 
 // 格式化快捷键：Mod-b 粗体、Mod-i 斜体、Mod-Shift-x 删除线、Mod-e 行内代码
 const formatKeymapPlugin = $prose((ctx) =>
@@ -148,106 +157,25 @@ const formatKeymapPlugin = $prose((ctx) =>
     }),
 );
 
-// 选区变更回调（由 index.ts 注入，用于驱动工具栏等外部 UI）
-let _onSelectionChange: ((view: EditorView) => void) | null = null;
-export function registerSelectionChangeHandler(cb: (view: EditorView) => void): void {
-    _onSelectionChange = cb;
-}
-
-const selectionPlugin = $prose(
-    () =>
-        new Plugin({
-            view: () => ({
-                update(view, prevState) {
-                    if (
-                        _onSelectionChange &&
-                        (!view.state.selection.eq(prevState.selection) ||
-                         !view.state.doc.eq(prevState.doc))
-                    ) {
-                        _onSelectionChange(view);
-                    }
-                },
-            }),
-        }),
-);
-
-// 列表 spread 规范化：编辑后若列表项只含单个块级子节点，自动将 spread 重置为 false
+// 列表 spread 规范化：编辑后若列表项只含单个块级子节点，自动将 spread 重置为 false。
+// 区间换算与规范化本体在 utils/listSpread.ts（纯逻辑，可直测边界）。
 const listSpreadNormalizePlugin = $prose((ctx) => {
     const schema = ctx.get(schemaCtx);
     return new Plugin({
         appendTransaction(transactions, _oldState, newState) {
-            if (!transactions.some((tr) => tr.docChanged)) return null;
-            let minFrom = newState.doc.content.size;
-            let maxTo = 0;
-            for (const tr of transactions) {
-                if (!tr.docChanged) continue;
-                for (const step of tr.steps) {
-                    step.getMap().forEach((_os, _oe, newStart, newEnd) => {
-                        if (newStart < minFrom) minFrom = newStart;
-                        if (newEnd > maxTo) maxTo = newEnd;
-                    });
-                }
-            }
-            if (minFrom > maxTo) return null;
+            const range = changeRangeInFinalDoc(transactions, newState.doc.content.size);
+            if (!range) { return null; }
             const tr = newState.tr;
-            let changed = false;
-            newState.doc.nodesBetween(minFrom, maxTo, (node, pos) => {
-                if (node.type !== schema.nodes.bullet_list && node.type !== schema.nodes.ordered_list)
-                    return;
-                let listNeedsSpread = false;
-                let offset = 1;
-                node.forEach((item) => {
-                    const itemNeedsSpread = item.childCount > 1;
-                    if (item.attrs.spread !== itemNeedsSpread) {
-                        tr.setNodeMarkup(pos + offset, undefined, { ...item.attrs, spread: itemNeedsSpread });
-                        changed = true;
-                    }
-                    if (itemNeedsSpread) listNeedsSpread = true;
-                    offset += item.nodeSize;
-                });
-                if (node.attrs.spread !== listNeedsSpread) {
-                    tr.setNodeMarkup(pos, undefined, { ...node.attrs, spread: listNeedsSpread });
-                    changed = true;
-                }
-            });
-            return changed ? tr : null;
+            return normalizeListSpread(newState.doc, schema, tr, range) ? tr : null;
         },
     });
 });
 
 // ─── 表格单元格点击修正 ──────────────────────────────────────────────────────
-
-function getCellCoords(doc: any, pos: number): { row: number; col: number } | null {
-    try {
-        const $pos = doc.resolve(pos);
-        for (let d = $pos.depth; d >= 0; d--) {
-            const typeName = $pos.node(d).type.name;
-            if (typeName === "table_cell" || typeName === "table_header") {
-                for (let td = d - 1; td >= 0; td--) {
-                    if ($pos.node(td).type.name === "table") {
-                        const tableNode = $pos.node(td);
-                        const tableStart = $pos.start(td);
-                        const cellRelPos = $pos.before(d) - tableStart;
-                        const map = TableMap.get(tableNode);
-                        const rect = map.findCell(cellRelPos);
-                        return { row: rect.top + 1, col: rect.left + 1 };
-                    }
-                }
-            }
-        }
-    } catch { /* 非表格节点或文档结构异常，返回 null */ }
-    return null;
-}
+// 状态机与转移函数在 utils/cellClickState.ts（回归：9 个可变标志散在三个回调里互相读写）。
 
 const cellClickFixPlugin = $prose(() => {
-    let pendingClickPos: number | null = null;
-    let cellClickTarget: number | null = null; // 表格单击位置，不受 mouseup 清理影响
-    let clickIsPlain = true;
-    let wasCrossCell = false;
-    let lastGoodCellSelection: CellSelection | null = null;
-    let multiSelectCount = 0;
-    let lastMouseX = 0;
-    let lastMouseY = 0;
+    const cell = createCellClickState();
     let capturedView: EditorView | null = null;
 
     return new Plugin({
@@ -259,39 +187,25 @@ const cellClickFixPlugin = $prose(() => {
             handleDOMEvents: {
                 mousedown: (view, event) => {
                     if (event.button !== 0 || event.detail !== 1 || event.shiftKey || event.ctrlKey || event.metaKey) {
-                        pendingClickPos = null;
+                        beginClick(cell, null);
                         return false;
                     }
-                    const cell = (event.target as Element).closest("td, th");
-                    if (!cell) { pendingClickPos = null; return false; }
-                    const pos = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                    pendingClickPos = pos ? pos.pos : null;
-                    cellClickTarget = pos ? pos.pos : null;
-                    clickIsPlain = true;
-                    wasCrossCell = false;
-                    lastGoodCellSelection = null;
-                    lastMouseX = event.clientX;
-                    lastMouseY = event.clientY;
+                    if (!(event.target as Element).closest("td, th")) {
+                        beginClick(cell, null);
+                        return false;
+                    }
+                    const at = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                    beginClick(cell, at ? { pos: at.pos, x: event.clientX, y: event.clientY } : null);
 
-                    const onMove = (mv: MouseEvent) => {
-                        lastMouseX = mv.clientX;
-                        lastMouseY = mv.clientY;
-                        if (Math.abs(mv.clientX - event.clientX) + Math.abs(mv.clientY - event.clientY) > 4) clickIsPlain = false;
-                    };
+                    const originX = event.clientX;
+                    const originY = event.clientY;
+                    const onMove = (mv: MouseEvent) => markDragged(cell, mv.clientX, mv.clientY, originX, originY);
                     document.addEventListener("mousemove", onMove, true);
 
                     const cleanup = () => {
                         document.removeEventListener("mouseup", cleanup, true);
                         document.removeEventListener("mousemove", onMove, true);
-                        if (wasCrossCell) {
-                            pendingClickPos = null;
-                            clickIsPlain = true;
-                            wasCrossCell = false;
-                            const savedCellSel = lastGoodCellSelection;
-                            setTimeout(() => { if (lastGoodCellSelection === savedCellSel) lastGoodCellSelection = null; }, 200);
-                        } else {
-                            Promise.resolve().then(() => { pendingClickPos = null; clickIsPlain = true; });
-                        }
+                        endClick(cell);
                     };
                     document.addEventListener("mouseup", cleanup, true);
                     return false;
@@ -307,8 +221,7 @@ const cellClickFixPlugin = $prose(() => {
                         const t = $pos.node(d).type.name;
                         if (t === "table_cell" || t === "table_header") {
                             // 在 Crepe rAF 内被拦截；再套一层 rAF 补 TextSelection
-                            const clickPos = cellClickTarget;
-                            cellClickTarget = null;
+                            const clickPos = consumeCellClickTarget(cell);
                             requestAnimationFrame(() => {
                                 const v = capturedView;
                                 if (!v) return;
@@ -317,151 +230,64 @@ const cellClickFixPlugin = $prose(() => {
                                 try {
                                     const p = Math.min(clickPos ?? tr.selection.from, v.state.doc.content.size);
                                     v.dispatch(v.state.tr.setSelection(TextSelection.near(v.state.doc.resolve(p))));
-                                } catch { /* cellClickTarget 位置无效，不修正选区 */ }
+                                } catch { /* 单击位置无效，不修正选区 */ }
                             });
                             return false;
                         }
                     }
                 } catch { /* 非表格节点内的 $pos 遍历，忽略 */ }
             }
-            if (!lastGoodCellSelection) return true;
+            if (!cell.lastGoodCellSelection) return true;
             if (state.selection instanceof CellSelection && !(tr.selection instanceof CellSelection)) {
                 return false;
             }
             return true;
         },
         appendTransaction(_trs, _oldState, newState) {
-            if (pendingClickPos === null) return null;
+            if (cell.pendingClickPos === null) return null;
             const sel = newState.selection;
-            const $pos = newState.doc.resolve(Math.min(pendingClickPos, newState.doc.content.size));
+            if (!(sel instanceof CellSelection)) { return null; }
+            if (sel.isRowSelection() || sel.isColSelection()) { return null; }
 
-            // 单格 CellSelection → 转 TextSelection
-            if (sel instanceof CellSelection) {
-                if (sel.isRowSelection() || sel.isColSelection()) return null;
-                if (sel.$anchorCell.pos !== sel.$headCell.pos) {
-                    wasCrossCell = true;
-                    lastGoodCellSelection = sel;
-                    return null;
-                }
-                try {
-                    if (!clickIsPlain && capturedView) {
-                        const toCoords = capturedView.posAtCoords({ left: lastMouseX, top: lastMouseY });
-                        if (toCoords) {
-                            const headP = Math.min(toCoords.pos, newState.doc.content.size);
-                            try {
-                                const $a = newState.doc.resolve(Math.min(pendingClickPos, newState.doc.content.size));
-                                const $h = newState.doc.resolve(headP);
-                                let aCellStart = -1, hCellStart = -1;
-                                for (let d = $a.depth; d >= 0; d--) { if ($a.node(d).type.name === "table_cell" || $a.node(d).type.name === "table_header") { aCellStart = $a.start(d); break; } }
-                                for (let d = $h.depth; d >= 0; d--) { if ($h.node(d).type.name === "table_cell" || $h.node(d).type.name === "table_header") { hCellStart = $h.start(d); break; } }
-                                if (aCellStart !== hCellStart) return null;
-                            } catch { /* 单元格边界检测失败（文档结构变化），回退为单格光标 */ }
-                            return newState.tr.setSelection(TextSelection.create(newState.doc, headP, Math.min(pendingClickPos, newState.doc.content.size)));
-                        }
-                    }
-                    return newState.tr.setSelection(TextSelection.near($pos));
-                } catch { /* pos 无效（如节点刚被删除），不修正选区 */ return null; }
+            const decision = decideCellSelection(cell, {
+                isRowOrCol: false, // 上面已先行排除整行/整列
+                anchorCellPos: sel.$anchorCell.pos,
+                headCellPos: sel.$headCell.pos,
+            });
+            if (decision.kind === "rememberCrossCell") {
+                cell.lastGoodCellSelection = sel;
+                return null;
             }
 
-            return null;
+            const clickPos = cell.pendingClickPos;
+            const $pos = newState.doc.resolve(Math.min(clickPos, newState.doc.content.size));
+            try {
+                if (!cell.clickIsPlain && capturedView) {
+                    const toCoords = capturedView.posAtCoords({ left: cell.lastMouseX, top: cell.lastMouseY });
+                    if (toCoords) {
+                        const headP = Math.min(toCoords.pos, newState.doc.content.size);
+                        try {
+                            if (cellStartAt(newState.doc, clickPos) !== cellStartAt(newState.doc, headP)) { return null; }
+                        } catch { /* 单元格边界检测失败（文档结构变化），回退为单格光标 */ }
+                        return newState.tr.setSelection(
+                            TextSelection.create(newState.doc, headP, Math.min(clickPos, newState.doc.content.size)),
+                        );
+                    }
+                }
+                return newState.tr.setSelection(TextSelection.near($pos));
+            } catch { /* 位置无效（如节点刚被删除），不修正选区 */ return null; }
         },
     });
 });
 
-// ─── 比较规范化辅助函数 ─────────────────────────────────────────────────────
-
-const SEP_ROW_RE  = /^\|[\s\-:|]+\|$/;
-const TABLE_ROW_RE = /^\|.*\|$/;
-
-function normalizeSepRow(line: string): string {
-    const t = line.trim();
-    const cells = t.split('|').slice(1, -1).map(c => {
-        return c.trim().replace(/(:?)-+(:?)/g, (_: string, a: string, b: string) => (a ?? '') + '-' + (b ?? ''));
-    });
-    return '|' + cells.join('|') + '|';
-}
-
-function normalizeSplitStrong(line: string): string {
-    let prev: string;
-    do {
-        prev = line;
-        line = line.replace(
-            /\*\*((?:[^*]|\*(?!\*))*)\*\* \*\*((?:[^*]|\*(?!\*))*)\*\*/g,
-            '**$1 $2**',
-        );
-    } while (line !== prev);
-    return line;
-}
-
-function normalizeTableDataRow(line: string): string {
-    const t = line.trim();
-    const cells = t.split('|').slice(1, -1).map(c => {
-        const v = c.trim();
-        return v === '<br />' ? '' : v;
-    });
-    return '|' + cells.join('|') + '|';
-}
-
-function normalizeFenceOpen(line: string): string {
-    return line.replace(/^(\s*`{3,})\s+/, '$1');
-}
-
-function normLineForCompare(line: string): string {
-    const t = line.trim();
-    if (SEP_ROW_RE.test(t))   return normalizeSepRow(line);
-    if (TABLE_ROW_RE.test(t)) return normalizeTableDataRow(line);
-    if (/^`{3,}/.test(t))     return normalizeFenceOpen(line);
-    return normalizeSplitStrong(line);
-}
-
-// ─── 最小化差异合并 ──────────────────────────────────────────────────────────
-function applyMinimalChanges(saved: string, serialized: string): string {
-    interface SigLine { text: string; lineIdx: number }
-
-    function sigLines(md: string): SigLine[] {
-        return md.split('\n').reduce<SigLine[]>((acc, line, i) => {
-            if (line.trim() !== '') acc.push({ text: line, lineIdx: i });
-            return acc;
-        }, []);
+/** 位置所属单元格的起始坐标（-1 = 不在单元格内） */
+function cellStartAt(doc: ProseNode, pos: number): number {
+    const $pos = doc.resolve(Math.min(pos, doc.content.size));
+    for (let d = $pos.depth; d >= 0; d--) {
+        const name = $pos.node(d).type.name;
+        if (name === "table_cell" || name === "table_header") { return $pos.start(d); }
     }
-
-    const savedSig  = sigLines(saved);
-    const serialSig = sigLines(serialized);
-    const n = savedSig.length, m = serialSig.length;
-
-    const dp: Uint16Array[] = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-    for (let i = 1; i <= n; i++)
-        for (let j = 1; j <= m; j++)
-            dp[i][j] = normLineForCompare(savedSig[i - 1].text) === normLineForCompare(serialSig[j - 1].text)
-                ? dp[i - 1][j - 1] + 1
-                : Math.max(dp[i - 1][j], dp[i][j - 1]);
-
-    const keepMap = new Map<number, number>();
-    {
-        let i = n, j = m;
-        while (i > 0 && j > 0) {
-            if (normLineForCompare(savedSig[i - 1].text) === normLineForCompare(serialSig[j - 1].text)) {
-                keepMap.set(serialSig[j - 1].lineIdx, savedSig[i - 1].lineIdx);
-                i--; j--;
-            } else if (dp[i][j - 1] >= dp[i - 1][j]) {
-                j--;
-            } else {
-                i--;
-            }
-        }
-    }
-
-    if (keepMap.size === n && keepMap.size === m && saved.length === serialized.length) return saved;
-
-    const savedLines = saved.split('\n');
-    const serializedLines = serialized.split('\n');
-    const result: string[] = [];
-    for (let i = 0; i < serializedLines.length; i++) {
-        const savedIdx = keepMap.get(i);
-        if (savedIdx !== undefined) result.push(savedLines[savedIdx]);
-        else result.push(serializedLines[i]);
-    }
-    return result.join('\n');
+    return -1;
 }
 
 // ─── 自定义视图组件 ─────────────────────────────────────────
@@ -472,18 +298,49 @@ import { createImageView } from "./components/imageView";
 
 let _editor: Editor | null = null;
 let _savedMarkdown = '';
-let _hasUserInteracted = false;
-let _interactionListenerAdded = false;
+/** CodeMirror 主题补配观察器断开函数（编辑器重建时先断开旧的） */
+let _disconnectCmObserver: (() => void) | null = null;
+/** 主题订阅退订句柄（createEditor 订阅、destroyEditor 退订）——
+ * 回归：退订函数曾被丢弃，init/revert 每次重建向 themeBus 泄漏一个监听器，
+ * 闭包持有整篇旧文档的 mermaidCodeMap 且主题切换时重放全部旧回调 */
+let _unsubscribeTheme: (() => void) | null = null;
+let _serializationMode: SerializationMode = "clean";
 
-function setupInteractionTracking(): void {
-    if (_interactionListenerAdded) return;
-    _interactionListenerAdded = true;
-    const mark = () => { _hasUserInteracted = true; };
-    document.addEventListener('keydown',   mark, { capture: true });
-    document.addEventListener('mousedown', mark, { capture: true });
-    document.addEventListener('paste',     mark, { capture: true });
-    document.addEventListener('drop',      mark, { capture: true });
-    document.addEventListener('cut',       mark, { capture: true });
+export function setSerializationMode(mode: SerializationMode): void {
+    _serializationMode = mode;
+}
+
+/** 当前序列化模式（回归测试观测口：init/revert 重建不得重置运行期配置） */
+export function getSerializationMode(): SerializationMode {
+    return _serializationMode;
+}
+
+/**
+ * 保存前的收尾（序列化 → 归一化 → 最小行改动 → 还原原文行尾）。
+ *
+ * 三件事（都在两种序列化模式下生效）：
+ * 1. 擦掉列表项空内容占位 `<br />`（`stripListItemBreakPlaceholder`）；
+ * 2. 去掉多余的 `\&` 转义（`dropRedundantAmpersandEscapes`）；
+ * 3. **行尾保真**：比较与序列化统一在 LF 口径下做，最后按源文件惯用行尾写回。源是 CRLF 时
+ *    逐行签名会带上 `\r`、与 LF 序列化结果永远不相等，导致「全文都被判为改动」（用户看到的
+ *    是整篇被重排）；写盘又是直接写字节，不还原就每存一次把 CRLF 文件改成 LF。
+ */
+function prepareMarkdownForSave(source: string, serialized: string): string {
+    const eol = detectLineEnding(source);
+    const sourceLf = toLf(source);
+    const normalized = dropRedundantAmpersandEscapes(stripListItemBreakPlaceholder(toLf(serialized)));
+    const withoutEol = (() => {
+        if (_serializationMode === "compatible") return applyMinimalChanges(sourceLf, normalized);
+        try {
+            return applyMinimalChanges(sourceLf, serializeCleanMarkdown(sourceLf, normalized));
+        } catch (error) {
+            // 错误日志保留（与调试开关无关）：clean 序列化器异常时回退 compatible 输出，
+            // 静默回退会掩盖序列化器缺陷
+            console.warn("[markdown-serialization] Clean serializer failed; using compatible output", { error });
+            return applyMinimalChanges(sourceLf, normalized);
+        }
+    })();
+    return withLineEnding(withoutEol, eol);
 }
 
 export function getEditorView(): EditorView | null {
@@ -491,40 +348,70 @@ export function getEditorView(): EditorView | null {
     return _editor.action((ctx) => ctx.get(editorViewCtx));
 }
 
+/**
+ * 销毁当前编辑器并清理其侧效应（主题订阅、CodeMirror 观察器、模块引用）；幂等。
+ * revert/重建前由宿主调用（替代直接 _editor.destroy()）。
+ */
+export function destroyEditor(): void {
+    _unsubscribeTheme?.();
+    _unsubscribeTheme = null;
+    _disconnectCmObserver?.();
+    _disconnectCmObserver = null;
+    _editor?.destroy();
+    _editor = null;
+}
+
+/**
+ * 保存时拉取序列化（拉取式架构的序列化唯一入口）：
+ * Extension 在自动保存防抖到点 / Cmd+S 时 requestContent，webview 在此序列化一次
+ * （含 clean 模式处理 + minimalDiff 保留未改行原文）并回传。输入期间零序列化。
+ */
+export function getMarkdownForSave(): string {
+    if (!_editor) return _savedMarkdown;
+    const serialized = _editor.action(getMarkdown());
+    const toSave = prepareMarkdownForSave(_savedMarkdown, serialized);
+    _savedMarkdown = toSave;
+    return toSave;
+}
+
 export async function createEditor(
     container: HTMLElement,
     initialMarkdown: string,
-    onUpdate: (markdown: string) => void,
+    onDocumentChanged: () => void,
     onRenameImage?: (webviewUri: string, newBasename: string) => Promise<void>,
     onTocToggle?: () => void,
 ): Promise<Editor> {
-    _hasUserInteracted = false;
-    setupInteractionTracking();
-
-    let debounceTimer: ReturnType<typeof setTimeout>;
-    let isComposing = false;
-    let pendingMd: string | null = null;
-
-    const fireUpdate = (md: string) => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => onUpdate(md), 300);
-    };
-    const debouncedUpdate = (md: string) => {
-        if (isComposing) { pendingMd = md; return; }
-        fireUpdate(md);
-    };
-
-    container.addEventListener('compositionstart', () => { isComposing = true; });
-    container.addEventListener('compositionend', () => {
-        isComposing = false;
-        if (pendingMd !== null) {
-            const md = pendingMd;
-            pendingMd = null;
-            fireUpdate(md);
-        }
-    });
+    // 回归（F1）：不再在此重置序列化模式——init 与 revert 都走 createEditor，
+    // 用启动快照重置会把用户中途改的配置静默回滚（外部写盘触发 revert 即复现）。
+    // 运行期配置统一由 init 消息载荷与 setSerializationMode 消息维护。
+    // 用户交互纪元快照（回归 F4：与 index.ts 的延迟滚动共用同一跟踪器）
+    const interactionEpochAtCreate = getUserInteractionEpoch();
 
     let isSettled = false;
+
+    // 文档变更轻量通知（不含序列化）。
+    // 架构调整：序列化从「每键推送」（listener markdownUpdated 每键全量序列化，
+    // 1 万行基准 52-99ms 尖峰）改为「保存时拉取」——Extension 在自动保存防抖到点
+    // 或 Cmd+S 时发 requestContent，webview 才序列化一次回传。输入期间零序列化。
+    // 仅 doc 变化才通知（回归：光标移动/选区变化也是 dispatch，曾误发脏标记，
+    // 未编辑也出现 ● 圆点）
+    let prevDoc: ProseNode | null = null;
+    const updateNotifyPlugin = $prose(() =>
+        new Plugin({
+            view() {
+                return {
+                    update(view) {
+                        if (!isSettled) return;
+                        if (getUserInteractionEpoch() === interactionEpochAtCreate) return;
+                        const doc = view.state.doc;
+                        if (prevDoc !== null && doc.eq(prevDoc)) return;
+                        prevDoc = doc;
+                        onDocumentChanged();
+                    },
+                };
+            },
+        }),
+    );
 
     // ── CrepeBuilder ──────────────────────────────────────────────────────────
     const crepe = new CrepeBuilder({
@@ -534,8 +421,14 @@ export async function createEditor(
 
     // Phase 3: 启用 Crepe 原生功能（替换自定义实现 + 新增能力）
     // ── 主题切换总线 ────────────────────────────────────────
+    // 初始主题取主题总线当前值（回归：此前硬编码 isDark=true 但传给 CodeMirror 的
+    // 初始 extension 是亮色，靠下方的观察器兜底修正）
+    let isDark = isDarkTheme();
     const cmTheme = new Compartment();
-    const getCMTheme = (dark: boolean) => dark ? oneDark : syntaxHighlighting(defaultHighlightStyle);
+    // 主题 extension 缓存：每次调用新建对象会让 Compartment.reconfigure 全量重算
+    // 并触发 CM 重渲染（放大下方观察器的回环）
+    const CM_THEME_EXT = { dark: oneDark, light: syntaxHighlighting(defaultHighlightStyle) };
+    const getCMTheme = (dark: boolean) => (dark ? CM_THEME_EXT.dark : CM_THEME_EXT.light);
 
     const reconfigureAllCM = () => {
         document.querySelectorAll(".cm-editor").forEach((el) => {
@@ -544,44 +437,91 @@ export async function createEditor(
         });
     };
 
-    // 监听新 CodeMirror 编辑器创建（补配主题）
-    const cmObserver = new MutationObserver(() => {
-        if (document.querySelector(".cm-editor")) setTimeout(reconfigureAllCM, 10);
-    });
-    cmObserver.observe(container, { childList: true, subtree: true });
+    // 新 CodeMirror 编辑器补配主题：只在 .cm-editor 数量变化时触发（回环防护见
+    // utils/cmThemeObserver.ts 注释——此前任何 DOM 变更都排一次重配，重配自身又
+    // 产生 DOM 变更，形成 10ms 一次的无限回环）
+    _disconnectCmObserver?.();
+    _disconnectCmObserver = observeCmEditorCount(container, reconfigureAllCM);
 
     // 主题切换：CodeMirror + Mermaid 全部统一处理
-    let isDark = true;
     const mermaidCodeMap = new Map<string, string>();
     let mermaidSeq = 0;
 
-    const renderMermaid = (code: string): Promise<string> => {
+    // ── Mermaid 惰性加载 ────────────────────────────────────────────────
+    // 首帧性能：mermaid 系（core + parser + cytoscape + 各 diagram）是 webview 包
+    // 最大单一依赖，静态 import 会把 ~1.3MB（压缩口径）压进入口。改为首个 mermaid
+    // 代码块渲染时才加载；主题切换在未加载时只记录目标主题，加载时统一初始化。
+    let _mermaidModule: typeof import("mermaid").default | null = null;
+    let _mermaidThemeInitializedFor: boolean | null = null;
+    async function loadMermaid(): Promise<typeof import("mermaid").default> {
+        if (!_mermaidModule) {
+            const mod = await import("mermaid");
+            _mermaidModule = mod.default;
+        }
+        if (_mermaidThemeInitializedFor !== isDark) {
+            _mermaidModule.initialize({ startOnLoad: false, theme: isDark ? "dark" : "default" });
+            _mermaidThemeInitializedFor = isDark;
+        }
+        return _mermaidModule;
+    }
+
+    const renderMermaid = async (code: string): Promise<string> => {
         const id = "mermaid-" + Math.random().toString(36).slice(2, 8);
-        return mermaid.render(id, code).then(({ svg }) => svg);
+        const mermaid = await loadMermaid();
+        const { svg } = await mermaid.render(id, code);
+        return svg;
     };
 
-    onThemeChange((dark) => {
+    _unsubscribeTheme = onThemeChange((dark) => {
         isDark = dark;
-        mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
-        // 重绘已有 mermaid 预览
-        mermaidCodeMap.forEach((code, key) => {
-            const el = document.querySelector<HTMLElement>(`[data-mermaid-key="${key}"]`);
-            if (el) renderMermaid(code).then((svg) => { el.innerHTML = svg; }).catch(() => {});
-        });
+        // 重绘已有 mermaid 预览（仅 mermaid 已加载时——未加载说明尚无预览可重绘，
+        // 主题偏好由 loadMermaid 在首次渲染时套用）
+        if (_mermaidModule) {
+            _mermaidModule.initialize({ startOnLoad: false, theme: dark ? "dark" : "default" });
+            _mermaidThemeInitializedFor = dark;
+            mermaidCodeMap.forEach((code, key) => {
+                const el = document.querySelector<HTMLElement>(`[data-mermaid-key="${key}"]`);
+                if (el) renderMermaid(code).then((svg) => {
+                    el.innerHTML = svg;
+                    const svgEl = el.querySelector<SVGElement>("svg");
+                    if (svgEl) enhanceMermaidPreview(el, svgEl);
+                }).catch(() => { /* 单图渲染失败不影响其他图与主题切换（错误图保持旧内容） */ });
+            });
+        }
         // 重配 CodeMirror
         reconfigureAllCM();
     });
 
     // Mermaid 预览渲染
-    const renderPreview = (lang: string, code: string, apply: (v: string | null) => void) => {
+    const renderPreview = (lang: string, code: string, apply: (v: null | string | HTMLElement) => void) => {
+        // LaTeX 代码块预览：vendor/latexFeature 的惰性 KaTeX 异步渲染
+        // （vendor 不 import codeBlockConfig——pnpm peer 变体下其 SliceType 符号分裂，
+        // 跨上下文 update 会 contextNotFound；统一走本文件的 renderPreview）
+        if (lang.toLowerCase() === "latex" && code.length > 0) {
+            renderLatexPreview(code, apply);
+            return null;
+        }
         if (lang.toLowerCase() !== "mermaid") return null;
         const key = `m-${++mermaidSeq}`;
+        // 键按「DOM 里是否还有对应节点」回收：在 mermaid 块里每敲一个字符上游就会用新的
+        // text.value 触发一次 renderPreview，旧键随之失去节点（apply 已替换 DOM）。原实现
+        // 只增不删，主题切换的 forEach 会对全部历史键各做一次 document.querySelector——
+        // 查询次数随编辑次数无界增长。这里顺手清掉查不到节点的键（保留仍有效的 =
+        // 文档里其他 mermaid 块，主题切换要重绘它们）。
+        for (const oldKey of mermaidCodeMap.keys()) {
+            if (oldKey !== key && !document.querySelector(`[data-mermaid-key="${oldKey}"]`)) {
+                mermaidCodeMap.delete(oldKey);
+            }
+        }
         mermaidCodeMap.set(key, code);
         apply(`<div data-mermaid-key="${key}"></div>`);
-        const el = () => document.querySelector(`[data-mermaid-key="${key}"]`);
+        const el = () => document.querySelector<HTMLElement>(`[data-mermaid-key="${key}"]`);
         renderMermaid(code).then((svg) => {
             const e = el();
-            if (e) e.innerHTML = svg;
+            if (!e) return;
+            e.innerHTML = svg;
+            const svgEl = e.querySelector<SVGElement>("svg");
+            if (svgEl) enhanceMermaidPreview(e, svgEl);
         }).catch((err) => {
             console.warn('[mermaid] render failed:', err);
             const e = el();
@@ -592,11 +532,10 @@ export async function createEditor(
     crepe
         .addFeature(codeMirror, {
             languages: codeLanguages,
-            theme: cmTheme.of(getCMTheme(false)),
+            theme: cmTheme.of(getCMTheme(isDark)),
             renderPreview,
             searchPlaceholder: t('Search language...'),
         })
-        .addFeature(cursor) // 原版虚拟光标（mark 边界方向键/方向指示），z-index 已在 style.css 修复被背景盖住问题
         .addFeature(listItem)
         .addFeature(topBar, {
             headingOptions: [
@@ -608,320 +547,111 @@ export async function createEditor(
                 { label: 'H5', level: 5 },
                 { label: 'H6', level: 6 },
             ],
-            buildTopBar: (builder) => {
-                // Undo/Redo — 最前面独立组
-                builder.addGroup('history', '').addItem('undo', {
-                    icon: TbUndo,
-                    active: (ctx: Ctx) => undo(ctx.get(editorViewCtx).state),
-                    onRun: (ctx: Ctx) => { const v = ctx.get(editorViewCtx); undo(v.state, v.dispatch, v); },
-                }).addItem('redo', {
-                    icon: TbRedo,
-                    active: (ctx: Ctx) => redo(ctx.get(editorViewCtx).state),
-                    onRun: (ctx: Ctx) => { const v = ctx.get(editorViewCtx); redo(v.state, v.dispatch, v); },
-                });
-                // 清除格式 — formatting 组末尾（行内代码后面）
-                builder.getGroup('formatting').addItem('clear-format', {
-                    icon: TbEraser,
-                    active: (ctx) => {
-                        const v = ctx.get(editorViewCtx);
-                        const { from, to, empty } = v.state.selection;
-                        if (!empty) {
-                            let has = false;
-                            v.state.doc.nodesBetween(from, to, (n) => { if (n.marks.length) { has = true; return false; } return true; });
-                            return has;
-                        }
-                        // 无选区时：光标在链接内即为 active
-                        const linkType = v.state.schema.marks['link'];
-                        if (!linkType) return false;
-                        return linkType.isInSet(v.state.doc.resolve(from).marks()) !== undefined;
-                    },
-                    onRun: (ctx) => {
-                        const v = ctx.get(editorViewCtx);
-                        let { from, to, empty } = v.state.selection;
-                        const tr = v.state.tr;
-                        const linkType = v.state.schema.marks['link'];
-
-                        // 光标在链接内（无选区）→ 取消整个链接
-                        if (empty && linkType) {
-                            const $from = v.state.doc.resolve(from);
-                            if (linkType.isInSet($from.marks())) {
-                                while (from > 0 && v.state.doc.rangeHasMark(from - 1, from, linkType)) from--;
-                                const docSize = v.state.doc.content.size;
-                                while (to < docSize && v.state.doc.rangeHasMark(to, to + 1, linkType)) to++;
-                                tr.removeMark(from, to, linkType);
-                                v.dispatch(tr);
-                                return;
-                            }
-                        }
-
-                        // 有选区 → 扩展链接边界后清除所有标记
-                        if (linkType) {
-                            while (from > 0 && v.state.doc.rangeHasMark(from - 1, from, linkType)) from--;
-                            const docSize = v.state.doc.content.size;
-                            while (to < docSize && v.state.doc.rangeHasMark(to, to + 1, linkType)) to++;
-                        }
-
-                        v.state.doc.nodesBetween(from, to, (n, pos) => {
-                            if (n.marks.length) {
-                                const s = Math.max(pos, from), e = Math.min(pos + n.nodeSize, to);
-                                n.marks.forEach((m) => tr.removeMark(s, e, m.type));
-                            }
-                        });
-                        if (linkType) tr.removeMark(from, to, linkType);
-                        v.dispatch(tr);
-                    },
-                });
-                // 图片 — insert 组，link 和 table 之间（清空后按序重建）
-                {
-                    const g = builder.getGroup('insert'); const items = g.group.items;
-                    const linkItem = items.find((i) => i.key === 'link');
-                    const tableItem = items.find((i) => i.key === 'table');
-                    g.clear();
-                    if (linkItem) g.addItem('link', linkItem);
-                    g.addItem('image', {
-                        icon: TbImage,
-                        active: () => false,
-                        onRun: (ctx) => {
-                            ctx.get(editorViewCtx).dom.dispatchEvent(new CustomEvent('epytor:insertImage', { bubbles: true }));
-                        },
-                    });
-                    if (tableItem) g.addItem('table', tableItem);
-                }
-                // 引用块一键退出：在引用内点击 → lift 解包，否则 → 包裹
-                {
-                    const isInBlockquote = (state: EditorState) => {
-                        const bqType = state.schema.nodes['blockquote'];
-                        if (!bqType) return false;
-                        const { $from } = state.selection;
-                        for (let d = $from.depth; d >= 0; d--) {
-                            if ($from.node(d).type === bqType) return true;
-                        }
-                        return false;
-                    };
-
-                    const moreG = builder.getGroup('more');
-                    const moreItems = moreG.group.items;
-                    const quoteItem = moreItems.find((i) => i.key === 'quote');
-                    const hrItem = moreItems.find((i) => i.key === 'hr');
-                    const quoteIcon = quoteItem?.icon ?? '';
-                    moreG.clear();
-                    moreG.addItem('quote', {
-                        icon: quoteIcon,
-                        active: (ctx) => isInBlockquote(ctx.get(editorViewCtx).state),
-                        onRun: (ctx) => {
-                            const v = ctx.get(editorViewCtx);
-                            if (isInBlockquote(v.state)) {
-                                lift(v.state, v.dispatch);
-                            } else {
-                                const bq = v.state.schema.nodes['blockquote'];
-                                if (bq) wrapIn(bq)(v.state, v.dispatch);
-                            }
-                        },
-                    });
-                    if (hrItem) moreG.addItem('hr', hrItem);
-                }
-                // 列表切换：不在列表 → 包裹；在列表且类型不同 → 直接切换；类型相同 → 取消列表
-                {
-                    const findListItems = (state: EditorState) => {
-                        const liType = state.schema.nodes['list_item'];
-                        const { from, to } = state.selection;
-                        const items: Array<{ pos: number; node: any }> = [];
-                        state.doc.nodesBetween(from, to, (node, pos) => {
-                            if (node.type === liType) items.push({ pos, node });
-                        });
-                        if (!items.length) {
-                            const { $from } = state.selection;
-                            for (let d = $from.depth; d >= 0; d--) {
-                                if ($from.node(d).type === liType) {
-                                    items.push({ pos: $from.before(d), node: $from.node(d) });
-                                    break;
-                                }
-                            }
-                        }
-                        return items;
-                    };
-                    // 找到包含这些 list_item 的顶层列表节点（去重）
-                    const findTopLists = (state: EditorState, items: Array<{ pos: number; node: any }>) => {
-                        const lists: Array<{ pos: number; node: any }> = [];
-                        const seen = new Set<number>();
-                        items.forEach(({ pos }) => {
-                            const $pos = state.doc.resolve(pos);
-                            for (let d = $pos.depth; d >= 0; d--) {
-                                const node = $pos.node(d);
-                                if (node.type.name === 'bullet_list' || node.type.name === 'ordered_list') {
-                                    const listPos = $pos.before(d);
-                                    if (!seen.has(listPos)) {
-                                        seen.add(listPos);
-                                        lists.push({ pos: listPos, node });
-                                    }
-                                    break;
-                                }
-                            }
-                        });
-                        return lists;
-                    };
-                    const listKind = (state: EditorState): 'bullet' | 'ordered' | 'task' | null => {
-                        const items = findListItems(state);
-                        if (!items.length) return null;
-                        const attrs = items[0].node.attrs;
-                        if (attrs.checked != null) return 'task';
-                        return attrs.listType === 'ordered' ? 'ordered' : 'bullet';
-                    };
-                    const toggleList = (target: 'bullet' | 'ordered' | 'task') => (ctx: any) => {
-                        const v = ctx.get(editorViewCtx);
-                        const { state, dispatch } = v;
-                        const schema = state.schema;
-                        const kind = listKind(state);
-                        if (!kind) {
-                            // 不在列表 → 原包裹行为
-                            let nodeType: any = null;
-                            let attrs: any = null;
-                            if (target === 'bullet') nodeType = schema.nodes['bullet_list'];
-                            else if (target === 'ordered') nodeType = schema.nodes['ordered_list'];
-                            else { nodeType = schema.nodes['list_item']; attrs = { checked: false }; }
-                            if (nodeType) ctx.get(commandsCtx).call(wrapInBlockTypeCommand.key, { nodeType, attrs });
-                            return;
-                        }
-                        if (kind === target) {
-                            // 同类型 → 取消/降级（lift 一层）
-                            const liType = schema.nodes['list_item'];
-                            liftListItem(liType)(state, dispatch);
-                            return;
-                        }
-                        // 不同类型 → 换外层列表类型 + 更新 list_item attrs
-                        // 用 setNodeMarkup（不改变节点大小，光标位置自动保留，不会跳行）
-                        const items = findListItems(state);
-                        const lists = findTopLists(state, items);
-                        if (!lists.length) return;
-                        const tr = state.tr;
-                        lists.forEach(({ pos, node }) => {
-                            const newType = target === 'ordered'
-                                ? schema.nodes['ordered_list']
-                                : schema.nodes['bullet_list'];
-                            const newAttrs = { ...node.attrs };
-                            if (target === 'ordered') newAttrs.order = 1;
-                            // 换外层类型（content 保留）
-                            tr.setNodeMarkup(pos, newType, newAttrs);
-                            // 逐个 list_item 更新 attrs
-                            let order = 1;
-                            node.forEach((item: any, _off: number, itemPos: number) => {
-                                const itemAttrs = { ...item.attrs };
-                                if (target === 'bullet') {
-                                    itemAttrs.listType = 'bullet';
-                                    itemAttrs.label = '•';
-                                    itemAttrs.checked = null;
-                                } else if (target === 'ordered') {
-                                    itemAttrs.listType = 'ordered';
-                                    itemAttrs.label = `${order}.`;
-                                    itemAttrs.checked = null;
-                                    order++;
-                                } else { // task
-                                    itemAttrs.checked = false;
-                                    itemAttrs.listType = 'bullet';
-                                    itemAttrs.label = '•';
-                                }
-                                tr.setNodeMarkup(pos + itemPos + 1, undefined, itemAttrs);
-                            });
-                        });
-                        dispatch(tr);
-                    };
-                    const listG = builder.getGroup('list');
-                    const listItems = listG.group.items;
-                    const bulletItem = listItems.find((i: any) => i.key === 'bullet-list');
-                    const orderedItem = listItems.find((i: any) => i.key === 'ordered-list');
-                    const taskItem = listItems.find((i: any) => i.key === 'task-list');
-                    if (bulletItem || orderedItem || taskItem) {
-                        listG.clear();
-                        if (bulletItem) listG.addItem('bullet-list', {
-                            icon: bulletItem.icon,
-                            active: (c: any) => listKind(c.get(editorViewCtx).state) === 'bullet',
-                            onRun: toggleList('bullet'),
-                        });
-                        if (orderedItem) listG.addItem('ordered-list', {
-                            icon: orderedItem.icon,
-                            active: (c: any) => listKind(c.get(editorViewCtx).state) === 'ordered',
-                            onRun: toggleList('ordered'),
-                        });
-                        if (taskItem) listG.addItem('task-list', {
-                            icon: taskItem.icon,
-                            active: (c: any) => listKind(c.get(editorViewCtx).state) === 'task',
-                            onRun: toggleList('task'),
-                        });
-                    }
-                }
-                // 目录切换 — 设置前独立组
-                builder.addGroup('toc', '').addItem('toc', {
-                    icon: TbToc,
-                    active: () => false,
-                    onRun: () => {
-                        onTocToggle?.();
-                    },
-                });
-                // 设置 — 末尾独立组
-                builder.addGroup('settings', '').addItem('settings', {
-                    icon: TbGear,
-                    active: () => false,
-                    onRun: () => {
-                        document.dispatchEvent(new CustomEvent('epytor:openSettings', { bubbles: true }));
-                    },
-                });
-                // 将 toc、history 组移到最前面
-                const groups = builder.build();
-                const tocGroup = groups.find((g) => g.key === 'toc');
-                if (tocGroup) {
-                    const idx = groups.indexOf(tocGroup);
-                    groups.splice(idx, 1);
-                    groups.unshift(tocGroup);
-                }
-                const historyGroup = groups.find((g) => g.key === 'history');
-                if (historyGroup) {
-                    const idx = groups.indexOf(historyGroup);
-                    groups.splice(idx, 1);
-                    groups.splice(1, 0, historyGroup);
-                }
-            },
+            buildTopBar: (builder) => buildTopBarConfig(builder, onTocToggle),
         })
         .addFeature(toolbar)
         .addFeature(table)
-        .addFeature(latex)       // 全新：KaTeX 数学公式
+        .addFeature(latexFeature)   // 本地惰性 KaTeX 实现（替代上游 latex）
         .addFeature(linkTooltip)
     // 已启用：feature/toolbar → 选中文字浮动工具栏
+
+    // 恢复行内代码 mark 的 inclusive：7.22.1（#2451）改为 false，块尾输入即退出
+    // 代码 span——epytor 的 ./ @/ 路径补全依赖在行内代码尾部继续编辑，
+    // 恢复 7.22.0 行为（退出用方向键/点击明确操作）
+    crepe.editor.use(
+        inlineCodeSchema.extendSchema((prev) => (ctx) => ({ ...prev(ctx), inclusive: true })),
+    );
+
+    // 光标插件独立注册：官方 cursor 插件（drop indicator）+ 默认行为虚拟光标。
+    // 回归：Crepe cursor feature 的 createVirtualCursor 带 skipWarning:['inlineCode']
+    // （7.22.1 为 inclusive:false 设计）；epytor 恢复 inclusive:true 后仍跳过警告，
+    // 导致行内代码边界的方向指示消失、方向键无法退出——自注册默认行为（7.22.0 一致）
+    crepe.editor.use(cursor);
+    crepe.editor.use($prose(() => createVirtualCursor()));
+
+    // 撤销粒度：每次输入一步（默认 500ms 合并窗会把连续输入并成一次撤销，
+    // 用户无法预知一次 Ctrl+Z 撤掉多少）。IME 组合内部仍按组合 ID 合并——
+    // 一段候选提交 = 一步，不会撤到拼音中间态；新一段候选（组合 ID 变化）
+    // 与前一次输入各自成步，撤销不会连带撤掉上一步。
+    crepe.editor.use($prose(() => {
+        let prevComposition: unknown = null;
+        return new Plugin({
+            filterTransaction(tr) {
+                if (!tr.docChanged) { return true; }
+                const composition = tr.getMeta("composition") ?? null;
+                if (composition === null || composition !== prevComposition) { closeHistory(tr); }
+                prevComposition = composition;
+                return true;
+            },
+        });
+    }));
 
     // 注入保留的自定义配置
     crepe.editor
         .config((ctx) => {
             _savedMarkdown = initialMarkdown;
 
-            // 注册自定义 image NodeView
+            // 表格单元格内 Shift+Enter 软换行由 softBreakKeymap 负责（见其文件头：
+            // 上游命令在行尾已有 hardbreak 时会「转段落」，表格内反直觉，故不采用）。
+            // 代码块内的 Shift+Enter 仍走上游默认（softBreakKeymap 返回 false 放行）。
+
+            // Milkdown 的默认 text handler 会对普通文本中的 `_`、`*`、`[`
+            // 过度转义。保留其上下文安全规则，只在 Clean 模式放宽已知误报。
+            ctx.update(remarkStringifyOptionsCtx, (options) => {
+                const compatibleTextHandler = options.handlers?.text;
+                if (!compatibleTextHandler) return options;
+                // 列表标记符沿用文件自己的写法（回归：默认 `*` 会把用户的 `- item`、
+                // `1) item` 在保存时改写掉）。两种序列化模式共用——它与 clean/compatible
+                // 的差别（转义与表格换行）无关，属于「不改用户原文」的保真项。
+                const markers = detectListMarkerStyle(_savedMarkdown ?? initialMarkdown);
+                // 表格单元格内换行：mdast 默认 handler 在表格上下文退化为空格，
+                // 覆盖为 GFM 标准 <br>（两种序列化模式均生效，见 withTableBreakHandler）
+                return withTableBreakHandler({
+                    ...options,
+                    bullet: markers.bullet,
+                    bulletOrdered: markers.ordered,
+                    handlers: {
+                        ...options.handlers,
+                        text: (node, parent, state, info) => {
+                            if (_serializationMode === "compatible") {
+                                return compatibleTextHandler(node, parent, state, info);
+                            }
+                            return cleanTextHandler(node, parent, state, info);
+                        },
+                    },
+                });
+            });
+
+            // 注册自定义 image / 行内公式 NodeView（行内公式为惰性 KaTeX：
+            // 占位展示源码，katex 就绪后异步渲染，见 vendor/latexFeature.ts）
             ctx.set(nodeViewCtx, [
                 [
                     "image",
                     (node, view, getPos) =>
                         createImageView(node, view, getPos, undefined, undefined, onRenameImage),
                 ],
+                [
+                    "math_inline",
+                    (node) => createMathInlineView(node),
+                ],
             ]);
 
         })
-        .use(listener)              // 追加 listener 用于 markdownUpdated
-        .use(listLiftPlugin)        // 保留：列表 backspace
-        .use(selectionPlugin)       // 保留：选区变更回调
+        .use(updateNotifyPlugin)    // 文档变更轻量通知（保存时拉取序列化，输入期间零序列化）
         .use(formatKeymapPlugin)    // 保留：自定义格式化快捷键
+        .use(headingFoldPlugin)     // 标题折叠（Decoration，不修改文档）
+        .use(headingStickyPlugin)   // 标题吸顶条（滚动跟随 + 推挤过渡）
+        .use(softBreakKeymap)       // Shift+Enter 软换行（表格内允许；见文件头回归说明）
         .use(cellClickFixPlugin)    // 表格单击→光标定位，拖拽→多选
+        .use(listBackspacePlugin)   // 列表项行首 Backspace 的落点（见 utils/listBackspace.ts）
+        .use(listMarkerPlugin)      // Word 式多级列表标记（见 listMarkers.css 与同名 spec）
+        .use(emptyTaskListItemRemark) // 空任务项（`- [ ] `）识别（见 utils/emptyTaskListItem.ts）
         .use(listSpreadNormalizePlugin); // 保留：列表 spread 规范化
-
-    // 注册 markdownUpdated 回调（自动保存链路）
-    crepe.on((api) => {
-        api.markdownUpdated((_ctx, markdown) => {
-            if (!isSettled) return;
-            if (!_hasUserInteracted) return;
-            const toSave = applyMinimalChanges(_savedMarkdown, markdown);
-            if (toSave === _savedMarkdown) return;
-            _savedMarkdown = toSave;
-            debouncedUpdate(toSave);
-        });
-    });
 
     _editor = await crepe.create();
     isSettled = true;
+    // 首帧基准：settle 后用户首个交互事务（点击定位光标等纯选区 dispatch）与基准
+    // doc 相同即不通知（回归：prevDoc=null 使首事务无条件误发脏标记，未编辑就出 ● 圆点）
+    prevDoc = _editor.action((ctx) => ctx.get(editorViewCtx)).state.doc;
     return _editor;
 }

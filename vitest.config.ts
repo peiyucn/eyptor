@@ -41,6 +41,12 @@ export default defineConfig({
             thresholds: {
                 lines: 70,
                 functions: 70,
+                // AGENTS 分模块覆盖率底线（CI test:coverage 强制；实测各模块线覆盖远超底线）
+                "src/utils/imageService.ts": { lines: 85 },
+                "src/utils/getNonce.ts": { lines: 100 },
+                "src/MarkdownDocument.ts": { lines: 80 },
+                "src/utils/contentTransform.ts": { lines: 90 },
+                "src/utils/lineMap.ts": { lines: 90 },
             },
         },
     },

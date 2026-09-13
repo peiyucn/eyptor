@@ -9,6 +9,8 @@ jobs:
   publish:
     name: publish
     runs-on: ubuntu-latest
+    # 发布环境：Deployments 页留下每次发布记录（dsh-launcher-panel / dsh-sparrow 同款做法）
+    environment: marketplace-publish
     permissions:
       contents: write
 
@@ -38,12 +40,13 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          # 从两份 CHANGELOG 抽取本版本条目，英文在上、中文在下拼成发布说明
+          # 从两份 CHANGELOG 抽取本版本条目，英文在上、中文在下拼成发布说明。
+          # 用 index() 前缀匹配而非正则：awk 里 \[ 是非法转义会退化成字符类，匹配失效。
           extract() {
-            awk -v ver="^## \\[${VERSION}\\]" '
+            awk -v ver="${VERSION}" '
               BEGIN { found=0; lines="" }
-              $0 ~ ver { found=1; next }
-              found && /^## \[/ { exit }
+              index($0, "## [" ver "]") == 1 { found=1; next }
+              found && index($0, "## [") == 1 { exit }
               found { lines = lines $0 "\n" }
               END { printf "%s", lines }
             ' "$1"

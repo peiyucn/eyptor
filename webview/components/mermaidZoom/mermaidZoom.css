@@ -1,0 +1,44 @@
+/* Mermaid 预览缩放（全部使用 --vscode-* 变量） */
+.epytor-mermaid-zoom-container {
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.epytor-mermaid-zoom-bar {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    gap: 2px;
+    z-index: 5;
+    background: var(--vscode-editorWidget-background, #252526);
+    border: 1px solid var(--vscode-menu-border, #454545);
+    border-radius: 4px;
+    padding: 2px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.epytor-mermaid-zoom-container:hover .epytor-mermaid-zoom-bar {
+    opacity: 1;
+}
+
+.epytor-mermaid-zoom-btn {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--vscode-icon-foreground, #cccccc);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.epytor-mermaid-zoom-btn:hover {
+    background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}

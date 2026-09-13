@@ -27,6 +27,30 @@ interface TooltipHandle {
     show(): void;
 }
 
+export interface TooltipHorizontalPos {
+    left?: string;
+    right?: string;
+}
+
+/**
+ * 横向定位纯函数（可单测）：
+ * - 右半屏按钮 → 右缘对齐按钮右缘（确定性不超视口右缘，回归：findBar 末位按钮 tooltip 超屏被裁剪）
+ * - 左半屏按钮 → 左缘对齐按钮左缘（向右伸展，受 CSS max-width 限制）
+ */
+export function computeTooltipHorizontal(
+    el: { left: number; right: number },
+    viewportWidth: number,
+): TooltipHorizontalPos {
+    if (el.right > viewportWidth / 2) {
+        return {
+            right: `${Math.max(TOOLTIP_VIEWPORT_MARGIN_PX, viewportWidth - el.right)}px`,
+        };
+    }
+    return {
+        left: `${Math.max(TOOLTIP_VIEWPORT_MARGIN_PX, el.left)}px`,
+    };
+}
+
 function position(
     tip: HTMLElement,
     el: HTMLElement,
@@ -38,9 +62,19 @@ function position(
     const elRect = el.getBoundingClientRect();
     const tipRect = tip.getBoundingClientRect();
 
-    let x = elRect.left + elRect.width / 2 - tipRect.width / 2;
-    let y: number;
+    const horizontal = computeTooltipHorizontal(
+        { left: elRect.left, right: elRect.right },
+        window.innerWidth,
+    );
+    if (horizontal.left !== undefined) {
+        tip.style.left = horizontal.left;
+        tip.style.right = "auto";
+    } else {
+        tip.style.left = "auto";
+        tip.style.right = horizontal.right!;
+    }
 
+    let y: number;
     if (placement === "above") {
         y = elRect.top - tipRect.height - TOOLTIP_SPACING_PX;
         if (y < TOOLTIP_VIEWPORT_MARGIN_PX) {
@@ -52,16 +86,18 @@ function position(
             y = elRect.top - tipRect.height - TOOLTIP_SPACING_PX;
         }
     }
-
-    if (x + tipRect.width > window.innerWidth - TOOLTIP_VIEWPORT_MARGIN_PX) {
-        x = window.innerWidth - tipRect.width - TOOLTIP_VIEWPORT_MARGIN_PX;
-    }
-    if (x < TOOLTIP_VIEWPORT_MARGIN_PX) {
-        x = TOOLTIP_VIEWPORT_MARGIN_PX;
-    }
-
-    tip.style.left = `${x}px`;
     tip.style.top = `${y}px`;
+
+    // 读回校验兜底：任何测量/CSS 层误差导致仍超出视口时，改由 right/left 锚定贴边
+    const finalRect = tip.getBoundingClientRect();
+    if (finalRect.width > 0 && finalRect.right > window.innerWidth - TOOLTIP_VIEWPORT_MARGIN_PX) {
+        tip.style.left = "auto";
+        tip.style.right = `${TOOLTIP_VIEWPORT_MARGIN_PX}px`;
+    } else if (finalRect.width > 0 && finalRect.left < TOOLTIP_VIEWPORT_MARGIN_PX) {
+        tip.style.left = `${TOOLTIP_VIEWPORT_MARGIN_PX}px`;
+        tip.style.right = "auto";
+    }
+
     tip.style.visibility = "visible";
 }
 

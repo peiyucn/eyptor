@@ -2,8 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
     extractFrontmatter,
     restoreContentForSave,
+    convertTableBrForDisplay,
+    buildContentWithFrontmatter,
+    normalizeImageDestination,
+    rewriteImageSources,
 } from "../../src/utils/contentTransform";
-import { computeLineMap } from "../../src/utils/lineMap";
+import { computeLineRanges, computeDisplayLineRanges } from "../../src/utils/lineMap";
 
 // ─────────────────────────────────────────────────────────────
 // extractFrontmatter
@@ -114,62 +118,343 @@ describe("restoreContentForSave", () => {
         const result = restoreContentForSave(content, "", uriMap);
         expect(result).toBe("![1](./img.png) ![2](./img.png)");
     });
+
+    // ── 回归 E7：替换域收窄到图片语法内（此前全文 split/join） ──────────────
+    it("代码围栏内的裸 webviewUri 字符串 应该 不被改写（回归：此前全文 split/join 会把代码块内容改掉）", () => {
+        const uriMap = new Map([["vscode-resource://host/a.png", "./a.png"]]);
+        const content = "```text\nvscode-resource://host/a.png\n```\n\n![alt](vscode-resource://host/a.png)";
+        const result = restoreContentForSave(content, "", uriMap);
+        expect(result).toBe("```text\nvscode-resource://host/a.png\n```\n\n![alt](./a.png)");
+    });
+
+    it("正文/链接里的 webviewUri 字符串 应该 不被改写", () => {
+        const uriMap = new Map([["vscode-resource://host/a.png", "./a.png"]]);
+        const content = "见 [说明](vscode-resource://host/a.png) 与纯文本 vscode-resource://host/a.png";
+        expect(restoreContentForSave(content, "", uriMap)).toBe(content);
+    });
+
+    it("序列化把括号转义为 \\( 时 应该 仍能还原为相对路径（回归：此前 webviewUri 泄漏进磁盘文件）", () => {
+        const uriMap = new Map([["vscode-resource://host/my (v2).png", "./images/my (v2).png"]]);
+        const serialized = '![alt](vscode-resource://host/my \\(v2\\).png "ratio:0.5")';
+        expect(restoreContentForSave(serialized, "", uriMap))
+            .toBe('![alt](./images/my (v2).png "ratio:0.5")');
+    });
+
+    it("序列化把含空格路径包成 <...> 时 应该 仍能还原", () => {
+        const uriMap = new Map([["vscode-resource://host/my file.png", "my file.png"]]);
+        const serialized = "![alt](<vscode-resource://host/my file.png>)";
+        expect(restoreContentForSave(serialized, "", uriMap)).toBe("![alt](my file.png)");
+    });
 });
 
 // ─────────────────────────────────────────────────────────────
-// computeLineMap
+// computeLineRanges（段落行区间：行号映射与滚动同步的共同底座）
 // ─────────────────────────────────────────────────────────────
-describe("computeLineMap", () => {
-    it("空内容返回空数组", () => {
-        expect(computeLineMap("")).toEqual([]);
+describe("computeLineRanges", () => {
+    it("空内容 应该 返回空数组", () => {
+        expect(computeLineRanges("")).toEqual([]);
     });
 
-    it("只有空行返回空数组", () => {
-        expect(computeLineMap("\n\n\n")).toEqual([]);
+    it("只有空行 应该 返回空数组", () => {
+        expect(computeLineRanges("\n\n\n")).toEqual([]);
     });
 
-    it("单行内容返回 [1]", () => {
-        expect(computeLineMap("# Hello")).toEqual([1]);
+    it("单行内容 应该 返回 [{1,1}]", () => {
+        expect(computeLineRanges("# Hello")).toEqual([{ start: 1, end: 1 }]);
     });
 
-    it("两个段落（中间空行分隔）返回各段起始行号", () => {
+    it("两个段落（中间空行分隔） 应该 返回各段起止行", () => {
         const content = "# Heading\n\nSome paragraph text.";
-        const lineMap = computeLineMap(content);
-        expect(lineMap).toEqual([1, 3]);
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 1 },
+            { start: 3, end: 3 },
+        ]);
     });
 
-    it("代码块整体作为一个段落处理", () => {
+    it("代码块 应该 整体成段（end 为闭围栏行）", () => {
         const content = "# H\n\n```ts\nconst x = 1;\nconst y = 2;\n```\n\n## H2";
-        const lineMap = computeLineMap(content);
-        // 期望：行1（标题）、行3（代码块）、行8（H2）
-        expect(lineMap[0]).toBe(1);
-        expect(lineMap[1]).toBe(3);
-        expect(lineMap[2]).toBe(8);
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 1 },
+            { start: 3, end: 6 },
+            { start: 8, end: 8 },
+        ]);
     });
 
-    it("波浪线代码块（~~~）同样正确处理", () => {
+    it("波浪线代码块（~~~） 应该 同样整体成段", () => {
         const content = "~~~python\nprint('hello')\n~~~\n\n# After";
-        const lineMap = computeLineMap(content);
-        expect(lineMap.length).toBe(2);
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 3 },
+            { start: 5, end: 5 },
+        ]);
     });
 
-    it("行号从 1 开始（1-indexed）", () => {
-        const content = "paragraph1\n\nparagraph2";
-        const lineMap = computeLineMap(content);
-        expect(lineMap[0]).toBe(1);
+    it("行号 应该 从 1 开始（1-indexed）", () => {
+        expect(computeLineRanges("paragraph1\n\nparagraph2")[0].start).toBe(1);
     });
 
-    it("前导空行不计入行号", () => {
-        const content = "\n\n# Heading";
-        const lineMap = computeLineMap(content);
-        expect(lineMap).toEqual([3]);
+    it("前导空行 应该 不计入行号", () => {
+        expect(computeLineRanges("\n\n# Heading")).toEqual([{ start: 3, end: 3 }]);
     });
 
-    it("大文件（1000 行）计算耗时低于 100ms", () => {
+    // 回归（用户实测「源码在 3. 保存链路，切回预览跑到 6」「预览切源码完全无法定位」）：
+    // 旧实现按空行分段，空行分隔的列表项各成一段，而 CommonMark 把它们解析成**一个**
+    // list 块——块数与块序都和渲染结果对不上，滚动同步整体偏移。
+    it("空行分隔的列表项 应该 合并为一个列表块（与渲染块结构一致）", () => {
+        const content = [
+            "## 章节",
+            "",
+            "* [x] 第一项",
+            "",
+            "* [ ] 第二项",
+            "",
+            "* [x] 第三项",
+            "",
+            "## 下一节",
+        ].join("\n");
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 1 },
+            { start: 3, end: 7 },
+            { start: 9, end: 9 },
+        ]);
+    });
+
+    it("嵌套列表 应该 与父列表同属一个块", () => {
+        const content = ["* 父项", "", "  * 子项", "", "* 第二个父项"].join("\n");
+        expect(computeLineRanges(content)).toEqual([{ start: 1, end: 5 }]);
+    });
+
+    it("GFM 表格 应该 整体成块（含分隔行）", () => {
+        const content = "| a | b |\n| - | - |\n| 1 | 2 |\n\n段落";
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 3 },
+            { start: 5, end: 5 },
+        ]);
+    });
+
+    it("多行引用块 应该 整体成块", () => {
+        const content = "> 第一行\n> 第二行\n\n段落";
+        expect(computeLineRanges(content)).toEqual([
+            { start: 1, end: 2 },
+            { start: 4, end: 4 },
+        ]);
+    });
+
+    it("链接引用定义 应该 不产生块（渲染端不生成块）", () => {
+        const content = "[ref]: https://example.com\n\n段落";
+        expect(computeLineRanges(content)).toEqual([{ start: 3, end: 3 }]);
+    });
+
+    it("块数与「块之间空行数」无关 应该 只取决于块结构", () => {
+        const tight = ["* a", "* b", "* c"].join("\n");
+        const loose = ["* a", "", "* b", "", "* c"].join("\n");
+        expect(computeLineRanges(tight).length).toBe(1);
+        expect(computeLineRanges(loose).length).toBe(1);
+    });
+
+    it("大文件（400 块）解析耗时不随块数平方增长（回归：O(n²) 上屏卡顿）", () => {
+        // 挂钟断言对机器负载敏感（并行跑测试时偶发假红）：改为「多轮取最小值 + 宽松上限」。
+        // 真正的回归（O(n²)、丢缓存、每次全量重建）会让耗时高出数量级，仍会被抓住。
         const content = Array.from({ length: 200 }, (_, i) => `## Heading ${i}\n\nContent ${i}`).join("\n\n");
-        const start = performance.now();
-        computeLineMap(content);
-        const elapsed = performance.now() - start;
-        expect(elapsed).toBeLessThan(100);
+        computeLineRanges(content); // 预热（首次调用含解析器 JIT）
+        let best = Number.POSITIVE_INFINITY;
+        for (let i = 1; i <= 5; i++) {
+            // 每轮内容不同 → 必然绕过单条缓存，测的是真实解析
+            const input = content + "\n".repeat(i);
+            const start = performance.now();
+            computeLineRanges(input);
+            best = Math.min(best, performance.now() - start);
+        }
+        expect(best).toBeLessThan(300);
+    });
+
+    it("同一内容重复调用 应该 命中缓存（返回同一结果、不重解析）", () => {
+        const content = "# A\n\n正文\n\n* 一\n\n* 二";
+        const first = computeLineRanges(content);
+        const second = computeLineRanges(content);
+        expect(second).toBe(first);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// computeDisplayLineRanges（回归：源码/预览切换光标总回 1 行 1 列）
+// ─────────────────────────────────────────────────────────────
+describe("computeDisplayLineRanges", () => {
+    it("无 frontmatter 时 应该 与 computeLineRanges 一致", () => {
+        const content = "# 标题\n\n段落一\n\n段落二\n";
+        expect(computeDisplayLineRanges(content)).toEqual(computeLineRanges(content));
+    });
+
+    it("有 frontmatter 时 应该 跳过 frontmatter 块、行号仍指向完整源码", () => {
+        const content = "---\ntitle: A\ndate: 2026-01-01\n---\n# 标题\n\n段落一\n\n段落二\n";
+        // 正文块：H1（源码第 5 行）、段落一（7）、段落二（9）
+        expect(computeDisplayLineRanges(content).map((r) => r.start)).toEqual([5, 7, 9]);
+        // 对照：正文口径把 frontmatter（与紧随的标题同块）算成第 0 块，正文块索引整体错位
+        expect(computeLineRanges(content)[0].start).toBe(1);
+    });
+
+    it("CRLF frontmatter 应该 同样按行数偏移", () => {
+        const content = "---\r\ntitle: A\r\n---\r\n# 标题\r\n";
+        expect(computeDisplayLineRanges(content).map((r) => r.start)).toEqual([4]);
+    });
+
+    it("每块 应该 给出起始行与结束行（代码块按围栏整体成段）", () => {
+        const content = "---\ntitle: A\n---\n# 标题\n\n段落一\n\n```js\nconst a = 1;\nconst b = 2;\n```\n\n段落二\n";
+        expect(computeDisplayLineRanges(content)).toEqual([
+            { start: 4, end: 4 },
+            { start: 6, end: 6 },
+            { start: 8, end: 11 },
+            { start: 13, end: 13 },
+        ]);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// convertTableBrForDisplay
+// ─────────────────────────────────────────────────────────────
+describe("convertTableBrForDisplay", () => {
+    it("表格行内 <br> 应该 转为 &#10; 实体（GFM 合法、解析渲染换行）", () => {
+        expect(convertTableBrForDisplay("| A |\n| --- |\n| x<br>z |")).toBe(
+            "| A |\n| --- |\n| x&#10;z |",
+        );
+    });
+
+    it("<br/> 与 <br /> 变体、大小写 应该 全部转换", () => {
+        expect(convertTableBrForDisplay("| a<br/>b |\n| c<br />d |\n| e<BR>f |")).toBe(
+            "| a&#10;b |\n| c&#10;d |\n| e&#10;f |",
+        );
+    });
+
+    it("代码围栏内的 |...<br>... 行 应该 不转换", () => {
+        const input = "```html\n| a<br>b |\n```\n\n| x<br>y |\n";
+        const output = convertTableBrForDisplay(input);
+        // 围栏内保持原样；围栏外的表格行转换
+        expect(output).toBe("```html\n| a<br>b |\n```\n\n| x&#10;y |\n");
+    });
+
+    it("普通段落中的 <br> 应该 不转换", () => {
+        expect(convertTableBrForDisplay("line one<br>line two\n")).toBe(
+            "line one<br>line two\n",
+        );
+    });
+
+    it("已有 &#10; 实体 应该 原样保留", () => {
+        expect(convertTableBrForDisplay("| x&#10;z |")).toBe("| x&#10;z |");
+    });
+
+    it("无 <br> 的表格 应该 原样返回", () => {
+        const input = "| A | B |\n| --- | --- |\n| 1 | 2 |\n";
+        expect(convertTableBrForDisplay(input)).toBe(input);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// buildContentWithFrontmatter
+// ─────────────────────────────────────────────────────────────
+describe("buildContentWithFrontmatter", () => {
+    it("新增 frontmatter 行 应该 替换 YAML 头且正文不变", () => {
+        const current = "---\ntitle: A\n---\n# Body\n";
+        const result = buildContentWithFrontmatter(current, "---\ntitle: A\ntags: x\n---\n", new Map());
+        expect(result).toBe("---\ntitle: A\ntags: x\n---\n# Body\n");
+    });
+
+    it("frontmatter 与现状相同 应该 返回 null（跳过保存）", () => {
+        const current = "---\ntitle: A\n---\n# Body\n";
+        expect(buildContentWithFrontmatter(current, "---\ntitle: A\n---\n", new Map())).toBeNull();
+    });
+
+    it("无 frontmatter 文档新增 YAML 头 应该 前置插入", () => {
+        const result = buildContentWithFrontmatter("# Body\n", "---\ntitle: A\n---\n", new Map());
+        expect(result).toBe("---\ntitle: A\n---\n# Body\n");
+    });
+
+    it("webviewUri 应该 还原为相对路径", () => {
+        const current = "---\ntitle: A\n---\n![alt](vscode-webview://img.png)\n";
+        const result = buildContentWithFrontmatter(
+            current,
+            "---\ntitle: A\n---\n",
+            new Map([["vscode-webview://img.png", "img.png"]]),
+        );
+        expect(result).toBe("---\ntitle: A\n---\n![alt](img.png)\n");
+    });
+});
+
+// ─────────────────────────────────────────────────────────────
+// rewriteImageSources（显示侧与保存侧共用的唯一图片替换域）
+// ─────────────────────────────────────────────────────────────
+describe("rewriteImageSources", () => {
+    const replaceWith = (target: string, newSrc: string) => (src: string) =>
+        src === target ? newSrc : undefined;
+
+    it("应该 仅替换 src 并保留 alt 与 title（回归：重建丢 title 导致 ratio 宽高比失效）", () => {
+        expect(rewriteImageSources('![alt](./img/a.png "ratio:0.36")', replaceWith("./img/a.png", "U")))
+            .toBe('![alt](U "ratio:0.36")');
+    });
+
+    it("单引号 title 应该 原样保留引号风格", () => {
+        expect(rewriteImageSources("![alt](./img/a.png 'ratio:0.36')", replaceWith("./img/a.png", "U")))
+            .toBe("![alt](U 'ratio:0.36')");
+    });
+
+    it("无 title 应该 不加多余引号", () => {
+        expect(rewriteImageSources("![alt](./img/a.png)", replaceWith("./img/a.png", "U")))
+            .toBe("![alt](U)");
+    });
+
+    it("含空格路径 应该 完整捕获（回归：旧正则 [^)\\s\"]+ 在空格处截断，显示破裂 + 保存往返改写畸形内容）", () => {
+        expect(rewriteImageSources('![alt](my image.png "r")', replaceWith("my image.png", "U")))
+            .toBe('![alt](U "r")');
+    });
+
+    it("含括号路径（一层嵌套） 应该 完整捕获（回归：旧正则在 ) 处截断）", () => {
+        expect(rewriteImageSources("![alt](my file (v2).png)", replaceWith("my file (v2).png", "U")))
+            .toBe("![alt](U)");
+    });
+
+    it("含空格路径 + title 应该 两者都正确处理", () => {
+        expect(rewriteImageSources('![alt](my image.png "ratio:0.5")', replaceWith("my image.png", "U")))
+            .toBe('![alt](U "ratio:0.5")');
+    });
+
+    it("含括号路径 + title 应该 两者都正确处理", () => {
+        expect(rewriteImageSources('![alt](my file (v2).png "ratio:0.5")', replaceWith("my file (v2).png", "U")))
+            .toBe('![alt](U "ratio:0.5")');
+    });
+
+    it("同一行多个图片 应该 各自独立替换（未命中的保持原样）", () => {
+        expect(rewriteImageSources("![a](x.png) and ![b](y z.png)", replaceWith("y z.png", "U")))
+            .toBe("![a](x.png) and ![b](U)");
+    });
+
+    it("http 图片 应该 同样参与替换判定（由调用方决定是否跳过）", () => {
+        expect(rewriteImageSources("![alt](https://example.com/a.png)", () => undefined))
+            .toBe("![alt](https://example.com/a.png)");
+    });
+
+    it("无图片 应该 原样返回", () => {
+        const md = "# 正文\n\n无图";
+        expect(rewriteImageSources(md, () => "U")).toBe(md);
+    });
+
+    it("同一图片语法重复出现 应该 全部替换", () => {
+        expect(rewriteImageSources("![1](a.png) ![2](a.png)", replaceWith("a.png", "U")))
+            .toBe("![1](U) ![2](U)");
+    });
+});
+
+describe("normalizeImageDestination", () => {
+    it("反斜杠转义 应该 还原（mdast 序列化把括号写成 \\(）", () => {
+        expect(normalizeImageDestination("my \\(v2\\).png")).toBe("my (v2).png");
+    });
+
+    it("尖括号包裹 应该 去除（mdast 序列化含空格目标时）", () => {
+        expect(normalizeImageDestination("<my file.png>")).toBe("my file.png");
+    });
+
+    it("普通路径 应该 原样返回", () => {
+        expect(normalizeImageDestination("./images/a.png")).toBe("./images/a.png");
+    });
+
+    it("Windows 反斜杠路径 应该 不被当作转义（仅标点转义生效）", () => {
+        expect(normalizeImageDestination("images\\a.png")).toBe("images\\a.png");
     });
 });

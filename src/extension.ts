@@ -1,137 +1,87 @@
 import * as vscode from "vscode";
 import { MarkdownEditorProvider } from "./MarkdownEditorProvider";
-
-function debugLog(...args: unknown[]): void {
-    if (vscode.workspace.getConfiguration("epytor").get<boolean>("debugMode", false)) {
-        console.log(...args);
-    }
-}
+import {
+    DEFAULT_CODE_BLOCK_MAX_HEIGHT,
+    DEFAULT_EDITOR_MAX_WIDTH,
+    MIN_CODE_BLOCK_MAX_HEIGHT,
+    MIN_EDITOR_MAX_WIDTH,
+    sanitizeCssNumber,
+    sanitizeSerializationMode,
+} from "./utils/webviewConfigSanitize";
+import type { ToWebviewMessage } from "../shared/messages";
 
 /**
- * 根据 defaultMode 同步 workbench.editorAssociations：
- * - "source"  → 注入 "*.md"/"*.markdown": "default"，让文本编辑器直接打开，不触发自定义编辑器
- * - "wysiwyg" → 删除上述条目，恢复 package.json 中 priority:default 生效
+ * 配置变更 → WebView 广播表（表驱动，新增配置项只加一行）：
+ * 每项 = 配置全限定键 + 把配置值映射为消息的函数。
  */
-function syncEditorAssociation(mode: string): void {
-    const wbConfig = vscode.workspace.getConfiguration("workbench");
-    const current: Record<string, string> = {
-        ...(wbConfig.get<Record<string, string>>("editorAssociations") ?? {}),
-    };
-    if (mode === "source") {
-        current["*.md"] = "default";
-        current["*.markdown"] = "default";
-    } else {
-        // preview 模式：删除 association，依赖 package.json 的 priority:default 自动生效
-        delete current["*.md"];
-        delete current["*.markdown"];
-    }
-    wbConfig.update("editorAssociations", current, vscode.ConfigurationTarget.Global);
-}
+export const CONFIG_BROADCASTS: ReadonlyArray<{
+    section: string;
+    message: (value: unknown) => ToWebviewMessage;
+}> = [
+    {
+        section: "epytor.serializationMode",
+        message: (value) => ({ type: "setSerializationMode", mode: sanitizeSerializationMode(value) }),
+    },
+    {
+        section: "epytor.tableWrapMode",
+        message: (value) => ({ type: "tableWrapModeChanged", mode: typeof value === "string" ? value : "wrap" }),
+    },
+    {
+        // 数值口径与 schema 对齐：越界/非法一律回退默认值，见 webviewConfigSanitize
+        section: "epytor.editorMaxWidth",
+        message: (value) => ({
+            type: "editorMaxWidthChanged",
+            value: sanitizeCssNumber(value, DEFAULT_EDITOR_MAX_WIDTH, MIN_EDITOR_MAX_WIDTH),
+        }),
+    },
+    {
+        section: "epytor.codeBlockMaxHeight",
+        message: (value) => ({
+            type: "codeBlockMaxHeightChanged",
+            value: sanitizeCssNumber(value, DEFAULT_CODE_BLOCK_MAX_HEIGHT, MIN_CODE_BLOCK_MAX_HEIGHT),
+        }),
+    },
+];
 
 export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         MarkdownEditorProvider.register(context),
     );
 
-    // 激活时同步一次 editorAssociations
-    const initialMode = vscode.workspace
-        .getConfiguration("epytor")
-        .get<string>("defaultMode", "wysiwyg");
-    syncEditorAssociation(initialMode);
-
-    // priority:option 下不自动接管文件打开，用 onDidChangeTabs 监听文本 tab 并切换到 WYSIWYG
-    // diff 视图只产生 TabInputTextDiff，不会触发此逻辑
-    context.subscriptions.push(
-        vscode.window.tabGroups.onDidChangeTabs(async (event) => {
-            const mode = vscode.workspace
-                .getConfiguration("epytor")
-                .get<string>("defaultMode", "wysiwyg");
-            if (mode !== "wysiwyg") { return; }
-
-            for (const tab of event.opened) {
-                if (!(tab.input instanceof vscode.TabInputText)) { continue; }
-                const uri = (tab.input as vscode.TabInputText).uri;
-                if (uri.scheme !== "file") { continue; }
-                if (!/\.(md|markdown)$/i.test(uri.fsPath)) { continue; }
-
-                const uriStr = uri.toString();
-                if (MarkdownEditorProvider.suppressAutoSwitch.has(uriStr)) { continue; }
-
-                // 若 URI fragment 包含行号（全局搜索传入 #L10 格式），提前存储以便 WYSIWYG 初始化后跳转
-                const fragMatch = uri.fragment?.match(/^L?(\d+)/);
-                if (fragMatch) {
-                    const fragLine = parseInt(fragMatch[1], 10);
-                    if (fragLine >= 1) {
-                        debugLog('[onDidChangeTabs] fragment line:', fragLine, 'fsPath:', uri.fsPath);
-                        MarkdownEditorProvider.current?.setPendingNavigation(uri.fsPath, fragLine);
-                    }
-                }
-
-                // 先关文本 tab，再开 WYSIWYG（与 switchToPreview 命令保持一致）
-                const isPreview = tab.isPreview;
-                const viewCol = tab.group.viewColumn;
-                await vscode.window.tabGroups.close(tab);
-                await vscode.commands.executeCommand(
-                    "vscode.openWith",
-                    uri,
-                    MarkdownEditorProvider.viewType,
-                    { viewColumn: viewCol, preview: isPreview },
-                );
-            }
-        }),
-    );
-
-    // 监听文本编辑器激活事件：捕获全局搜索导航时短暂出现的 .md 文本编辑器光标位置
-    context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor((editor) => {
-            if (!editor) { return; }
-            const { uri } = editor.document;
-            if (!uri.fsPath.endsWith('.md')) { return; }
-            // 切换到文本编辑器期间（suppressNavFromTextEditor 已设置），跳过行号回传
-            // 避免主动切走时行号被反馈给 WebView 触发多余的 scrollToLine
-            if (MarkdownEditorProvider.current?.isNavFromTextEditorSuppressed) { return; }
-            const line = editor.selection.active.line + 1; // 转为 1-indexed
-            if (line >= 1) {
-                MarkdownEditorProvider.current?.setPendingNavigation(uri.fsPath, line);
-            }
-        }),
-    );
+    // priority:default 下 md 直接以 WYSIWYG 打开（无「文本 tab → 转换」中间态——
+    // 该转换机制曾是打开闪动/双 tab/焦点互抢的根源，见 2026-09-08 简化设计）。
+    // 默认打开方式由用户在 VS Code 官方入口设置（Reopen Editor With → Configure
+    // default editor），本扩展不再改写 workbench.editorAssociations。
+    // 全局搜索行号由 revealLine 命令拦截 + pendingNavigation 处理（见下）。
+    // 回归（E3/C2）：此处原有 onDidChangeActiveTextEditor 行号回传监听器 + 配套
+    // ExpiryWindowMap 抑制窗口——监听器的存在理由是 priority:option 时代「文本 tab
+    // 先开再转换」的中间态，根治后已消失；其唯一触发流程 switchToTextEditor 又被
+    // 抑制窗口屏蔽，且 switchToPreview 已显式捕获当前行号（数据完全冗余），两者已删。
 
     // 拦截 revealLine 命令：全局搜索点击结果时 VS Code 会调此命令导航到指定行。
-    // 若当前有 .md 自定义编辑器 tab（遍历所有 group），则转发给 WebView；否则回退到文本编辑器行为。
+    // 归属由「谁持有 activeTextEditor」自然区分：
+    //   - md 自定义编辑器结果 → activeTextEditor 为 undefined → 行号经全局兜底槽由
+    //     面板 ready / viewState 激活时消费（下方 revealRange 分支天然 no-op）
+    //   - 文本编辑器结果（含 source 模式 md、.ts/.js 等）→ revealRange 直接定位
+    // 回归（E1）：此前只要存在任一 md 面板就把行号广播给全部面板并提前 return，
+    // 导致非 md 搜索跳转被吞（落到文件头）且其它 md 文档被错误滚动到该行号。
     context.subscriptions.push(
         vscode.commands.registerCommand(
             'revealLine',
             (args: { lineNumber: number; at?: string }) => {
-                debugLog('[revealLine] 触发，lineNumber:', args.lineNumber, 'at:', args.at);
                 const targetLine = args.lineNumber + 1; // 转为 1-indexed
-                // 始终写入全局兜底：确保 onDidChangeViewState（含延迟检查）能消费到
+                // 全局兜底槽：md 面板 ready / viewState 激活时消费（10s TTL）
                 MarkdownEditorProvider.current?.setGlobalRevealLine(targetLine);
-                // 对所有已注册的 .md 面板设置 pending navigation
-                // 避免仅靠 tab.isActive 判断（tab 切换和 revealLine 触发顺序不确定）
-                const mdPaths = MarkdownEditorProvider.current?.getAllMdFsPaths() ?? [];
-                if (mdPaths.length > 0) {
-                    debugLog('[revealLine] 已注册 .md 面板数:', mdPaths.length, '行号:', targetLine);
-                    for (const fsPath of mdPaths) {
-                        MarkdownEditorProvider.current?.setPendingNavigation(fsPath, targetLine);
-                    }
-                    return;
+                // 目标就是当前激活的 md 面板（同文档搜索结果）→ 直接投递，立即可见；
+                // directOnly 不暂存：即便此刻还是即将被替换的旧文档，也不会留下
+                // 5s 陈旧条目污染后续激活
+                const activeTab = vscode.window.tabGroups.activeTabGroup?.activeTab;
+                if (activeTab?.input instanceof vscode.TabInputCustom
+                    && activeTab.input.viewType === MarkdownEditorProvider.viewType) {
+                    MarkdownEditorProvider.current?.setPendingNavigation(
+                        activeTab.input.uri.fsPath, targetLine, { directOnly: true });
                 }
-                // 兜底：遍历 tab groups 查找 active .md 自定义 tab
-                for (const group of vscode.window.tabGroups.all) {
-                    for (const tab of group.tabs) {
-                        if (tab.input instanceof vscode.TabInputCustom) {
-                            const uri = (tab.input as vscode.TabInputCustom).uri;
-                            if (uri.fsPath.endsWith('.md') && tab.isActive) {
-                                debugLog('[revealLine] 找到 active .md 自定义 tab，fsPath:', uri.fsPath);
-                                MarkdownEditorProvider.current?.setPendingNavigation(uri.fsPath, targetLine);
-                                return;
-                            }
-                        }
-                    }
-                }
-                debugLog('[revealLine] 未找到 .md 面板，等待 viewState 延迟消费');
-                // 回退：文本编辑器使用 revealRange
+                // 文本编辑器兜底：无条件执行（custom md tab 激活时 activeTextEditor 为 undefined，天然 no-op）
                 const editor = vscode.window.activeTextEditor;
                 if (editor) {
                     const pos = new vscode.Position(args.lineNumber, 0);
@@ -145,64 +95,15 @@ export function activate(context: vscode.ExtensionContext) {
         ),
     );
 
-    // 调试模式：初始化 context 变量
-    const initialDebug = vscode.workspace
-        .getConfiguration("epytor")
-        .get<boolean>("debugMode", false);
-    vscode.commands.executeCommand(
-        "setContext",
-        "epytor.debugModeActive",
-        initialDebug,
-    );
-
-    // 调试模式开关命令（两个互斥命令，通过 when 条件切换显示，实现 ✓ 前缀效果）
-    const toggleDebugMode = () => {
-        const cfg = vscode.workspace.getConfiguration("epytor");
-        const next = !cfg.get<boolean>("debugMode", false);
-        cfg.update("debugMode", next, vscode.ConfigurationTarget.Global);
-        vscode.commands.executeCommand(
-            "setContext",
-            "epytor.debugModeActive",
-            next,
-        );
-        MarkdownEditorProvider.current?.postToAll({
-            type: "setDebugMode",
-            enabled: next,
-        });
-    };
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "epytor.debugModeEnable",
-            toggleDebugMode,
-        ),
-        vscode.commands.registerCommand(
-            "epytor.debugModeDisable",
-            toggleDebugMode,
-        ),
-    );
-
     // 监听设置手动变更（从 VSCode 设置 UI 修改时同步）
+    // 简单广播项用表驱动（回归 E10：此前每项一段同构分支，新增配置要复制第四份；
+    // tableWrapMode 原在 Provider.register 内另设一份监听，现统一到此处）
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((e) => {
-            if (e.affectsConfiguration("epytor.defaultMode")) {
-                const mode = vscode.workspace
-                    .getConfiguration("epytor")
-                    .get<string>("defaultMode", "wysiwyg");
-                syncEditorAssociation(mode);
-            }
-            if (e.affectsConfiguration("epytor.debugMode")) {
-                const v = vscode.workspace
-                    .getConfiguration("epytor")
-                    .get<boolean>("debugMode", false);
-                vscode.commands.executeCommand(
-                    "setContext",
-                    "epytor.debugModeActive",
-                    v,
-                );
-                MarkdownEditorProvider.current?.postToAll({
-                    type: "setDebugMode",
-                    enabled: v,
-                });
+            for (const item of CONFIG_BROADCASTS) {
+                if (!e.affectsConfiguration(item.section)) { continue; }
+                const value = vscode.workspace.getConfiguration().get(item.section);
+                MarkdownEditorProvider.current?.postToAll(item.message(value));
             }
         }),
     );
@@ -227,9 +128,12 @@ export function activate(context: vscode.ExtensionContext) {
                 if (!target) { return; }
 
                 const provider = MarkdownEditorProvider.current;
-                // 优先方案：向 WebView 请求当前滚动行号，WebView 会上报位置后自行触发切换
-                // 这样菜单按钮和 Cmd+Shift+M 快捷键行为一致（均携带行号，不主动关闭自定义编辑器 tab）
-                if (provider) {
+                // 向 WebView 请求当前滚动行号：WebView 上报位置后回发 switchToTextEditor 消息，
+                // 由 Provider 落盘最新内容、关闭 WYSIWYG tab、再以文本编辑器打开并定位到该行
+                // （携带行号 + 拉取式架构下必须先落盘；与 Cmd+Shift+M 快捷键行为一致）
+                // 回归 E6：此前判据是 `if (provider)`（激活后恒真）——该文档没有打开的面板时
+                // 命令静默空转；改为真实面板检查，无面板时走下面的兜底
+                if (provider?.hasPanel(target)) {
                     provider.postToPanel(target, { type: "requestSwitchToTextEditor" });
                     return;
                 }
@@ -250,12 +154,17 @@ export function activate(context: vscode.ExtensionContext) {
                 if (!target) {
                     return;
                 }
-                // 切换前保存当前光标行号，供 WYSIWYG 面板激活时定位
-                const currentLine = activeEditor?.selection.active.line ?? -1;
-                if (currentLine >= 0) {
-                    MarkdownEditorProvider.current?.setPendingNavigation(target.fsPath, currentLine + 1);
+                // 切换前保存**视口顶部行号**（不是光标行）：与 VS Code 内置 Markdown 预览
+                // 的滚动同步同口径，供 WYSIWYG 面板激活时定位。
+                // 回归（用户实测「文本→预览定位位置错误」）：此前用 selection.active.line，
+                // 光标被滚动到视口外时会跳到完全不同的位置。
+                const topVisibleLine = activeEditor?.visibleRanges[0]?.start.line
+                    ?? activeEditor?.selection.active.line
+                    ?? -1;
+                if (topVisibleLine >= 0) {
+                    MarkdownEditorProvider.current?.setPendingNavigation(target.fsPath, topVisibleLine + 1);
                 }
-                // 读取文本编辑器 tab 的 preview 状态和所在列，关闭前保存
+                // 读取文本编辑器 tab 的 preview 状态和所在列（兜底路径用）
                 let isPreview = false;
                 let viewCol: vscode.ViewColumn = vscode.ViewColumn.Active;
                 let textTab: vscode.Tab | undefined;
@@ -272,16 +181,27 @@ export function activate(context: vscode.ExtensionContext) {
                         }
                     }
                 }
-                // 先关文本编辑器 tab，再开 WYSIWYG，避免两个 tab 并存的闪烁
-                if (textTab) {
-                    await vscode.window.tabGroups.close(textTab);
+                // 原地替换编辑器类型（与 VS Code 内置 markdown.togglePreview 同一机制：
+                // `reopenActiveEditorWith`）——标签不重建、不新增，切换零闪动。
+                // 回归（用户实测：切回预览会闪、还闪出同名标签再消失、标签跳到末尾）：
+                // 此前「关文本 tab 再 openWith」= 重建整个 webview，冷启动必闪。
+                try {
+                    await vscode.commands.executeCommand(
+                        "reopenActiveEditorWith",
+                        MarkdownEditorProvider.viewType,
+                    );
+                } catch {
+                    // 兜底（旧版 VS Code 无该命令）：关文本 tab 再打开预览
+                    if (textTab) {
+                        await vscode.window.tabGroups.close(textTab);
+                    }
+                    await vscode.commands.executeCommand(
+                        "vscode.openWith",
+                        target,
+                        MarkdownEditorProvider.viewType,
+                        { viewColumn: viewCol, preview: isPreview },
+                    );
                 }
-                await vscode.commands.executeCommand(
-                    "vscode.openWith",
-                    target,
-                    MarkdownEditorProvider.viewType,
-                    { viewColumn: viewCol, preview: isPreview },
-                );
             },
         ),
     );

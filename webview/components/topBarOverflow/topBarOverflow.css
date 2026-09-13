@@ -1,0 +1,86 @@
+/* 顶栏溢出菜单（全部使用 --vscode-* 变量） */
+
+/* 被收起的按钮 */
+.top-bar-item--overflow-hidden {
+    display: none !important;
+}
+
+/* hidden 属性兜底：display:inline-flex 会覆盖 UA 的 [hidden]{display:none}，
+   否则宽窗口无需溢出时「⋯」仍显示且点击无反应（菜单为空提前返回） */
+.epytor-topbar-more-btn[hidden] {
+    display: none !important;
+}
+
+/* ⋯ 更多按钮（fixed 在 topBar 右侧，不在 topBar 内部，避免 Vue patch 干扰） */
+.epytor-topbar-more-btn {
+    position: fixed;
+    z-index: 103;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--vscode-icon-foreground, #cccccc);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.epytor-topbar-more-btn:hover {
+    background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+/* 溢出面板 */
+.epytor-topbar-overflow-menu {
+    position: fixed;
+    z-index: 104;
+    min-width: 160px;
+    max-width: 240px;
+    padding: 4px;
+    background: var(--vscode-menu-background, #252526);
+    border: 1px solid var(--vscode-menu-border, #454545);
+    border-radius: 5px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+}
+
+.epytor-topbar-overflow-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--vscode-menu-foreground, #cccccc);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.epytor-topbar-overflow-item:hover {
+    background: var(--vscode-menu-selectionBackground, #04395e);
+    color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+.epytor-topbar-overflow-item svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--vscode-menu-foreground, #cccccc);
+    /* 两种图标形态统一着色：
+       - 官方 top-bar 图标无 fill/stroke 属性 → SVG 默认黑色 fill；此处 fill:currentColor 继承菜单前景色
+       - 我们的 Tb 图标带内联 style="fill:none!important"（描边风格）→ 内联 !important 胜过此规则，保持描边
+       注意：不要写 `svg *` 子元素 fill 规则，会把描边图标的 path 填成实心块 */
+    fill: currentColor;
+}
+
+.epytor-topbar-overflow-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

@@ -5,6 +5,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 English | [简体中文](CHANGELOG.zh-CN.md)
 
+## [1.2.0] - 2026-09-13
+
+### Features
+
+- **Clean Markdown serialization mode** (`epytor.serializationMode`: `clean` / `compatible`) — minimizes unnecessary escaping and redundant table breaks; default `clean` (#15, thanks @Jurhoo)
+- **Source ↔ preview keeps your place** — switching between the WYSIWYG editor and the text/preview tab returns to the same position, from any entry point (menu, shortcut, command palette, search results)
+- **Table grid picker**: an 8×8 grid on the insert-table button, any rows × columns
+- **Regular-expression search** in the find bar (`.*` toggle) with invalid-pattern feedback and zero-width match protection
+- **Heading sticky title** (up to three levels, pinned as soon as the heading reaches the top) **with sibling folding** — the document itself is never modified
+- **Table wrap modes** (`epytor.tableWrapMode`: `wrap` / `nowrap`) plus Shift+Enter soft breaks inside cells
+- **Editable frontmatter panel** — add, edit and remove key/value rows in place
+- **Toolbar overflow menu** — buttons collapse into a "⋯" menu on narrow windows
+- **Mermaid preview zoom** (0.2×–3×, with reset and horizontal scroll)
+
+### Experience
+
+- **Switching tabs no longer rebuilds the editor** — undo/redo history, scroll position and folded headings survive tab switches because the editor is still there, not restored after a rebuild
+- **`.markdown` files get the same menu and `Ctrl/Cmd+Shift+M` shortcut as `.md`**
+- **The editor is now listed as `EPYTOR`** under *Reopen Editor With…* (it used to read `WYSIWYG Markdown Editor - EPYTOR`)
+- **Brand mark is now `🦖EPYTOR`** (emoji first, matching dsh-sparrow; updated in the top bar and both READMEs)
+- **Backspace at the start of a list item now breaks the list**: the item becomes a plain line instead of merging into the line above, and when an ordered list is split this way the second half continues the numbering instead of restarting at 1
+- **Auto save follows the built-in VS Code `files.autoSave`** (`off` / `afterDelay` / `onFocusChange` / `onWindowChange`); `epytor.autoSave` and `epytor.autoSaveDelay` are gone
+- **Table cell padding, line spacing and the row/column selection toolbar** are unified with the rest of the editor
+- **The whole document now uses one spacing scale**: a single line height (shared by paragraphs, list items, blockquotes and table cells) and a single gap between adjacent blocks (10.5px), with headings and rules taking the 2× step of the same scale. Before, the gap between adjacent blocks came in six different values (2.8 / 4 / 4 / 4 / 18.2 / 21px) and heading spacing scaled with the heading's own font size (h1 to its next block 11.2px, h6 only 5.0px)
+- **Lists**: markers (bullet / number / checkbox) are centred on the text of their own line, item spacing matches paragraph spacing, and each nesting level indents 27px instead of 55px
+- **Blockquotes and table cells** now have equal top and bottom padding, equal to the document-wide block gap
+- **Soft line breaks in the source no longer add an extra line**: two lines of text are two lines, with no blank line appearing in between
+- **Heading fold buttons moved outside the text column**: every heading lines up with the body text, with the button hanging in the left margin and fading in when you hover the heading
+- **The outline (TOC) now has just two states**: open means it stays and pushes the text aside, and **closing it wins above everything** — once dismissed it never comes back on its own, however the window is resized; whether an opened TOC stays is decided by the window width (threshold = your editor width setting + 100, so it follows `epytor.editorMaxWidth`). The pin and collapse-all buttons are gone, the panel title is simply **Contents** (「目录」 in Chinese), and the edge handle is now a direction arrow (› when closed, ‹ when open)
+- **Word-style multilevel list markers**: numbered lists show `1.` / `a)` / `i.` and bullets show ● / ■ / ◆ by nesting level, cycling back at the fourth level (your Markdown source and saved files are unchanged — the file keeps `1.` numbering and the bullet marker you wrote)
+- **Failures are no longer silent**: image upload, image rename, save and switch failures explain what went wrong, and several messages that stayed English in a Chinese UI are translated
+- **Settings are grouped** into *epytor* (editor) and *epytor › Images*, and **`e`epytor.editorMaxWidth`` / `epytor.codeBlockMaxHeight` apply immediately** — no need to reopen the tab
+- **Image server settings are merged into one `epytor.imageServer` object** (`url` / `fieldName` / `extraParams` / `responsePath`), and `extraParams` is now a real JSON object. Migrating is recommended: `epytor.imageServerUrl`, `imageServerFieldName`, `imageServerExtraParams` and `imageServerResponsePath` still work as a fallback but are marked deprecated
+- **`epytor.markdown.serializationMode` was renamed to `epytor.serializationMode`** (the old key was never released)
+- **Four settings were removed**: `epytor.defaultMode` (use the built-in **Reopen Editor With… → Configure default editor**), `epytor.fontFamily` (the editor now follows your VS Code editor font), `epytor.imageSelectionColor` (the selection frame follows the VS Code theme colour) and `epytor.debugMode` along with the `epytor.toggleDebugMode` command
+
+### Performance
+
+- **Opening a Markdown file is significantly faster**: the editor payload loads on demand (Mermaid, KaTeX and per-language syntax support only when used) and post-open bookkeeping no longer blocks the first frame
+- **Typing in large documents no longer stutters every few hundred milliseconds** — nothing is processed in the background while you type; the document is handed over after you stop
+- **Large-document input lag** (#16, thanks to @Jurhoo for the report and the initial diagnosis): large documents are now smooth — how far the editor keeps up depends on your machine, not on per-edit work (see Known Limitations). Following their diagnosis, the whole-document diff that ran on every edit was replaced by a line-anchor based local change; this release also stopped all background full-document work while typing (hand-over happens after you stop), rebuilt the sticky-heading cache on document coordinates with debouncing (zero DOM queries while scrolling), made serialization pull-based (zero serialization while typing), and pinned undo granularity to one step per typing burst
+- **Search stays responsive on huge files**: highlighting is capped instead of building tens of thousands of ranges
+
+### Bug fixes
+
+- **External writes are no longer overwritten by auto save** — files changed by scripts or AI assistants keep their content
+- **Explorer clicks no longer make tabs flash**, and switching documents no longer leaves the editor unable to receive input
+- **Source ↔ preview**: the cursor no longer jumps back to line 1 or to the wrong block, and large files no longer lose their position when switching back
+- **Images**: paths with spaces or parentheses no longer break or get mangled on save, an image title is no longer swallowed into the path (which caused 404s), rename failures are reported instead of silent, Windows reserved names are rejected, and upload failures, timeouts and oversized files are reported
+- **Global search**: clicking a non-Markdown result no longer jumps to the top of the file or scrolls other Markdown documents
+- **Your "Open With" choice for `.md` files is no longer silently removed**
+- **Find bar**: a closed find bar no longer runs the previous search, and invalid patterns are reported
+- **A paragraph written across several source lines no longer gains an extra blank line**: soft line breaks used to be rendered as a full-height block
+- **Saving no longer rewrites your list syntax**: bullet markers (`-` / `*` / `+`), the ordered-list style (`1.` or `1)`) and nested-list indentation are kept exactly as written — only the lines you actually changed are rewritten
+- **Saving no longer rewrites your file's line endings or escapes URLs**: a CRLF file used to be written back as LF (and, because of that mismatch, the whole document was treated as changed and re-serialized), and `&` in link targets was escaped to `\&` — both are gone; what you did not touch is written back byte for byte
+- **Empty checkboxes are recognised**: `- [ ] ` (nothing written after the marker) now shows a checkbox instead of a bullet with the literal text `[ ]`, and saving keeps the line as you wrote it
+- **Outline panel**: the closing sections of a document now light up in order as you scroll to the end, and the last one takes over at the very bottom — before, they could never become current (a short closing section can never reach the sticky line), so the highlight was stuck one section early and the panel could not scroll to its end
+- **Path and language autocomplete**: keyboard navigation keeps its highlight
+- **Editor focus restored** when switching back from another file (cursor visible but input dead)
+- **Security**: external links are limited to http/https/mailto; image paths, the image gallery listing and path links can no longer escape the workspace; image-server settings injected by a workspace are never used for uploads (the image is saved locally and a notice is shown) and a plain-http image server is flagged once; upload errors no longer echo the server response body
+- **Milkdown** upgraded 7.22.0 → 7.22.1 (inline-code mark fix and a dompurify security update)
+- **Dependencies**: security patch upgrades (`nanoid` 3.3.17 → 3.3.19, `fast-uri` 3.1.5 → 3.1.7, `vitest` 4.1.10 → 4.1.11, from Dependabot alerts) — none of them ends up in the extension itself, so there is no user-perceivable change
+
 ## [1.1.6] - 2026-08-06
 
 ### Added

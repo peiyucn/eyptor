@@ -3,6 +3,7 @@ import { DEFAULT_TOPBAR_HEIGHT, VIEWPORT_PADDING } from "../../../shared/constan
 import { createButton } from "@/ui/dom";
 import { IconChevronUp, IconChevronDown, IconX } from "@/ui/icons";
 import { t, kbd } from "@/i18n";
+import { findMatches, MAX_MATCHES } from "@/utils/findMatches";
 
 // TypeScript 类型声明：CSS Custom Highlight API（Chromium 105+ / Electron 22+）
 declare class Highlight {
@@ -11,6 +12,9 @@ declare class Highlight {
 declare namespace CSS {
     const highlights: Map<string, Highlight>;
 }
+
+/** 输入防抖：查找是逐键重算全部匹配，间隔太小会在长文档上拖慢输入 */
+const SEARCH_DEBOUNCE_MS = 150;
 
 export interface FindBarController {
     open(initialQuery?: string): void;
@@ -60,6 +64,14 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
     btnCase.setAttribute("aria-label", t("Match Case"));
     btnCase.setAttribute("aria-pressed", "false");
 
+    const btnRegex = createButton({
+        className: "find-bar__btn",
+        label: ".*",
+        title: t("Regular Expression"),
+    });
+    btnRegex.setAttribute("aria-label", t("Regular Expression"));
+    btnRegex.setAttribute("aria-pressed", "false");
+
     const btnClose = createButton({
         className: "find-bar__btn",
         icon: IconX,
@@ -67,16 +79,19 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
     });
     btnClose.setAttribute("aria-label", t("Close"));
 
-    // 布局：input → count → prev↑ → next↓ → sep → Aa → close
-    bar.append(input, count, btnPrev, btnNext, sep, btnCase, btnClose);
+    // 布局：input → count → prev↑ → next↓ → sep → Aa → .* → close
+    bar.append(input, count, btnPrev, btnNext, sep, btnCase, btnRegex, btnClose);
     document.body.appendChild(bar);
 
     // ── 状态 ─────────────────────────────────────────────
     let visible = false;
     let caseSensitive = false;
+    let useRegex = false;
     let matchRanges: Range[] = [];
     let currentIdx = 0;
     let debounceTimer = 0;
+    /** 本轮搜索是否因达到上限被截断（计数显示「N+」） */
+    let truncated = false;
 
     // ── 高亮更新 ─────────────────────────────────────────
     function updateHighlights() {
@@ -100,8 +115,10 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
 
     // ── 搜索 ──────────────────────────────────────────────
     function search(query: string) {
+        if (!visible) return; // 双保险：关闭后任何迟到调用都不执行（见 close 的 timer 清理）
         matchRanges = [];
         currentIdx = 0;
+        truncated = false;
 
         if (!query) {
             count.textContent = "";
@@ -113,25 +130,42 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
         const editorEl = getEditorEl();
         if (!editorEl) { return; }
 
-        const q = caseSensitive ? query : query.toLowerCase();
+        let invalidRegex = false;
         const walker = document.createTreeWalker(editorEl, NodeFilter.SHOW_TEXT);
         let node: Text | null;
         while ((node = walker.nextNode() as Text | null)) {
-            const text = caseSensitive ? node.textContent! : node.textContent!.toLowerCase();
-            let idx = 0;
-            while (idx < text.length) {
-                const found = text.indexOf(q, idx);
-                if (found === -1) { break; }
+            const result = findMatches(node.textContent!, query, { caseSensitive, useRegex });
+            if (result.invalidRegex) {
+                invalidRegex = true;
+                break;
+            }
+            for (const m of result.matches) {
+                // 聚合上限：匹配总数封顶 MAX_MATCHES（防单个 Highlight 注册海量 Range）
+                if (matchRanges.length >= MAX_MATCHES) {
+                    truncated = true;
+                    break;
+                }
                 const r = new Range();
-                r.setStart(node, found);
-                r.setEnd(node, found + query.length);
+                r.setStart(node, m.start);
+                r.setEnd(node, m.end);
                 matchRanges.push(r);
-                idx = found + 1;
+            }
+            if (result.truncated || matchRanges.length >= MAX_MATCHES) {
+                truncated = true;
+                break;
             }
         }
 
+        if (invalidRegex) {
+            matchRanges = [];
+            count.textContent = t("Invalid Regex");
+            bar.classList.add("find-bar--no-results");
+            updateHighlights();
+            return;
+        }
+
         if (matchRanges.length) {
-            count.textContent = `1/${matchRanges.length}`;
+            count.textContent = `1/${matchRanges.length}${truncated ? "+" : ""}`;
             bar.classList.remove("find-bar--no-results");
             scrollToMatch(0);
         } else {
@@ -144,7 +178,7 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
     function scrollToMatch(idx: number) {
         if (!matchRanges[idx]) { return; }
         currentIdx = idx;
-        count.textContent = `${currentIdx + 1}/${matchRanges.length}`;
+        count.textContent = `${currentIdx + 1}/${matchRanges.length}${truncated ? "+" : ""}`;
         updateHighlights();
         const r = matchRanges[idx];
         const node = r.startContainer;
@@ -172,7 +206,7 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
     // ── 事件绑定 ─────────────────────────────────────────
     input.addEventListener("input", () => {
         clearTimeout(debounceTimer);
-        debounceTimer = window.setTimeout(() => search(input.value), 150);
+        debounceTimer = window.setTimeout(() => search(input.value), SEARCH_DEBOUNCE_MS);
     });
 
     input.addEventListener("keydown", (e) => {
@@ -199,6 +233,13 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
         search(input.value);
     });
 
+    btnRegex.addEventListener("click", () => {
+        useRegex = !useRegex;
+        btnRegex.classList.toggle("find-bar__btn--active", useRegex);
+        btnRegex.setAttribute("aria-pressed", String(useRegex));
+        search(input.value);
+    });
+
     // 阻止搜索栏内的 mousedown 冒泡，防止编辑器捕获
     bar.addEventListener("mousedown", (e) => e.stopPropagation());
 
@@ -216,6 +257,10 @@ export function initFindBar(getEditorEl: () => HTMLElement | null): FindBarContr
 
     function close() {
         visible = false;
+        // 回归（P3）：此前不清防抖 timer——关闭后 150ms 内 pending 搜索照常执行，
+        // 高亮复活、计数写回隐藏栏、页面被 scrollToMatch 拽动
+        clearTimeout(debounceTimer);
+        debounceTimer = 0;
         bar.classList.remove("find-bar--visible");
         bar.classList.remove("find-bar--no-results");
         clearHighlights();

@@ -8,7 +8,8 @@ import { mockVscodeApi } from "./setup";
 // 延迟导入，确保 acquireVsCodeApi 在 setup.ts 中已完成注入
 const {
     notifyReady,
-    notifyUpdate,
+    notifyMarkDirty,
+    notifyContentResponse,
     notifyOpenUrl,
     notifyOpenFile,
     notifySwitchToTextEditor,
@@ -30,10 +31,15 @@ describe("messaging — postMessage 格式验证", () => {
         expect(mockVscodeApi.postMessage).toHaveBeenCalledWith({ type: "ready" });
     });
 
-    it("notifyUpdate 携带 content 字段", () => {
-        notifyUpdate("# Hello");
+    it("notifyMarkDirty 发送 { type: 'markDirty' }（拉取式保存的轻量脏标记）", () => {
+        notifyMarkDirty();
+        expect(mockVscodeApi.postMessage).toHaveBeenCalledWith({ type: "markDirty" });
+    });
+
+    it("notifyContentResponse 携带 content 字段（保存时拉取的序列化回传）", () => {
+        notifyContentResponse("# Hello");
         expect(mockVscodeApi.postMessage).toHaveBeenCalledWith({
-            type: "update",
+            type: "contentResponse",
             content: "# Hello",
         });
     });
@@ -120,5 +126,31 @@ describe("messaging — postMessage 格式验证", () => {
     it("notifyOpenSettings 发送 { type: 'openSettings' }", () => {
         notifyOpenSettings();
         expect(mockVscodeApi.postMessage).toHaveBeenCalledWith({ type: "openSettings" });
+    });
+
+    it("onMessage 合法对象载荷 应该 转发给 handler（回归：无任何运行时校验直接断言类型）", async () => {
+        const { onMessage } = await import("../../webview/messaging");
+        const handler = vi.fn();
+        onMessage(handler);
+        window.dispatchEvent(new MessageEvent("message", {
+            data: { type: "wordCount", lines: 1, words: 2, charsNoSpace: 3, charsWithSpace: 4 },
+        }));
+        expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it("onMessage 非对象载荷（字符串）应该 丢弃", async () => {
+        const { onMessage } = await import("../../webview/messaging");
+        const handler = vi.fn();
+        onMessage(handler);
+        window.dispatchEvent(new MessageEvent("message", { data: "not-an-object" }));
+        expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("onMessage 缺少 type 的对象 应该 丢弃", async () => {
+        const { onMessage } = await import("../../webview/messaging");
+        const handler = vi.fn();
+        onMessage(handler);
+        window.dispatchEvent(new MessageEvent("message", { data: { content: "x" } }));
+        expect(handler).not.toHaveBeenCalled();
     });
 });

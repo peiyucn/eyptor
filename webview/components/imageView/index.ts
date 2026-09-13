@@ -15,6 +15,7 @@ import {
 } from "@/ui/icons";
 import { t } from "@/i18n";
 import { createButton, createSeparator, setupInputKeyboard } from "@/ui/dom";
+import { showTooltipAt } from "@/ui/tooltip";
 import { attachImgPathComplete, resolveToWebviewUri } from './imgPathComplete';
 import './imageView.css';
 
@@ -25,18 +26,26 @@ const IMAGE_RETRY_MAX_DELAY_MS = 2000;
 const MIN_IMAGE_RESIZE_HEIGHT = 40;
 const MAX_IMAGE_RESIZE_RATIO = 0.8;
 
-// ─── webviewUri ↔ relPath 双向映射（由 index.ts 在收到 init/revert 消息时写入）─────
+// ─── webviewUri → relPath 映射（由 index.ts 在收到 init/revert 消息时写入，展示用）──
+// 回归 P8：此前另存一份 relPath → webviewUri 反向镜像，重命名后不同步（陈旧映射靠
+// 异步解析兜底）——反向翻译统一走 Extension 的 resolveImagePath（已有 3s 超时回退）
 const _uriToRel = new Map<string, string>(); // webviewUri → relPath
-const _relToUri = new Map<string, string>(); // relPath    → webviewUri
 
 /** 由外部（index.ts）在 init/revert 收到 imageUriMap 后调用 */
 export function setImageUriMap(map: Record<string, string>): void {
     _uriToRel.clear();
-    _relToUri.clear();
     for (const [uri, rel] of Object.entries(map)) {
         _uriToRel.set(uri, rel);
-        _relToUri.set(rel, uri);
     }
+}
+
+/**
+ * 图片重命名后同步展示映射（回归：此前 map 只在 init/revert 刷新，重命名后的
+ * 新 webviewUri 查不到 → 编辑路径时输入框里显示的是编码过的 URI 尾巴）。
+ */
+export function remapImageUri(oldWebviewUri: string, newWebviewUri: string, newRelPath: string): void {
+    _uriToRel.delete(oldWebviewUri);
+    _uriToRel.set(newWebviewUri, newRelPath);
 }
 
 /** 将 webviewUri 转为可显示的 relPath（找不到时原样返回） */
@@ -44,15 +53,12 @@ function toDisplayPath(src: string): string {
     return _uriToRel.get(src) ?? src;
 }
 
-/** 将 relPath 转为可在 NodeView 中直接渲染的 webviewUri（找不到时原样返回） */
-function toWebviewUri(src: string): string {
-    return _relToUri.get(src) ?? src;
-}
-
 type ViewMutationRecord = MutationRecord | { type: "selection"; target: Node };
 
 // ─── Lightbox ──────────────────────────────────────────────
 let activeLightbox: HTMLElement | null = null;
+/** 当前 lightbox 的完整清理函数（NodeView.destroy 需要一并释放 document keydown 监听） */
+let activeLightboxCleanup: (() => void) | null = null;
 
 export function showGlobalLightbox(src: string, alt: string): void {
     if (activeLightbox) {
@@ -82,6 +88,7 @@ export function showGlobalLightbox(src: string, alt: string): void {
             document.body.removeChild(activeLightbox);
         }
         activeLightbox = null;
+        activeLightboxCleanup = null;
         document.removeEventListener("keydown", onKeyDown);
     }
 
@@ -103,6 +110,7 @@ export function showGlobalLightbox(src: string, alt: string): void {
         close();
     });
     document.addEventListener("keydown", onKeyDown);
+    activeLightboxCleanup = close;
 }
 
 // ─── 阻止输入框事件冒泡到 ProseMirror ────────────────────
@@ -282,7 +290,6 @@ export function createImageView(
 
     // ── 加载中占位符 ──────────────────────────────────────────
     let imgErrored = false;
-    let imgLoaded = false;
     const loadingPlaceholder = document.createElement("div");
     loadingPlaceholder.className = "img-loading-placeholder";
     loadingPlaceholder.innerHTML = '<span class="img-loading-spinner"></span><span>Loading...</span>';
@@ -293,11 +300,13 @@ export function createImageView(
     errorPlaceholder.style.display = "none";
 
     let retryCount = 0;
+    /** 加载失败重试 timer 句柄（destroy 时清理，防节点销毁后仍改写已脱离 DOM 的 img.src） */
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     img.addEventListener("error", () => {
         if (retryCount < MAX_IMAGE_LOAD_RETRIES) {
             retryCount++;
             const delay = Math.min(IMAGE_RETRY_BASE_DELAY_MS * retryCount, IMAGE_RETRY_MAX_DELAY_MS);
-            setTimeout(() => {
+            retryTimer = setTimeout(() => {
                 const src = img.src;
                 img.src = "";
                 img.src = src.replace(/([?&])_r=\d+/, "") + (src.includes("?") ? "&" : "?") + "_r=" + Date.now();
@@ -312,7 +321,6 @@ export function createImageView(
     });
 
     img.addEventListener("load", () => {
-        imgLoaded = true;
         imgNaturalH = img.naturalHeight;
         loadingPlaceholder.style.display = "none";
         if (imgErrored) {
@@ -462,7 +470,17 @@ export function createImageView(
             const newBasename = infoInput.value.trim();
             const orig = basenameNoExt(rawSrc);
             if (newBasename && newBasename !== orig && onRenameImage) {
-                onRenameImage(rawSrc, newBasename).catch(() => {});
+                onRenameImage(rawSrc, newBasename).catch((error) => {
+                    // 回归：失败被空 catch 吞掉，输入框静默复位、用户以为重命名成功
+                    // （文件名非法/被占用/超时均无任何提示）
+                    infoInput.value = orig;
+                    showTooltipAt(
+                        infoInput,
+                        // 错误消息来自宿主（Extension 侧已本地化）；极端无 message 时用英文兜底
+                        error instanceof Error && error.message ? error.message : "Rename failed",
+                        "above",
+                    );
+                });
             } else {
                 infoInput.value = orig;
             }
@@ -556,8 +574,6 @@ export function createImageView(
                 isEditingSrc = false;
                 // ① 补全时 dataset 存的 webviewUri 最可靠
                 const datasetUri = (input.dataset.imgWebviewUri ?? "").trim();
-                // ② 已有映射（init/revert 建立）
-                const mappedUri = displayVal ? toWebviewUri(displayVal) : "";
 
                 const applyUri = (newSrc: string) => {
                     if (!newSrc || newSrc === rawSrc) { view.focus(); return; }
@@ -575,10 +591,9 @@ export function createImageView(
 
                 if (datasetUri) {
                     applyUri(datasetUri);
-                } else if (mappedUri !== displayVal) {
-                    applyUri(mappedUri);
                 } else if (displayVal) {
-                    // 绝对 URL 直接使用，不经过 Extension 解析
+                    // 绝对 URL 直接使用，不经过 Extension 解析；其余一律交给
+                    // Extension 解析（回归 P8：不再用陈旧的反向镜像短路）
                     if (/^https?:\/\//i.test(displayVal)) {
                         applyUri(displayVal);
                     } else {
@@ -605,7 +620,6 @@ export function createImageView(
             const newAlt = (updatedNode.attrs["alt"] as string) ?? "";
             if (rawSrc !== newSrc) {
                 rawSrc = newSrc;
-                imgLoaded = false;
                 imgErrored = false;
                 imgNaturalH = 0;
                 loadingPlaceholder.style.display = "flex";
@@ -632,7 +646,6 @@ export function createImageView(
             wrapper.classList.add("image-wrapper--selected");
             toolbar.style.display = "flex";
             resizeHandle.classList.add("img-resize-handle--visible");
-            toolbar.classList.add("image-toolbar--below");
         },
 
         deselectNode(): void {
@@ -652,14 +665,25 @@ export function createImageView(
         },
 
         destroy(): void {
-            // 清理 lightbox（若此图片触发的 lightbox 仍在显示）
+            // 清理 lightbox（若此图片触发的 lightbox 仍在显示）——经完整 cleanup 一并
+            // 移除 document keydown 监听（回归：此前只 removeChild，onKeyDown 悬空到
+            // 用户下次按 Escape 才自愈）
             if (activeLightbox && document.body.contains(activeLightbox)) {
                 const lbImg = activeLightbox.querySelector("img");
                 if (lbImg && lbImg.src === img.src) {
-                    document.body.removeChild(activeLightbox);
-                    activeLightbox = null;
+                    activeLightboxCleanup?.();
                 }
             }
+            // 加载重试 timer（回归：节点销毁后仍改写已脱离 DOM 的 img.src）
+            if (retryTimer !== null) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
+            }
+            // 拖拽 resize 的 window 监听（回归：拖拽中途删除节点，监听滞留到下次 pointerup，
+            // onResizeMove 持续操作已销毁的 img）
+            window.removeEventListener("pointermove", onResizeMove);
+            window.removeEventListener("pointerup", onResizeUp);
+            document.body.style.cursor = "";
         },
     };
 }

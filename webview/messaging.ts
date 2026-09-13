@@ -18,8 +18,20 @@ export function notifyReady(): void {
     vscode.postMessage({ type: "ready" });
 }
 
-export function notifyUpdate(markdown: string): void {
-    vscode.postMessage({ type: "update", content: markdown });
+export function notifyMarkDirty(): void {
+    vscode.postMessage({ type: "markDirty" });
+}
+
+export function notifyUnsavedContent(content: string): void {
+    vscode.postMessage({ type: "unsavedContent", content });
+}
+
+export function notifyContentResponse(content: string): void {
+    vscode.postMessage({ type: "contentResponse", content });
+}
+
+export function notifyFrontmatterUpdate(frontmatter: string): void {
+    vscode.postMessage({ type: "frontmatterUpdate", frontmatter });
 }
 
 export function notifyOpenUrl(url: string): void {
@@ -32,6 +44,11 @@ export function notifyOpenFile(relativePath: string): void {
 
 export function notifySwitchToTextEditor(line?: number): void {
     vscode.postMessage({ type: "switchToTextEditor", ...(line !== undefined ? { line } : {}) });
+}
+
+/** 视口顶部源码行上报（滚动防抖后调用；切回文本编辑器时按它定位） */
+export function notifyViewportLine(line: number): void {
+    vscode.postMessage({ type: "viewportLine", line });
 }
 
 export function notifyOpenSettings(): void {
@@ -78,7 +95,19 @@ export function notifyWordCount(
 
 export function onMessage(handler: (msg: IncomingMessage) => void): void {
     window.addEventListener("message", (event: MessageEvent) => {
-        handler(event.data as IncomingMessage);
+        // 最小运行时守卫：只校验载荷形状（回归：event.data 曾直接断言为 IncomingMessage，
+        // 无任何校验）。注意：不做 event.source 校验——VS Code WebView 中 Extension 的
+        // postMessage 到达时 source 是父窗口而非自身 window，校验来源会丢光合法消息
+        // （2026-09-08 曾误加 `event.source === window` 导致整页不渲染，已回退）。
+        const data = event.data as unknown;
+        if (data === null || typeof data !== "object") {
+            return;
+        }
+        const msg = data as IncomingMessage;
+        if (typeof msg.type !== "string") {
+            return;
+        }
+        handler(msg);
     });
 }
 

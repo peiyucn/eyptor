@@ -1,19 +1,14 @@
 import { notifyGetPathSuggestions, notifyResolveImagePath } from "@/messaging";
 import { getFileIcon } from "../pathLink/fileIcons";
 import type { PathSuggestionItem } from "../../../shared/messages";
-import {
-    closeDropdown as closeDropdownState,
-    updateActiveItem,
-    type DropdownState,
-} from "@/ui/dropdownComplete";
+import { createPathDropdown } from "@/ui/pathCompleteCore";
+import { PATH_COMPLETE_DEBOUNCE_MS, PATH_COMPLETE_RETRIGGER_DELAY_MS, PATH_PREFIX_REGEX } from "../../../shared/constants";
+import { beginPathSuggestionRequest } from "@/utils/pathSuggestionRequests";
 
 const IMG_ACTIVE_CLASS = "img-path-complete-item--active";
 
 // ─── 常量 ────────────────────────────────────────────────────
 const RESOLVE_IMAGE_TIMEOUT_MS = 3000;
-const PATH_SUGGESTION_TIMEOUT_MS = 5000;
-const PATH_COMPLETE_RETRIGGER_DELAY_MS = 50;
-const PATH_COMPLETE_DEBOUNCE_MS = 200;
 const IMAGE_BLUR_CLOSE_DELAY_MS = 150;
 
 // ─── resolveImagePath 异步机制 ────────────────────────────────
@@ -41,22 +36,7 @@ export function resolveToWebviewUri(relPath: string): Promise<string> {
     });
 }
 
-// 触发路径补全的前缀检测（与 pathComplete.ts 保持一致）
-const PATH_PREFIX_REGEX = /^(@\/|\.{1,2}\/|[a-zA-Z0-9_-][a-zA-Z0-9._-]*\/)/;
-
-type SuggestCallback = (items: PathSuggestionItem[]) => void;
-
-// 回调 map：id → resolve（全局唯一，各 input 通过 id 区分）
-const _pendingImgSuggestions = new Map<string, SuggestCallback>();
-
-/** 外部调用此函数分发 pathSuggestions 消息到本模块 */
-export function dispatchImgPathSuggestions(id: string, items: PathSuggestionItem[]): void {
-    const cb = _pendingImgSuggestions.get(id);
-    if (cb) {
-        _pendingImgSuggestions.delete(id);
-        cb(items);
-    }
-}
+// 触发路径补全的前缀检测与超时/防抖常量统一在 shared/constants.ts
 
 /**
  * 为一个 <input> 元素附加图片路径自动补全。
@@ -69,14 +49,44 @@ export function attachImgPathComplete(
     onEnter?: () => void,
     onEscape?: () => void,
 ): () => void {
-    const state: DropdownState = { el: null, activeIndex: -1 };
-    let lastItems: PathSuggestionItem[] = [];
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let suppressMouseover = false;
     let isDestroyed = false;
     let skipDatasetClear = false;
+    /** 最近一次发出的补全请求 id（过期守卫：晚到的旧响应不得覆盖当前下拉） */
+    let latestSuggestionId = "";
 
-    function closeDropdown(): void { closeDropdownState(state); lastItems = []; }
+    const dropdown = createPathDropdown<PathSuggestionItem>({
+        listClass: "img-path-complete-list",
+        itemClass: "img-path-complete-item",
+        activeClass: IMG_ACTIVE_CLASS,
+        renderItem: (item) => {
+            if (item.webviewUri) {
+                return `<img class="img-complete-thumb" src="${item.webviewUri}" alt=""><span class="img-complete-label">${escapeHtml(lastSeg(item.path))}</span>`;
+            }
+            const iconEl = document.createElement("span");
+            iconEl.className = "img-complete-icon";
+            iconEl.innerHTML = getFileIcon(item.path, item.isDir);
+            const label = document.createElement("span");
+            label.className = "img-complete-label";
+            label.textContent = lastSeg(item.path);
+            return `${iconEl.outerHTML}${label.outerHTML}`;
+        },
+        getTitle: (item) => item.path,
+        onSelect: (item) => applySelection(item),
+    });
+
+    function lastSeg(path: string): string {
+        return path.replace(/\/$/, "").split("/").pop() ?? path;
+    }
+
+    /** 最小 HTML 转义（缩略图分支以 innerHTML 拼装 label 文本） */
+    function escapeHtml(text: string): string {
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
 
     function applySelection(item: PathSuggestionItem): void {
         input.value = item.path;
@@ -90,69 +100,11 @@ export function attachImgPathComplete(
         input.focus();
 
         if (item.isDir) {
-            closeDropdown();
+            dropdown.close();
             setTimeout(() => { triggerSuggest(); }, PATH_COMPLETE_RETRIGGER_DELAY_MS);
         } else {
-            closeDropdown();
+            dropdown.close();
         }
-    }
-
-    function showDropdown(items: PathSuggestionItem[]): void {
-        closeDropdown();
-        const filtered = items.filter(item => item.isDir || item.webviewUri !== undefined);
-        if (filtered.length === 0) { return; }
-        lastItems = filtered;
-
-        const rect = input.getBoundingClientRect();
-        const ul = document.createElement("ul");
-        ul.className = "img-path-complete-list";
-        ul.style.top = `${rect.bottom + 2}px`;
-        ul.style.left = `${rect.left}px`;
-        ul.style.minWidth = `${rect.width}px`;
-
-        filtered.forEach((item, i) => {
-            const li = document.createElement("li");
-            li.className = "img-path-complete-item";
-
-            if (item.webviewUri) {
-                const thumb = document.createElement("img");
-                thumb.className = "img-complete-thumb";
-                thumb.src = item.webviewUri;
-                thumb.alt = "";
-                li.appendChild(thumb);
-            } else {
-                const iconEl = document.createElement("span");
-                iconEl.className = "img-complete-icon";
-                iconEl.innerHTML = getFileIcon(item.path, item.isDir);
-                li.appendChild(iconEl);
-            }
-
-            const lastSeg = item.path.replace(/\/$/, "").split("/").pop() ?? item.path;
-            const label = document.createElement("span");
-            label.className = "img-complete-label";
-            label.textContent = lastSeg;
-            li.title = item.path;
-            li.appendChild(label);
-
-            li.addEventListener("mousedown", (e) => {
-                e.preventDefault();
-                state.activeIndex = i;
-                applySelection(item);
-            });
-            li.addEventListener("mousemove", () => { suppressMouseover = false; });
-            li.addEventListener("mouseover", () => {
-                if (suppressMouseover) { return; }
-                state.activeIndex = i;
-                updateActiveItem(state, IMG_ACTIVE_CLASS);
-            });
-
-            ul.appendChild(li);
-        });
-
-        document.body.appendChild(ul);
-        state.el = ul;
-        state.activeIndex = 0;
-        updateActiveItem(state, IMG_ACTIVE_CLASS);
     }
 
     // ── 触发补全请求 ───────────────────────────────────────────
@@ -160,22 +112,30 @@ export function attachImgPathComplete(
     function triggerSuggest(): void {
         const query = input.value.trim();
         if (!query || !PATH_PREFIX_REGEX.test(query)) {
-            closeDropdown();
+            // 使 in-flight 旧响应失效（查询已不匹配），防下拉复活
+            latestSuggestionId = "";
+            dropdown.close();
             return;
         }
 
-        const id = `ips_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-        _pendingImgSuggestions.set(id, (items) => {
-            if (!isDestroyed) {
-                showDropdown(items);
-            }
-        });
-        notifyGetPathSuggestions(id, query);
-
-        // 超时清理
-        setTimeout(() => {
-            _pendingImgSuggestions.delete(id);
-        }, PATH_SUGGESTION_TIMEOUT_MS);
+        // 请求登记与超时清理统一走 pathSuggestionRequests（回归 P4：此前手写 Map + setTimeout）
+        const handle = beginPathSuggestionRequest();
+        latestSuggestionId = handle.id;
+        handle.promise.then((items) => {
+            // 过期守卫：目录大时请求 A 后发 B，A 晚回会覆盖 B 的下拉（回归）
+            if (isDestroyed || handle.id !== latestSuggestionId) { return; }
+            // 双保险：输入框已脱离文档（宿主关闭对话框）时拒绝渲染，防游离下拉复活
+            if (!input.isConnected) return;
+            const filtered = items.filter(item => item.isDir || item.webviewUri !== undefined);
+            if (filtered.length === 0) return;
+            const rect = input.getBoundingClientRect();
+            dropdown.show(
+                { left: rect.left, top: rect.bottom + 2 },
+                filtered,
+                `${rect.width}px`,
+            );
+        }).catch(() => { /* 超时/取消：静默放弃，下拉不复活 */ });
+        notifyGetPathSuggestions(handle.id, query);
     }
 
     // ── 事件监听 ───────────────────────────────────────────────
@@ -200,8 +160,8 @@ export function attachImgPathComplete(
         if (e.key === "Enter") {
             e.preventDefault();
             e.stopPropagation();
-            if (state.el && state.activeIndex >= 0 && state.activeIndex < lastItems.length) {
-                applySelection(lastItems[state.activeIndex]);
+            if (dropdown.isOpen()) {
+                dropdown.handleKeydown(e); // 选中当前高亮项
             } else {
                 onEnter?.();
             }
@@ -211,52 +171,28 @@ export function attachImgPathComplete(
         if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
-            if (state.el) {
-                closeDropdown();
+            if (dropdown.isOpen()) {
+                dropdown.close();
             } else {
                 onEscape?.();
             }
             return;
         }
 
-        if (!state.el) { return; }
-
-        if (e.key === "ArrowDown") {
-            e.preventDefault();
-            e.stopPropagation();
-            suppressMouseover = true;
-            state.activeIndex = state.activeIndex >= lastItems.length - 1 ? 0 : state.activeIndex + 1;
-            updateActiveItem(state, IMG_ACTIVE_CLASS);
-            return;
-        }
-        if (e.key === "ArrowUp") {
-            e.preventDefault();
-            e.stopPropagation();
-            suppressMouseover = true;
-            state.activeIndex = state.activeIndex <= 0 ? lastItems.length - 1 : state.activeIndex - 1;
-            updateActiveItem(state, IMG_ACTIVE_CLASS);
-            return;
-        }
-        if (e.key === "Tab") {
-            if (state.activeIndex >= 0 && state.activeIndex < lastItems.length) {
-                e.preventDefault();
-                e.stopPropagation();
-                applySelection(lastItems[state.activeIndex]);
-            }
-            return;
-        }
+        if (!dropdown.isOpen()) { return; }
+        dropdown.handleKeydown(e); // 方向键 / Tab
     }
 
     function onDocMousedown(e: MouseEvent): void {
-        if (state.el && !state.el.contains(e.target as Node) && e.target !== input) {
-            closeDropdown();
+        if (dropdown.isOpen() && !dropdown.contains(e.target as Node) && e.target !== input) {
+            dropdown.close();
         }
     }
 
     function onBlur(): void {
         // 延迟关闭，让 mousedown 的 applySelection 先执行
         setTimeout(() => {
-            if (!isDestroyed) { closeDropdown(); }
+            if (!isDestroyed) { dropdown.close(); }
         }, IMAGE_BLUR_CLOSE_DELAY_MS);
     }
 
@@ -270,7 +206,7 @@ export function attachImgPathComplete(
     return function detach(): void {
         isDestroyed = true;
         if (debounceTimer) { clearTimeout(debounceTimer); }
-        closeDropdown();
+        dropdown.close();
         input.removeEventListener("input", onInput);
         input.removeEventListener("keydown", onKeydown, true);
         input.removeEventListener("blur", onBlur);
