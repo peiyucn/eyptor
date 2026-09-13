@@ -38,7 +38,7 @@
     "customEditors": [
       {
         "viewType": "epytor.editor",
-        "displayName": "%customEditor.displayName%",
+        "displayName": "EPYTOR",
         "selector": [
           {
             "filenamePattern": "*.md"
