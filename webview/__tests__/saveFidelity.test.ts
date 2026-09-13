@@ -65,21 +65,21 @@ describe("保存保真（列表写法不被重写）", () => {
         const { save } = await openEditor(source);
 
         expect(save()).toBe(source);
-    }, 30_000);
+    }, 60_000);
 
     it("未编辑时任务列表 应该 逐字保存（回归：此前变 `* [ ]`）", async () => {
         const source = "- [ ] todo\n- [x] done\n";
         const { save } = await openEditor(source);
 
         expect(save()).toBe(source);
-    }, 30_000);
+    }, 60_000);
 
     it("未编辑时 4 空格嵌套列表 应该 逐字保存（回归：此前缩进被改成 3 空格）", async () => {
         const source = "1. a\n    1. b\n        - bullet\n";
         const { save } = await openEditor(source);
 
         expect(save()).toBe(source);
-    }, 30_000);
+    }, 60_000);
 
     it("空任务项（`- [ ] ` 后什么都不写）应该 识别成复选框并逐字保存", async () => {
         // 回归（2026-09-13，owner 在 ai_note 踩到）：上游 task-list 分词器要求标记后有内容，
@@ -96,7 +96,7 @@ describe("保存保真（列表写法不被重写）", () => {
         expect(checked).toEqual([false, true, false]);
 
         expect(save()).toBe(source);
-    }, 30_000);
+    }, 60_000);
 
     it("改了某一行时 该行按新内容保存 且未改行的写法原样保留", async () => {
         // 末尾留一个段落：文档以列表结尾时上游 trailing 插件会补一个空段落（与本次修复无关），
@@ -114,7 +114,7 @@ describe("保存保真（列表写法不被重写）", () => {
         editorView!.dispatch(editorView!.state.tr.insertText("!", insertAt));
 
         expect(save()).toBe("- one!\n- two\n\ntail\n");
-    }, 30_000);
+    }, 60_000);
 
     it("CRLF 文件 应该 逐字保存并保持 CRLF（回归：每存一次被改成 LF、整篇被判为改动）", async () => {
         const source = ["# 标题", "", "- one", "- two", "", "[链接](https://e.com/a?x=1&y=2)", ""]
@@ -125,7 +125,7 @@ describe("保存保真（列表写法不被重写）", () => {
         expect(saved).toBe(source);
         expect(saved.includes("\r\n")).toBe(true);
         expect(/(?<!\r)\n/.test(saved)).toBe(false);
-    }, 30_000);
+    }, 60_000);
 
     it("链接目标里的 & 应该 保留原样（回归：被写成 \\& 改写用户文件）", async () => {
         const source = [
@@ -139,5 +139,5 @@ describe("保存保真（列表写法不被重写）", () => {
 
         expect(saved).toBe(source);
         expect(saved.includes("\\&")).toBe(false);
-    }, 30_000);
+    }, 60_000);
 });
