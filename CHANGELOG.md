@@ -66,7 +66,7 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Editor focus restored** when switching back from another file (cursor visible but input dead)
 - **Security**: external links are limited to http/https/mailto; image paths, the image gallery listing and path links can no longer escape the workspace; image-server settings injected by a workspace are never used for uploads (the image is saved locally and a notice is shown) and a plain-http image server is flagged once; upload errors no longer echo the server response body
 - **Milkdown** upgraded 7.22.0 → 7.22.1 (inline-code mark fix and a dompurify security update)
-- **Dependencies**: security patch upgrades (`nanoid` 3.3.17 → 3.3.19, `fast-uri` 3.1.5 → 3.1.7, `vitest` 4.1.10 → 4.1.11, from Dependabot alerts) — none of them ends up in the extension itself, so there is no user-perceivable change
+- **Dependencies**: security patch upgrades (`nanoid` 3.3.17 → 3.3.19, `fast-uri` 3.1.5 → 3.1.7, `js-yaml` 4.3.1 → 4.3.2, `vitest` 4.1.10 → 4.1.11, from Dependabot alerts) — none of them ends up in the extension itself, so there is no user-perceivable change
 
 ## [1.1.6] - 2026-08-06
 

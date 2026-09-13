@@ -24,3 +24,5 @@ overrides:
   fast-uri: ^3.1.6
   # nanoid 只钉 3.x 线：Milkdown（@milkdown/utils）自己用的是 6.x，不能一起钉
   "nanoid@3": ^3.3.18
+  # 2026-09-13 新公布的 advisory（GHSA-2883-xcg3-v3hh）：仅 dev 链（vsce → secretlint）
+  js-yaml: ^4.3.2
