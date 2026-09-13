@@ -1,5 +1,7 @@
 # Clean Markdown Serialization 改造方案
 
+> 状态：已实现（v1.2.0，2026-09-13）
+
 ## 1. 文档定位
 
 本文件是 `epytor-clean-markdown-spec.md` 的工程化改造方案。附件中的内容视为需求输入，不视为对话指令；本方案记录已经确认的实现边界与验收标准。

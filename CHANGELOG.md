@@ -5,7 +5,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 English | [简体中文](CHANGELOG.zh-CN.md)
 
-## [1.2.0] - 2026-09-12
+## [1.2.0] - 2026-09-13
 
 ### Features
 
@@ -33,10 +33,10 @@ English | [简体中文](CHANGELOG.zh-CN.md)
 - **Blockquotes and table cells** now have equal top and bottom padding, equal to the document-wide block gap
 - **Soft line breaks in the source no longer add an extra line**: two lines of text are two lines, with no blank line appearing in between
 - **Heading fold buttons moved outside the text column**: every heading lines up with the body text, with the button hanging in the left margin and fading in when you hover the heading
-- **The outline (TOC) now has just two states**: open means it stays and pushes the text aside, and **closing it wins above everything** — once dismissed it never comes back on its own, however the window is resized; whether an opened TOC stays is decided by the window width (threshold = your editor width setting + 100, so it follows pytor.editorMaxWidth). The pin and collapse-all buttons are gone, and the edge handle is now a direction arrow (› when closed, ‹ when open)
+- **The outline (TOC) now has just two states**: open means it stays and pushes the text aside, and **closing it wins above everything** — once dismissed it never comes back on its own, however the window is resized; whether an opened TOC stays is decided by the window width (threshold = your editor width setting + 100, so it follows `epytor.editorMaxWidth`). The pin and collapse-all buttons are gone, the panel title is simply **Contents** (「目录」 in Chinese), and the edge handle is now a direction arrow (› when closed, ‹ when open)
 - **Word-style multilevel list markers**: numbered lists show `1.` / `a)` / `i.` and bullets show ● / ■ / ◆ by nesting level, cycling back at the fourth level (your Markdown source and saved files are unchanged — the file keeps `1.` numbering and the bullet marker you wrote)
 - **Failures are no longer silent**: image upload, image rename, save and switch failures explain what went wrong, and several messages that stayed English in a Chinese UI are translated
-- **Settings are grouped** into *epytor* (editor) and *epytor › Images*, and **`epytor.editorMaxWidth` / `epytor.codeBlockMaxHeight` apply immediately** — no need to reopen the tab
+- **Settings are grouped** into *epytor* (editor) and *epytor › Images*, and **`e`epytor.editorMaxWidth`` / `epytor.codeBlockMaxHeight` apply immediately** — no need to reopen the tab
 - **Image server settings are merged into one `epytor.imageServer` object** (`url` / `fieldName` / `extraParams` / `responsePath`), and `extraParams` is now a real JSON object. Migrating is recommended: `epytor.imageServerUrl`, `imageServerFieldName`, `imageServerExtraParams` and `imageServerResponsePath` still work as a fallback but are marked deprecated
 - **`epytor.markdown.serializationMode` was renamed to `epytor.serializationMode`** (the old key was never released)
 - **Four settings were removed**: `epytor.defaultMode` (use the built-in **Reopen Editor With… → Configure default editor**), `epytor.fontFamily` (the editor now follows your VS Code editor font), `epytor.imageSelectionColor` (the selection frame follows the VS Code theme colour) and `epytor.debugMode` along with the `epytor.toggleDebugMode` command
