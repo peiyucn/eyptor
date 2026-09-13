@@ -1,6 +1,9 @@
 /**
  * [vendor] Crepe LaTeX feature（@milkdown/crepe 7.22.1 · src/feature/latex/*）的本地化版本。
  *
+ * 许可：MIT（© 2020-present Mirone，Milkdown / @milkdown/crepe 上游）；
+ * 本文件是对上游代码的本地化改动，版权声明随上游保留。
+ *
  * 上游对照（每节标注来源文件，升级上游时逐节 diff）：
  *   §inline-latex  ← src/feature/latex/inline-latex.ts
  *   §block-latex   ← src/feature/latex/block-latex.ts

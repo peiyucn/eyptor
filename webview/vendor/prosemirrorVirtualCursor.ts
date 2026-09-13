@@ -1,5 +1,6 @@
 /**
- * Vendor 化的虚拟光标（基于 prosemirror-virtual-cursor 0.4.2，Apache-2.0/MIT 上游）。
+ * Vendor 化的虚拟光标：基于 prosemirror-virtual-cursor 0.4.2 改动而来。
+ * 许可：MIT（© 2022 ocavue），版权声明随上游保留。
  *
  * epytor 修改（用户决策「彻底解决，即使上游不支持」）：
  * 1. handleKeyDown：行内代码行尾（后面无内容，marksAfter 缺失）按 ArrowRight 时

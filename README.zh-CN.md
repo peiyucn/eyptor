@@ -6,7 +6,7 @@
 
 基于 [Milkdown](https://milkdown.dev/) 的 VSCode 所见即所得 Markdown 编辑器。富文本编辑 `.md` / `.markdown`，保存为标准 Markdown。
 
-> 基于 [git-xing/md-wysiwyg-editor](https://github.com/git-xing/md-wysiwyg-editor) (MIT) 的开源工作开发。版本历史见 [CHANGELOG](CHANGELOG.zh-CN.md)。
+> 起步自 [git-xing/md-wysiwyg-editor](https://github.com/git-xing/md-wysiwyg-editor)（MIT），此后**独立演进——已不是该项目的分支**；`webview/vendor/` 下少量 vendor 的第三方代码逐文件标注出处，上游版权保留在 [LICENSE](LICENSE) 中。版本历史见 [CHANGELOG](CHANGELOG.zh-CN.md)。
 
 ## 功能
 

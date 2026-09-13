@@ -6,7 +6,7 @@
 
 A WYSIWYG Markdown editor for VS Code, powered by [Milkdown](https://milkdown.dev/). Edit `.md` / `.markdown` as rich text, saved as standard Markdown.
 
-> Based on the open-source work of [git-xing/md-wysiwyg-editor](https://github.com/git-xing/md-wysiwyg-editor) (MIT). Version history: [CHANGELOG](CHANGELOG.md).
+> Started from [git-xing/md-wysiwyg-editor](https://github.com/git-xing/md-wysiwyg-editor) (MIT) and developed independently since — **no longer a fork of it**. A few vendored files under `webview/vendor/` note their sources in-file, and the upstream copyright is kept in [LICENSE](LICENSE). Version history: [CHANGELOG](CHANGELOG.md).
 
 ## Features
 
